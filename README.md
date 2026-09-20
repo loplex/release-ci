@@ -10,9 +10,10 @@ draft-before-tag releases and per-ecosystem publishing, which are planned.
 |-----------------|-------------------------------------------------------------------------|
 | `check-release` | What a release has to be true of, asked as properties over a repository |
 
-It reads three things out of the repository it is asked about: the tags, `CHANGELOG.md`, and the
-file the version is declared in. The first two are the same everywhere; the third is what a project
-type decides, and [check-release](#check-release) says where that line is drawn.
+It reads the tags and `CHANGELOG.md` out of the repository it is asked about, and takes the version a
+release is asked to be from whichever source that project declares. The first two are the same
+everywhere; the third is what a project type decides, and [check-release](#check-release) says where
+that line is drawn.
 
 Two more directories are planned and named ahead of time, so that what goes where is decided by the boundary
 rather than by whichever file is being written: `release-flow`, for the shape a release is cut and
@@ -27,7 +28,7 @@ ecosystem; an adapter's name says which one it is.
 | Subcommand    | Asks                                                              |
 |---------------|-------------------------------------------------------------------|
 | `version`     | whether the declared version may be released, given every tag     |
-| `next`        | the version to be worked on once one is released                  |
+| `next`        | the version that follows a released one                           |
 | `changelog`   | whether every released section still reads the way its tag has it |
 | `ancestry`    | whether every released tag is still reachable from this history   |
 | `prefix`      | what release tags are called here                                 |
@@ -60,6 +61,29 @@ python3 -m unittest discover -s check-release
 The same command runs on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
-Where a version is declared, and how it is written back, is the one thing here that a project type
-decides. Today that is `gradle.properties`; the reading and the writing sit in functions of their
-own so that another file format is another adapter rather than another rule.
+## Where the version comes from
+
+Every invocation says so, with `--source`, because the wrong guess is silent. Two are implemented,
+and they differ in more than a filename:
+
+| `--source`          | The version a release is asked to be                                 | After a release           |
+|---------------------|----------------------------------------------------------------------|---------------------------|
+| `gradle.properties` | read from the file, carrying `-SNAPSHOT`, which is dropped           | the next one written back |
+| `tags`              | handed in with `--version`, or the version after the highest release | nothing to write          |
+
+`-SNAPSHOT` belongs to the first of those, not to releasing: it is Gradle's and Maven's way of
+saying "not released yet". A repository consumed by tag alone has no such state, so `version_after`
+answers a bare version and the source adds the marker where there is one. `set-version` under
+`tags` refuses rather than reporting a success in which nothing was written, and with exit status 3
+rather than 1, so that a caller can tell "nothing to write to" from a write that failed.
+
+`--tag-prefix` says what release tags are called. `gradle.properties` declares it in the file, as
+`tagPrefix`; any other source has to be told. There is no default here on purpose - a repository
+tagging bare versions, read as though it tagged `v*`, turns up no releases at all and every check
+over them passes having compared nothing. A caller wanting a default declares it where its own
+readers can see it.
+
+Adding `package.json`, `pyproject.toml`, `Cargo.toml` or a plain `VERSION` file means a branch in
+`declares_a_version`, `marker_of` and `prefix_from`, which sit together for that reason, and a reader
+and a writer for that file. `version` and `set-version` call Gradle's outright, it being the one source
+that declares a version, so they are where the choice between the two is then made.

@@ -2,7 +2,7 @@
 """What a release has to be true of, checked before and after it is one.
 
 - `version` - whether the version the project declares may be released next, given the tags it already has.
-- `next` - the version to be worked on once one is released.
+- `next` - the version that follows a released one.
 - `changelog` - whether every section already released still reads the way it was released.
 - `ancestry` - whether every released tag is still reachable, a rewrite being able to take one off the history.
 - `prefix` - what release tags are called here, so that the workflows do not have to say it a second time.
@@ -77,10 +77,10 @@ SNAPSHOT = "-SNAPSHOT"
 # The one line of gradle.properties a release rewrites. Gradle allows space around the `=` and in front of the
 # key, and projects write it every way, so everything up to the value is captured and put back rather than
 # chosen here: turning one spelling into the other would show up in the diff as a change nobody made. The
-# indentation is part of that and has to be, because properties() reads an indented line as a declaration -
-# a writer that did not would refuse a file whose version it can see. The line ending is the same kind of
-# thing: the value stops short of a carriage return, so a file written with CRLF keeps it.
-VERSION_LINE = re.compile(r"^([ \t]*version[ \t]*=[ \t]*)([^\r\n]*)", re.MULTILINE)
+# indentation is part of that and has to be, because gradle_properties() reads an indented line as a
+# declaration - a writer that did not would refuse a file whose version it can see. The line ending is the
+# same kind of thing: the value stops short of a carriage return, so a file written with CRLF keeps it.
+GRADLE_VERSION_LINE = re.compile(r"^([ \t]*version[ \t]*=[ \t]*)([^\r\n]*)", re.MULTILINE)
 
 SECTION = re.compile(r"^## \[([^\]]+)\]", re.MULTILINE)
 LINK_DEFINITION = re.compile(r"^\[[^\]]+\]:\s.*$", re.MULTILINE)
@@ -185,8 +185,10 @@ def check_version(candidate: str, tags: list[str]) -> list[str]:
     return problems
 
 
-def next_worked_on(released: str) -> str:
-    """The version to be worked on once `released` is out.
+def version_after(released: str) -> str:
+    """The version that follows `released`, carrying no marker: what a project declaring its version writes
+    back as the next one being worked on, and what a repository versioned by its tags alone offers as the
+    default when a release is asked for. The marker, where there is one, is the source's to add.
 
     A pre-release does not advance anything: `0.2.0-rc.1` was a step towards `0.2.0`, so work goes on heading
     for it. A final release is followed by the smallest claim that can be made about what comes next, a patch;
@@ -194,8 +196,8 @@ def next_worked_on(released: str) -> str:
     """
     major, minor, patch, suffix, _ = VERSION.match(released).groups()  # A build is released, not worked on.
     if suffix is not None:
-        return f"{major}.{minor}.{patch}{SNAPSHOT}"
-    return f"{major}.{minor}.{int(patch) + 1}{SNAPSHOT}"
+        return f"{major}.{minor}.{patch}"
+    return f"{major}.{minor}.{int(patch) + 1}"
 
 
 def channel_of(version: str) -> str:
@@ -274,7 +276,7 @@ def unprotected(released: dict[str, str]) -> list[str]:
     return sorted((version for version, text in released.items() if version not in sections(text)), key=precedence)
 
 
-def with_version(text: str, version: str) -> str:
+def gradle_with_version(text: str, version: str) -> str:
     """gradle.properties with the version line rewritten and everything else left alone.
 
     A plain function over the text, like the rest of this file, so that what a release does to that line can be
@@ -287,7 +289,7 @@ def with_version(text: str, version: str) -> str:
     takes the last declaration, as Gradle does, so rewriting any other leaves the version the build sees as
     it was - and rewriting the last one leaves a stale line above it for the next reader to trust.
     """
-    replaced, count = VERSION_LINE.subn(lambda found: found.group(1) + version, text)
+    replaced, count = GRADLE_VERSION_LINE.subn(lambda found: found.group(1) + version, text)
     if count == 0:
         raise SystemExit("gradle.properties names no version to rewrite")
     if count > 1:
@@ -355,7 +357,7 @@ def declared(name: str, holds: str, newline: str | None = None) -> str:
         raise SystemExit(f"there is no {name} here, and that is where {holds}") from None
 
 
-def properties() -> dict[str, str]:
+def gradle_properties() -> dict[str, str]:
     """gradle.properties, read as the `name = value` lines a project declares its version in. Both spellings
     are taken, `version = 0.2.0` and `version=0.2.0`, because a reader that knows only one reports a file that
     names no version when it names one. Not the whole Java properties format - no `:` separator, no
@@ -371,32 +373,78 @@ def properties() -> dict[str, str]:
     return found
 
 
-def declared_version() -> str:
+def gradle_declared_version() -> str:
     """The version gradle.properties names, which is what a release is asked to be."""
-    declared = properties().get("version")
+    declared = gradle_properties().get("version")
     if declared is None:
         raise SystemExit("gradle.properties names no version")
     return declared
 
 
-def tag_prefix() -> str:
+# Where the version a release is asked to be comes from, and what is recorded once it is one. This is the one
+# thing here that a project type decides, and the two halves are not the same question. A Gradle project
+# declares the next version in a file and carries a marker on it while it is being worked on, so a release
+# reads the version off that file and writes the following one back. A repository consumed by tag alone
+# declares nothing: it is handed the version when a release is asked for, and records nothing afterwards,
+# because there is no file to record it in.
+#
+# Another source - package.json, pyproject.toml, Cargo.toml, a plain VERSION file - is a branch in the three
+# functions below, and a reader and a writer of its file beside gradle_declared_version and gradle_with_version.
+# version_command and set_version_command call those two outright, Gradle's being the one source that declares
+# a version, so a second one is also where they come to choose. The three sit together and are named for it so
+# that the boundary is a place in this file rather than a habit.
+SOURCES = ("gradle.properties", "tags")
+
+
+def declares_a_version(source: str) -> bool:
+    """Whether the source names the version between releases, so that a release reads it rather than being
+    handed it. Where it does, a release writes the next one back afterwards; where it does not, `set-version`
+    has nothing to write to and says so rather than reporting a success nothing happened in."""
+    return source != "tags"
+
+
+def marker_of(source: str) -> str:
+    """The suffix a version carries while it is being worked on, or the empty string where the source has no
+    such state. `-SNAPSHOT` is Gradle's and Maven's spelling and not a rule of releasing: a repository whose
+    version lives only in its tags has no version being worked on for a marker to sit on."""
+    return SNAPSHOT if source == "gradle.properties" else ""
+
+
+def prefix_from(source: str, given: str | None) -> str:
     """What a release tag carries in front of its version - `v0.1.0` against `0.1.0`.
 
-    Declared rather than assumed, and with no default, because both spellings are in use and the wrong guess is
-    silent: a repository that tags bare versions, read as though it tagged `v*`, turns up no released tags at
-    all, and every check over them then passes having compared nothing.
+    Declared rather than assumed, and with no default here, because both spellings are in use and the wrong
+    guess is silent: a repository that tags bare versions, read as though it tagged `v*`, turns up no released
+    tags at all, and every check over them then passes having compared nothing. A caller that wants a default
+    declares it where its own readers can see it, rather than having this file guess on everyone's behalf.
     """
-    prefix = properties().get("tagPrefix")
-    if prefix is None:
-        raise SystemExit("gradle.properties does not say, in tagPrefix, what release tags are called")
-    return prefix
+    if given is not None:
+        return given
+    if source == "gradle.properties":
+        prefix = gradle_properties().get("tagPrefix")
+        if prefix is None:
+            raise SystemExit("gradle.properties does not say, in tagPrefix, what release tags are called")
+        return prefix
+    raise SystemExit(f"--tag-prefix says what release tags are called, which {source} does not declare")
 
 
-def tags() -> list[str]:
+def next_candidate(prefix: str) -> str:
+    """The version to release when nobody says which: the one following the highest release there is.
+
+    What a dispatch offers as its default, a form being unable to compute one - the field is left empty and
+    this answers it. With nothing released there is nothing to count from, and the first version is named
+    outright rather than guessed at.
+    """
+    released = tags(prefix)
+    if not released:
+        raise SystemExit("nothing is released here to count from, so say which version to release")
+    return version_after(sorted(released, key=precedence)[-1])
+
+
+def tags(prefix: str) -> list[str]:
     """Every tag that names a release, with the prefix off. The repository carries tags that are not releases
     - the backups a history rewrite left behind, and a version somebody tagged while it was still being worked
     on - and those are nothing to be consistent with."""
-    prefix = tag_prefix()
     return [
         tag[len(prefix) :]
         for tag in git("tag", "-l", f"{prefix}*").split()
@@ -405,23 +453,30 @@ def tags() -> list[str]:
 
 
 def version_command(arguments) -> list[str]:
-    declared = arguments.version or declared_version()
+    prefix = prefix_from(arguments.source, arguments.tag_prefix)
 
-    # Named rather than assumed: a report that says gradle.properties declares what was typed on the command
-    # line sends its reader to edit a file that is not the one at fault.
-    source = "--version" if arguments.version else "gradle.properties"
+    if declares_a_version(arguments.source):
+        declared = arguments.version or gradle_declared_version()
+        marker = marker_of(arguments.source)
 
-    # Work carries the marker and a release is what drops it. Reading the release version off the development
-    # one, rather than being handed it, is what keeps the two from ever naming different things. It holds for
-    # a version handed in too, which is why --version takes a declared one rather than a release.
-    if not declared.endswith(SNAPSHOT):
-        return [
-            f"{source} names {declared}, which is not a version being worked on: "
-            f"between releases it names the next one, marked {SNAPSHOT}"
-        ]
+        # Named rather than assumed: a report that says the file declares what was typed on the command line
+        # sends its reader to edit something that is not at fault.
+        named = "--version" if arguments.version else arguments.source
 
-    candidate = declared[: -len(SNAPSHOT)]
-    problems = check_version(candidate, tags())
+        # Work carries the marker and a release is what drops it. Reading the release version off the
+        # development one, rather than being handed it, is what keeps the two from ever naming different
+        # things. It holds for a version handed in too, which is why --version takes a declared one.
+        if marker and not declared.endswith(marker):
+            return [
+                f"{named} names {declared}, which is not a version being worked on: "
+                f"between releases it names the next one, marked {marker}"
+            ]
+        candidate = declared.removesuffix(marker)
+    else:
+        # Handed in, or the default a dispatch leaves empty. Nothing is read and nothing will be written.
+        candidate = arguments.version or next_candidate(prefix)
+
+    problems = check_version(candidate, tags(prefix))
     if not problems:
         print(candidate)
     return problems
@@ -429,10 +484,10 @@ def version_command(arguments) -> list[str]:
 
 def changelog_command(arguments) -> list[str]:
     head = declared("CHANGELOG.md", "the released sections are")
-    prefix = tag_prefix()
+    prefix = prefix_from(arguments.source, arguments.tag_prefix)
 
     released = {}
-    for version in tags():
+    for version in tags(prefix):
         try:
             released[version] = git("show", f"{prefix}{version}:CHANGELOG.md")
         except subprocess.CalledProcessError:
@@ -449,32 +504,43 @@ def changelog_command(arguments) -> list[str]:
 
 
 def next_command(arguments) -> list[str]:
-    released = arguments.released.removeprefix(tag_prefix())
+    released = arguments.released.removeprefix(prefix_from(arguments.source, arguments.tag_prefix))
     if not VERSION.match(released):
         return [f"'{arguments.released}' is not a version this project releases"]
-    print(next_worked_on(released))
+    print(version_after(released) + marker_of(arguments.source))
     return []
 
 
+# The exit status of `set-version` under a source that declares no version, apart from the 1 every other
+# refusal gives. A caller carrying on without writing has to tell "there is nothing to write to" from "the
+# write failed", and only the first is safe to carry on from.
+NOTHING_TO_WRITE = 3
+
+
 def set_version_command(arguments) -> list[str]:
-    """Write the version gradle.properties names, which is what a release does to it before it builds."""
+    """Write the version the source declares, which is what a release does to it before it builds."""
+    if not declares_a_version(arguments.source):
+        print(f"{arguments.source} declares no version, so there is nothing here to write one to",
+              file=sys.stderr)
+        raise SystemExit(NOTHING_TO_WRITE)
+
     # Read and written with the line endings it has, so that a CRLF file is not rewritten whole to change one
     # line.
-    path = repository() / "gradle.properties"
-    written = with_version(declared(path.name, "the version is declared", newline=""), arguments.version)
+    path = repository() / arguments.source
+    written = gradle_with_version(declared(path.name, "the version is declared", newline=""), arguments.version)
     with open(path, "w", encoding="utf-8", newline="") as file:
         file.write(written)
 
     # Read back through the same reader everything else here uses. A rewrite that matched nothing is the failure
     # worth catching and it is the quiet one, which is the whole reason this is not a pattern in a shell script.
-    if declared_version() != arguments.version:
-        return [f"gradle.properties still does not name {arguments.version} after being rewritten"]
+    if gradle_declared_version() != arguments.version:
+        return [f"{arguments.source} still does not name {arguments.version} after being rewritten"]
     print(arguments.version)
     return []
 
 
 def channel_command(arguments) -> list[str]:
-    version = arguments.version.removeprefix(tag_prefix())
+    version = arguments.version.removeprefix(prefix_from(arguments.source, arguments.tag_prefix))
     if not VERSION.match(version):
         return [f"'{arguments.version}' is not a version this project releases"]
     print(channel_of(version))
@@ -484,7 +550,7 @@ def channel_command(arguments) -> list[str]:
 def prefix_command(arguments) -> list[str]:
     """What release tags are called here. Printed rather than written into the workflows, so that the spelling
     is declared once and a repository cannot come to disagree with its own tags."""
-    print(tag_prefix())
+    print(prefix_from(arguments.source, arguments.tag_prefix))
     return []
 
 
@@ -518,8 +584,8 @@ def holder(tag: str, version: str) -> str:
 
 
 def ancestry_command(arguments) -> list[str]:
-    prefix = tag_prefix()
-    released = tags()
+    prefix = prefix_from(arguments.source, arguments.tag_prefix)
+    released = tags(prefix)
     off_history = unreachable(prefix, released)
     reachable = {version: version not in off_history for version in released}
 
@@ -534,21 +600,25 @@ def ancestry_command(arguments) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--source", required=True, choices=SOURCES,
+                        help="where the version a release is asked to be comes from")
+    parser.add_argument("--tag-prefix", help="what release tags carry in front of the version, for a source "
+                                             "that declares no prefix of its own")
     commands = parser.add_subparsers(required=True)
 
     version = commands.add_parser("version", help="whether the declared version may be released next")
-    version.add_argument("--version", help=f"check this instead of what gradle.properties says, marked "
-                                            f"{SNAPSHOT} the way a declaration is")
+    version.add_argument("--version", help="release this version: the one to check instead of what the "
+                                           "source declares, marked the way that source marks a declaration")
     version.set_defaults(run=version_command)
 
-    following = commands.add_parser("next", help="the version to be worked on once one is released")
+    following = commands.add_parser("next", help="the version that follows a released one")
     following.add_argument("released", help="the version just released, with or without the tag prefix")
     following.set_defaults(run=next_command)
 
     changelog = commands.add_parser("changelog", help="whether released sections still read as released")
     changelog.set_defaults(run=changelog_command)
 
-    setting = commands.add_parser("set-version", help="write the version gradle.properties names")
+    setting = commands.add_parser("set-version", help="write the version the source declares")
     setting.add_argument("version", help="the version to write")
     setting.set_defaults(run=set_version_command)
 

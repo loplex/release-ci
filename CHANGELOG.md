@@ -13,5 +13,9 @@ released it, so once a version has a section here, that section may not be edite
   may be released next, whether a released changelog section still reads as it was released, whether
   every released tag is still reachable, which distribution channel a version goes to, and what a
   release writes back.
+- `--source`, which says where the version a release is asked to be comes from: `gradle.properties`,
+  or `tags` for a repository that is handed the version and records nothing.
+- `--tag-prefix`, which says what release tags carry in front of the version, for a source that
+  declares no prefix of its own.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

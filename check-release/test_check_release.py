@@ -756,6 +756,32 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual(printed.getvalue().strip(), "0.2.0")
 
+    def test_the_commit_a_release_tags_passes_as_that_release(self):
+        """Publishing a release creates its tag, and a workflow on push runs for it: the source there still names
+        the version just released, and `version` is not being asked to release it again."""
+        self.repository_with("v0.1.0", "v0.2.0", declaring="version = 0.2.0\ntagPrefix = v\n")
+        printed, said = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(printed), contextlib.redirect_stderr(said):
+            problems = version_command(argparse.Namespace(version=None, source="gradle.properties", tag_prefix=None))
+        self.assertEqual((problems, printed.getvalue().strip()), ([], "0.2.0"))
+        self.assertIn("this commit is the release of 0.2.0", said.getvalue())
+
+    def test_a_released_version_is_refused_on_a_commit_its_tag_is_not_on(self):
+        here = self.repository_with("v0.2.0", declaring="version = 0.2.0\ntagPrefix = v\n")
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t",
+                        "commit", "-q", "--allow-empty", "-m", "after"], cwd=here, check=True)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            problems = version_command(argparse.Namespace(version=None, source="gradle.properties", tag_prefix=None))
+        self.assertTrue(problems)
+        self.assertIn("released already", " ".join(problems))
+
+    def test_a_released_version_handed_in_on_its_tagged_commit_is_still_refused(self):
+        """Handed in, a version is a release being asked for, wherever it is asked."""
+        self.repository_with("v0.2.0", declaring="version = 0.2.0\ntagPrefix = v\n")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            problems = version_command(argparse.Namespace(version="0.2.0", source="gradle.properties", tag_prefix=None))
+        self.assertIn("released already", " ".join(problems))
+
     def test_a_tag_source_declares_no_version_to_write(self):
         """`set-version` reporting success having written nothing is the failure worth refusing: a release
         would carry on believing it had recorded something. Refused with a status of its own, so that a caller

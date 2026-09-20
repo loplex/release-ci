@@ -425,6 +425,14 @@ def version_command(arguments) -> list[str]:
         # version comes off, and a version handed in may be spelled with it or without. One still carrying it
         # after that - `1.0.0-SNAPSHOT+b` - is refused by check_version as a version being worked on, which it is.
         candidate = named.removesuffix(marker_of(arguments.source))
+
+        # The commit a release tags still names the version it released, and publishing a release creates that
+        # tag, which a workflow running on push runs for as well. Asked there, `version` is not being asked to
+        # release it again, so it says what the commit is and passes. A version handed in is still asked about.
+        if not arguments.version and f"{prefix}{candidate}" in git("tag", "--points-at", "HEAD").split():
+            print(f"note: this commit is the release of {candidate}, tagged {prefix}{candidate}", file=sys.stderr)
+            print(candidate)
+            return []
     else:
         # Handed in, or the default a dispatch leaves empty. No file is read, and nothing will be written.
         candidate = arguments.version or next_candidate(prefix)

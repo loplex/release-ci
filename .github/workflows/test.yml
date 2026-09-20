@@ -1,0 +1,18 @@
+# The suite that holds check-release to its word, run on every push and pull request. Python comes from
+# .python-version so that the version the tests are written against and the one they run on cannot
+# drift apart.
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - run: python3 -m unittest discover -s check-release

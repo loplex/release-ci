@@ -57,6 +57,9 @@ purpose:
 python3 -m unittest discover -s check-release
 ```
 
+The same command runs on every push and pull request, in
+[`.github/workflows/test.yml`](.github/workflows/test.yml).
+
 Where a version is declared, and how it is written back, is the one thing here that a project type
 decides. Today that is `gradle.properties`; the reading and the writing sit in functions of their
 own so that another file format is another adapter rather than another rule.

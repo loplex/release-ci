@@ -24,16 +24,15 @@ specification.loader.exec_module(check_release)
 check_version = check_release.check_version
 check_changelog = check_release.check_changelog
 precedence = check_release.precedence
-next_worked_on = check_release.next_worked_on
+version_after = check_release.version_after
 check_ancestry = check_release.check_ancestry
 channel_of = check_release.channel_of
 uncompared = check_release.uncompared
-read_properties = check_release.properties
 being_worked_on = check_release.being_worked_on
-with_version = check_release.with_version
 repository_root = check_release.repository_root
-tag_prefix = check_release.tag_prefix
+prefix_from = check_release.prefix_from
 version_command = check_release.version_command
+next_candidate = check_release.next_candidate
 SEMVER = check_release.SEMVER
 
 
@@ -270,26 +269,39 @@ class TwoBuildsOfOneVersion(unittest.TestCase):
 
 class WhatFollowsARelease(unittest.TestCase):
     def test_a_final_release_is_followed_by_a_patch(self):
-        self.assertEqual(next_worked_on("0.1.1"), "0.1.2-SNAPSHOT")
-        self.assertEqual(next_worked_on("1.9.0"), "1.9.1-SNAPSHOT")
+        self.assertEqual(version_after("0.1.1"), "0.1.2")
+        self.assertEqual(version_after("1.9.0"), "1.9.1")
+
+    def test_what_follows_is_bare_and_the_source_adds_its_marker(self):
+        """`-SNAPSHOT` is Gradle's spelling of a version being worked on. A repository versioned by its tags
+        has no such state, so what follows a release there is the bare version, which is also what `version`
+        takes under `tags` when none is handed in."""
+        self.assertEqual(self.next_after("v0.1.1", "gradle.properties"), ([], "0.1.2-SNAPSHOT"))
+        self.assertEqual(self.next_after("v0.1.1", "tags"), ([], "0.1.2"))
+
+    def next_after(self, released, source):
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            problems = check_release.next_command(argparse.Namespace(released=released, source=source,
+                                                                     tag_prefix="v"))
+        return problems, printed.getvalue().strip()
 
     def test_a_pre_release_goes_on_heading_for_the_release_it_was_for(self):
         """0.2.0-rc.1 was a step towards 0.2.0, so work carries on towards it. Counting the patch up here would
         skip the very release the train was running to, and the step check would refuse it afterwards."""
-        self.assertEqual(next_worked_on("0.2.0-rc.1"), "0.2.0-SNAPSHOT")
-        self.assertEqual(next_worked_on("0.2.0-beta.1"), "0.2.0-SNAPSHOT")
+        self.assertEqual(version_after("0.2.0-rc.1"), "0.2.0")
+        self.assertEqual(version_after("0.2.0-beta.1"), "0.2.0")
 
-    def test_build_metadata_is_not_carried_into_what_is_worked_on(self):
-        """Metadata names a build; what is worked on is not one."""
-        self.assertEqual(next_worked_on("1.0.0+dfsg1"), "1.0.1-SNAPSHOT")
-        self.assertEqual(next_worked_on("0.2.0-rc.1+sha.5114f85"), "0.2.0-SNAPSHOT")
+    def test_build_metadata_is_not_carried_into_what_follows(self):
+        """Metadata names a build; what follows a release is not that build."""
+        self.assertEqual(version_after("1.0.0+dfsg1"), "1.0.1")
+        self.assertEqual(version_after("0.2.0-rc.1+sha.5114f85"), "0.2.0")
 
     def test_what_follows_may_itself_be_released(self):
-        """The two rules have to agree: what is worked on next must be something the step check accepts."""
+        """The two rules have to agree: what follows a release must be something the step check accepts."""
         for released, releases in (("0.1.1", ["0.1.0", "0.1.1"]), ("0.2.0-rc.1", ["0.1.0", "0.2.0-rc.1"])):
             with self.subTest(released=released):
-                following = next_worked_on(released).removesuffix("-SNAPSHOT")
-                self.assertEqual(check_version(following, releases), [])
+                self.assertEqual(check_version(version_after(released), releases), [])
 
 
 class TheChannel(unittest.TestCase):
@@ -338,7 +350,8 @@ class TheChannel(unittest.TestCase):
             with self.subTest(version=version):
                 printed = io.StringIO()
                 with contextlib.redirect_stdout(printed):
-                    problems = check_release.channel_command(argparse.Namespace(version=version))
+                    problems = check_release.channel_command(
+                        argparse.Namespace(version=version, source="gradle.properties", tag_prefix=None))
                 self.assertEqual((problems, printed.getvalue()), ([], "beta\n"))
 
 
@@ -475,8 +488,6 @@ class AskingTheRepository(unittest.TestCase):
         check_release.REPO = self.here
         self.addCleanup(setattr, check_release, "REPO", original)
         self.git("init", "-q", "-b", "main")
-        # What names the prefix.
-        (self.here / "gradle.properties").write_text("tagPrefix = v\n", encoding="utf-8")
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n")
         self.git("tag", "v0.1.0")
         self.git("switch", "-q", "-c", "release/0.2.0")
@@ -521,7 +532,7 @@ class AskingTheRepository(unittest.TestCase):
 
     def test_a_section_off_this_history_is_not_called_deleted(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            problems = check_release.changelog_command(argparse.Namespace())
+            problems = check_release.changelog_command(argparse.Namespace(source="tags", tag_prefix="v"))
         self.assertEqual(len(problems), 1)
         self.assertIn("not on this history", problems[0])
 
@@ -533,7 +544,7 @@ class AskingTheRepository(unittest.TestCase):
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.1] - 2025-12-01\n\n- Z\n")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = check_release.changelog_command(argparse.Namespace())
+            problems = check_release.changelog_command(argparse.Namespace(source="tags", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
         self.assertIn("Not compared: 0.0.1 ", printed.getvalue())
@@ -548,88 +559,10 @@ class AskingTheRepository(unittest.TestCase):
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.1] - 2025-12-01\n\n- Z\n")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = check_release.changelog_command(argparse.Namespace())
+            problems = check_release.changelog_command(argparse.Namespace(source="tags", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
         self.assertIn("Not compared: 0.0.1 ", printed.getvalue())
-
-
-class RewritingTheVersion(unittest.TestCase):
-    """What a release does to gradle.properties, before it builds and again once it is out. Here rather than
-    in a pattern in a workflow, because a reader and a writer that have to agree about how the line is written
-    can drift apart in silence: the reading goes on working and only the writing stops, which is the half
-    nothing notices."""
-
-    TIGHT = "group=cz.loplex\nversion=0.1.1-SNAPSHOT\ntagPrefix=v\n"
-    SPACED = "group = cz.loplex\nversion = 0.2.1-SNAPSHOT\ntagPrefix =\n"
-
-    def test_a_tight_separator_stays_tight(self):
-        self.assertIn("version=0.1.1\n", with_version(self.TIGHT, "0.1.1"))
-
-    def test_a_spaced_separator_stays_spaced(self):
-        self.assertIn("version = 0.2.1\n", with_version(self.SPACED, "0.2.1"))
-
-    def test_nothing_but_the_version_line_moves(self):
-        """Comments and blank lines included: a real gradle.properties carries both, and a writer dropping them
-        would put a change nobody made into the release commit."""
-        text = "# the build\n\n" + self.SPACED
-        self.assertEqual(with_version(text, "0.2.1"), text.replace("0.2.1-SNAPSHOT", "0.2.1"))
-
-    def test_a_key_that_merely_ends_in_version_is_left_alone(self):
-        """Spelled the way gradle.properties really spells it. A fixture that differed in case as well -
-        `pluginVersion` - would pass under a writer that matched the end of the key rather than the whole of it,
-        having never matched either way. Asked alone first: beside a real `version` line, a writer taking both is
-        refused for declaring the version twice, and the test would fail on that refusal rather than on the key
-        being rewritten."""
-        with self.assertRaises(SystemExit):
-            with_version("plugin.version = 9.9.9\n", "0.2.0")
-        text = "plugin.version = 9.9.9\nversion = 0.1.0\n"
-        written = with_version(text, "0.2.0")
-        self.assertIn("plugin.version = 9.9.9\n", written)
-        self.assertIn("version = 0.2.0\n", written)
-
-    def test_an_indented_declaration_is_rewritten_where_it_is_read(self):
-        """properties() reads past the white space in front of a key, as Gradle does, so an indented declaration
-        is one both of them take, and rewritten it keeps its indentation and its separator: either one
-        changed would be a change nobody made."""
-        self.assertEqual(with_version("\tversion = 0.1.0\n", "0.2.0"), "\tversion = 0.2.0\n")
-        self.assertEqual(with_version("\tversion=0.1.0\n", "0.2.0"), "\tversion=0.2.0\n")
-
-    def test_the_version_is_written_as_data(self):
-        """`&` and a backreference are characters in a version, not instructions. They would not be under sed
-        or under a regular expression's own substitution, which is half of why this is neither."""
-        self.assertIn("version = 1.0.0-a&b\\\\1\n", with_version(self.SPACED, "1.0.0-a&b\\1"))
-
-    def test_a_file_naming_no_version_is_refused_rather_than_left_as_it_was(self):
-        with self.assertRaises(SystemExit):
-            with_version("group = cz.loplex\n", "0.2.1")
-
-    def test_a_version_declared_twice_is_refused_rather_than_rewritten_once(self):
-        """Gradle takes the last declaration, so a writer rewriting the first would leave the build on the
-        version it was asked to replace."""
-        with self.assertRaises(SystemExit):
-            with_version("version = 0.1.1-SNAPSHOT\nversion = 0.1.1-SNAPSHOT\n", "0.1.1")
-
-    def test_a_declaration_continued_onto_the_next_line_is_rewritten_whole(self):
-        written = with_version("a=1\nversion = 0.1.\\\n  1-SNAPSHOT\nb=2\n", "0.1.1")
-        self.assertEqual(written, "a=1\nversion = 0.1.1\nb=2\n")
-
-    def test_a_colon_separator_stays_a_colon(self):
-        self.assertEqual(with_version("version: 0.1.1-SNAPSHOT\n", "0.1.1"), "version: 0.1.1\n")
-
-    def test_a_key_a_continuation_splits_is_written_whole(self):
-        """Gradle joins `ver\\` and `sion` into one key, so the version is read there; the first line then holds
-        only part of the key, and putting it back would leave the file declaring `ver` instead."""
-        written = with_version("\tver\\\n  sion = 0.1.0\ntagPrefix = v\n", "0.2.0")
-        self.assertEqual(written, "\tversion = 0.2.0\ntagPrefix = v\n")
-
-    def test_the_version_is_escaped_as_properties_store_escapes_a_value(self):
-        """Written as data, a version still has to be read back as it was given: a character below a space or
-        above `~`, in Latin-1 or outside it, a leading space, and one the format reads as a separator or a comment
-        are escaped as Properties.store(OutputStream) escapes them."""
-        given = " 1=2:3#4!5\t6\u20ac 7\x01\u00e9\U0001F600"
-        written = with_version("version = 0.1.0\n", given)
-        self.assertEqual(written, "version = \\ 1\\=2\\:3\\#4\\!5\\t6\\u20AC 7\\u0001\\u00E9\\uD83D\\uDE00\n")
 
 
 class WritingTheVersionBack(unittest.TestCase):
@@ -646,13 +579,14 @@ class WritingTheVersionBack(unittest.TestCase):
     def set_version(self, version: str) -> list[str]:
         with contextlib.redirect_stdout(io.StringIO()):
             return check_release.set_version_command(
-                argparse.Namespace(version=version))
+                argparse.Namespace(version=version, source="gradle.properties", tag_prefix=None))
 
     def test_a_rewrite_that_did_not_take_is_caught_on_reading_back(self):
         """The read-back is what catches a writer and a reader that have come to disagree, which is the quiet
         failure; a writer that changes nothing stands in for one here."""
         self.properties_file_holding("version = 0.1.1-SNAPSHOT\n")
-        with unittest.mock.patch.object(check_release, "with_version", lambda text, version: text):
+        with unittest.mock.patch.object(check_release.SOURCES["gradle.properties"], "with_version",
+                                        lambda text, version: text):
             problems = self.set_version("0.1.1")
         self.assertTrue(problems)
         self.assertIn("still does not name 0.1.1", problems[0])
@@ -700,6 +634,22 @@ class WritingTheVersionBack(unittest.TestCase):
         self.assertEqual(path.read_bytes(), before.replace(b"0.1.1-SNAPSHOT", b"0.1.1"))
 
 
+class ReadingTheFile(unittest.TestCase):
+    """The file a source names, read from disk in the encoding its format is read in."""
+
+    def test_gradle_properties_is_read_a_byte_to_a_character_as_gradle_reads_it(self):
+        """Gradle reads every byte of the file as the one character with that code, so no byte above ASCII is
+        decoded as part of UTF-8 or through another single-byte table: the prefix a release takes has to be the one
+        the build sees."""
+        here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        (here / "gradle.properties").write_bytes(b"version = 0.1.1-SNAPSHOT\ntagPrefix = " + bytes(range(0x80, 0x100))
+                                                 + b"\n")
+        original = check_release.REPO
+        check_release.REPO = here
+        self.addCleanup(setattr, check_release, "REPO", original)
+        self.assertEqual(check_release.prefix_from("gradle.properties", None), "".join(map(chr, range(0x80, 0x100))))
+
+
 class AVersionHandedIn(unittest.TestCase):
     """`--version` in place of what the file declares, spelled with the marker or without it. Only a marker
     ending the version comes off, so a version carrying it anywhere else is still one being worked on."""
@@ -713,7 +663,7 @@ class AVersionHandedIn(unittest.TestCase):
         self.addCleanup(setattr, check_release, "REPO", original)
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = version_command(argparse.Namespace(version=given))
+            problems = version_command(argparse.Namespace(version=given, source="gradle.properties", tag_prefix="v"))
         return problems, printed.getvalue().strip()
 
     def test_a_version_handed_in_without_the_marker_is_released_as_it_is(self):
@@ -727,6 +677,108 @@ class AVersionHandedIn(unittest.TestCase):
         problems, printed = self.released_as("1.0.0-SNAPSHOT+b")
         self.assertEqual((len(problems), printed), (1, ""))
         self.assertIn("1.0.0-SNAPSHOT+b is a version being worked on", problems[0])
+
+
+class TheSourceAVersionComesFrom(unittest.TestCase):
+    """The one thing a project type decides. The two halves are not the same question: where the version is
+    read from, and whether anything is written once it is released. A repository whose version lives only in
+    its tags answers the first with "you tell me, or the one after the highest release" and the second with
+    "nowhere"."""
+
+    def repository_with(self, *tags, declaring=None):
+        here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        subprocess.run(["git", "init", "-q"], cwd=here, check=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t",
+                        "commit", "-q", "--allow-empty", "-m", "init"], cwd=here, check=True)
+        for tag in tags:
+            subprocess.run(["git", "tag", tag], cwd=here, check=True)
+        if declaring is not None:
+            (here / "gradle.properties").write_text(declaring, encoding="utf-8")
+        original = check_release.REPO
+        check_release.REPO = here
+        self.addCleanup(setattr, check_release, "REPO", original)
+        return here
+
+    def problems_releasing(self, given, *tags, source="tags", prefix="v"):
+        # The command prints the candidate it accepted; swallowed here so that a suite's output holds test
+        # results and nothing else.
+        self.repository_with(*tags)
+        with contextlib.redirect_stdout(io.StringIO()):
+            return version_command(argparse.Namespace(version=given, source=source, tag_prefix=prefix))
+
+    def test_a_tag_source_releases_the_version_it_is_handed(self):
+        self.repository_with("v0.1.0")
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            problems = version_command(argparse.Namespace(version="0.2.0", source="tags", tag_prefix="v"))
+        self.assertEqual((problems, printed.getvalue().strip()), ([], "0.2.0"))
+
+    def test_the_default_is_the_patch_after_the_highest_release(self):
+        """What a dispatch leaves to this rather than computing in a form: the field is empty, and the patch
+        after the highest release is what comes back. Which release is the highest where their names sort
+        otherwise is the next test's."""
+        self.repository_with("v0.1.0", "v0.2.0")
+        self.assertEqual(next_candidate("v"), "0.2.1")
+
+    def test_the_default_is_measured_by_precedence_not_by_how_tags_sort(self):
+        """`git tag -l` hands them back in ASCII order, where `v0.10.0` sorts before `v0.9.0`. Taking the last
+        one listed would offer `0.9.1` as the version after `0.10.0` - a release the step check then refuses,
+        from a default this file produced."""
+        self.repository_with("v0.9.0", "v0.10.0")
+        self.assertEqual(next_candidate("v"), "0.10.1")
+
+    def test_an_open_train_is_defaulted_to_the_release_it_was_for(self):
+        self.repository_with("v0.1.0", "v0.2.0-rc.1")
+        self.assertEqual(next_candidate("v"), "0.2.0")
+
+    def test_with_nothing_released_the_first_version_is_asked_for_rather_than_guessed(self):
+        self.repository_with()
+        with self.assertRaises(SystemExit) as raised:
+            next_candidate("v")
+        self.assertIn("say which version to release", str(raised.exception))
+
+    def test_a_tag_source_still_answers_to_the_rules(self):
+        """The adapter decides where the candidate comes from and nothing else: what may follow what is the
+        same rule for every source."""
+        problems = self.problems_releasing("0.4.0", "v0.1.0")
+        self.assertTrue(problems)
+        self.assertIn("does not follow 0.1.0", problems[0])
+
+    def test_a_declaring_source_with_no_marker_releases_the_version_as_declared(self):
+        """`marker_of` allows for a source that declares a version and carries no marker on it. Read off with
+        an empty marker, the declared version has to come out whole - not as the empty string a slice to `-0`
+        leaves - and be accepted, not refused as a version nobody would release."""
+        self.repository_with("v0.1.0", declaring="version = 0.2.0\n")
+        printed = io.StringIO()
+        with unittest.mock.patch.object(check_release, "marker_of", lambda source: ""), \
+                contextlib.redirect_stdout(printed):
+            problems = version_command(argparse.Namespace(version=None, source="gradle.properties", tag_prefix="v"))
+        self.assertEqual(problems, [])
+        self.assertEqual(printed.getvalue().strip(), "0.2.0")
+
+    def test_a_tag_source_declares_no_version_to_write(self):
+        """`set-version` reporting success having written nothing is the failure worth refusing: a release
+        would carry on believing it had recorded something. Refused with a status of its own, so that a caller
+        can tell it from a write that failed."""
+        self.repository_with("v0.1.0")
+        said = io.StringIO()
+        with contextlib.redirect_stderr(said), self.assertRaises(SystemExit) as raised:
+            check_release.set_version_command(argparse.Namespace(version="0.2.0", source="tags", tag_prefix="v"))
+        self.assertEqual(raised.exception.code, check_release.NOTHING_TO_WRITE)
+        self.assertNotIn(check_release.NOTHING_TO_WRITE, (1, 2), "the status of every other refusal, and argparse's")
+        self.assertIn("declares no version", said.getvalue())
+
+    def test_a_tag_source_declares_no_prefix_either(self):
+        self.repository_with("v0.1.0")
+        with self.assertRaises(SystemExit) as raised:
+            prefix_from("tags", None)
+        self.assertIn("--tag-prefix", str(raised.exception))
+
+    def test_a_prefix_given_outright_is_taken_over_any_the_source_declares(self):
+        self.repository_with(declaring="version = 1.0.0-SNAPSHOT\ntagPrefix = v\n")
+        self.assertEqual(prefix_from("gradle.properties", ""), "")
+        self.assertEqual(prefix_from("gradle.properties", "release-"), "release-")
+        self.assertEqual(prefix_from("gradle.properties", None), "v")
 
 
 class WhichTagsCountAsReleases(unittest.TestCase):
@@ -751,13 +803,10 @@ class WhichTagsCountAsReleases(unittest.TestCase):
                         "commit", "-q", "--allow-empty", "-m", "init"], cwd=repository, check=True)
         for tag in self.PLANTED:
             subprocess.run(["git", "tag", tag], cwd=repository, check=True)
-        (repository / "gradle.properties").write_text(
-            f"version = 9.9.9-SNAPSHOT\ntagPrefix = {prefix}\n", encoding="utf-8")
-
         original = check_release.REPO
         check_release.REPO = repository
         self.addCleanup(setattr, check_release, "REPO", original)
-        return sorted(check_release.released_versions())
+        return sorted(check_release.released_versions(prefix))
 
     def test_a_v_prefix_takes_the_v_tags_and_hands_back_versions(self):
         self.assertEqual(self.releases_under("v"), ["0.1.0", "1.2.3-rc.1"])
@@ -821,7 +870,8 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
 
     def test_a_subcommand_that_reads_the_repository_still_refuses_outside_one(self):
         nowhere = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        done = subprocess.run([sys.executable, str(SCRIPT), "prefix"], cwd=nowhere, capture_output=True, text=True)
+        done = subprocess.run([sys.executable, str(SCRIPT), "--source", "gradle.properties", "prefix"],
+                              cwd=nowhere, capture_output=True, text=True)
         self.assertEqual(done.returncode, 1)
         self.assertIn("inside the repository", done.stderr)
 
@@ -831,8 +881,8 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
         subprocess.run(["git", "init", "-q"], cwd=empty, check=True)
         for command, missing in (("prefix", "gradle.properties"), ("changelog", "CHANGELOG.md")):
             with self.subTest(command=command):
-                done = subprocess.run([sys.executable, str(SCRIPT), command], cwd=empty, capture_output=True,
-                                      text=True)
+                done = subprocess.run([sys.executable, str(SCRIPT), "--source", "gradle.properties", command],
+                                      cwd=empty, capture_output=True, text=True)
                 self.assertEqual(done.returncode, 1)
                 self.assertNotIn("Traceback", done.stderr)
                 self.assertIn(f"there is no {missing} here", done.stderr)
@@ -842,84 +892,6 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
         self.enterContext(contextlib.chdir(nowhere))
         with self.assertRaises(SystemExit):
             repository_root()
-
-
-class TheDeclarationsGradleHolds(unittest.TestCase):
-    """gradle.properties is where a release reads the version it is asked to be and the name its tag will
-    carry. Gradle accepts spaces around the `=` and projects use both spellings, so a reader that knows only
-    one of them reports a file that declares nothing when it declares it the other way."""
-
-    def properties_of(self, text):
-        written = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        (written / "gradle.properties").write_text(text, encoding="utf-8")
-        original = check_release.REPO
-        check_release.REPO = written
-        self.addCleanup(setattr, check_release, "REPO", original)
-        return read_properties()
-
-    def test_a_declaration_written_tight_is_read(self):
-        self.assertEqual(self.properties_of("version=0.2.1-SNAPSHOT\n")["version"], "0.2.1-SNAPSHOT")
-
-    def test_a_declaration_written_with_spaces_is_read(self):
-        self.assertEqual(self.properties_of("version = 0.2.1-SNAPSHOT\n")["version"], "0.2.1-SNAPSHOT")
-
-    def test_a_prefix_declared_empty_is_not_a_prefix_left_out(self):
-        """The distinction the whole parametrisation rests on: a project that tags bare versions says so, and
-        is not to be confused with one that forgot to say anything."""
-        self.assertEqual(self.properties_of("tagPrefix =\n").get("tagPrefix"), "")
-        self.assertIsNone(self.properties_of("version = 1.0.0\n").get("tagPrefix"))
-
-    def test_a_file_that_says_nothing_about_the_prefix_is_refused(self):
-        """No default, because the wrong guess is silent: a repository tagging bare versions, read as tagging
-        `v*`, turns up no released tags at all and every check over them then passes having compared nothing."""
-        self.properties_of("version = 1.0.0\n")
-        with self.assertRaises(SystemExit):
-            tag_prefix()
-
-    def test_a_line_continued_onto_the_next_is_one_declaration(self):
-        """Gradle reads a line ending in a backslash as going on in the next, so the `version` below is part of
-        the jvmargs value and declares nothing: a reader taking it would release a version the build never sees."""
-        found = self.properties_of("org.gradle.jvmargs=-Xmx1g \\\n    version = 0.1.0\ntagPrefix = v\n")
-        self.assertEqual(found, {"org.gradle.jvmargs": "-Xmx1g version = 0.1.0", "tagPrefix": "v"})
-
-    def test_an_even_run_of_backslashes_ends_the_line(self):
-        found = self.properties_of("path = C:\\\\dir\\\\\nversion = 1.0.0\n")
-        self.assertEqual(found, {"path": "C:\\dir\\", "version": "1.0.0"})
-
-    def test_an_escape_is_read_as_what_it_stands_for(self):
-        """`release\\-` is the prefix `release-` to Gradle, and so it is here: an escape taken as written would
-        name a prefix no tag carries, and every check over none would pass."""
-        found = self.properties_of("tagPrefix = release\\-\nversion = 1.0\\u002e0\nk\\ ey = a\\tb\n")
-        self.assertEqual(found, {"tagPrefix": "release-", "version": "1.0.0", "k ey": "a\tb"})
-
-    def test_a_colon_or_white_space_separates_as_the_equals_sign_does(self):
-        found = self.properties_of("version: 1.0.0\ntagPrefix v\n")
-        self.assertEqual(found, {"version": "1.0.0", "tagPrefix": "v"})
-
-    def test_a_malformed_unicode_escape_is_refused_as_gradle_refuses_it(self):
-        with self.assertRaises(SystemExit):
-            self.properties_of("version = 1.0.\\u00\n")
-
-    def test_the_file_is_read_a_byte_to_a_character_as_gradle_reads_it(self):
-        """Gradle reads every byte of the file as the one character with that code, so no byte above ASCII is
-        decoded as part of UTF-8 or through another single-byte table: the prefix a release takes has to be the one
-        the build sees."""
-        self.properties_of("")
-        (check_release.REPO / "gradle.properties").write_bytes(b"tagPrefix = " + bytes(range(0x80, 0x100)) + b"\n")
-        self.assertEqual(read_properties()["tagPrefix"], "".join(map(chr, range(0x80, 0x100))))
-
-    def test_a_surrogate_pair_is_one_character_and_a_lone_surrogate_is_kept(self):
-        """Java reads every `\\uXXXX` as one UTF-16 unit, so two that make a surrogate pair are one character, and
-        one left alone is kept as it is rather than refused."""
-        text = ("tagPrefix = \\uD83D\n"
-                "version = \\uD83D\\uDE00\n"
-                "apart = \\uDE00\\uD83Dx\\uD83D\\uD83Dx\\uDE00\n")
-        expected = {"tagPrefix": "\ud83d", "version": "\U0001F600", "apart": "\ude00\ud83dx\ud83d\ud83dx\ude00"}
-        self.assertEqual(self.properties_of(text), expected)
-
-    def test_comments_and_blank_lines_declare_nothing(self):
-        found = self.properties_of("# version=9.9.9\n\n  \nversion = 1.0.0\n! version=8.8.8\n")
-        self.assertEqual(found, {"version": "1.0.0"})
 
 
 if __name__ == "__main__":

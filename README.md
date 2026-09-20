@@ -18,9 +18,10 @@ end up assuming one ecosystem's build.
 |-----------------|-------------------------------------------------------------------------|
 | `check-release` | What a release has to be true of, asked as properties over a repository |
 
-It reads three things out of the repository it is asked about: the tags, `CHANGELOG.md`, and the
-file the version is declared in. The first two are the same everywhere; the third is what a project
-type decides, and [check-release](#check-release) says where that line is drawn.
+It reads the tags and `CHANGELOG.md` out of the repository it is asked about, and takes the version a
+release is asked to be from whichever source the invocation names. The first two are the same
+everywhere; the third is what a project type decides, and
+[Where the version comes from](#where-the-version-comes-from) says where the rules stop and the source begins.
 
 ## What is planned
 
@@ -33,15 +34,15 @@ type decides, and [check-release](#check-release) says where that line is drawn.
 
 `check-release.py` holds, as separate subcommands, what a release asks of a repository and does with it:
 
-| Subcommand    | What for                                                                            |
-|---------------|-------------------------------------------------------------------------------------|
-| `version`     | whether the declared version may be released, given the releases                    |
-| `next`        | the version to be worked on once one is released                                    |
-| `changelog`   | whether every released section of `CHANGELOG.md` still reads the way its tag has it |
-| `ancestry`    | whether every released tag is still reachable from this history                     |
-| `prefix`      | what release tags are called here                                                   |
-| `channel`     | the distribution channel a version goes to                                          |
-| `set-version` | write a version where it is declared: the one released, then the next               |
+| Subcommand    | What for                                                                                           |
+|---------------|----------------------------------------------------------------------------------------------------|
+| `version`     | whether the [candidate version](#where-the-version-comes-from) may be released, given the releases |
+| `next`        | the version that follows a released one, with the source's [marker](#where-the-version-comes-from) |
+| `changelog`   | whether every released section of `CHANGELOG.md` still reads the way its tag has it                |
+| `ancestry`    | whether every released tag is still reachable from this history                                    |
+| `prefix`      | what release tags are called here                                                                  |
+| `channel`     | the distribution channel a version goes to                                                         |
+| `set-version` | write a version where it is declared: the one released, then the next                              |
 
 A version here is a semantic version: `1.0.0`, `1.0.0-rc.1`, `1.0.0-eap-2`, `1.0.0+dfsg1`. The
 grammar is SemVer 2.0.0's own, so a leading zero and an empty identifier are refused rather than
@@ -69,7 +70,8 @@ a `## [Unreleased]` section on top, and a `## [<version>]` section for each rele
 
 The rules are plain functions over text, tags and booleans, and
 [`check-release/test_check_release.py`](check-release/test_check_release.py) exercises them without a
-repository to release; the helpers beside them that face git get one built for the purpose:
+repository to release, as [`test_sources.py`](check-release/test_sources.py) does the adapters for
+where the version comes from; the helpers beside them that face git get one built for the purpose:
 
 ```
 python3 -m unittest discover -s check-release
@@ -78,6 +80,49 @@ python3 -m unittest discover -s check-release
 The same command runs on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
-Where a version is declared, and how it is written back, is the one thing here that a project type
-decides. Today that is `gradle.properties`; the reading and the writing sit in functions of their
-own so that another file format is another adapter rather than another rule.
+## Where the version comes from
+
+Every invocation says so, with `--source`, because the wrong guess is silent. Two are implemented,
+and they differ in more than a filename:
+
+| `--source`          | The version a release is asked to be                                              | After a release           |
+|---------------------|-----------------------------------------------------------------------------------|---------------------------|
+| `gradle.properties` | read from the file or handed in with `--version`, a `-SNAPSHOT` ending it dropped | the next one written back |
+| `tags`              | handed in with `--version`, or the version after the highest release              | nothing to write          |
+
+The version a release is asked to be, whichever way it is found, is the candidate version: what
+`check-release version` holds to the rules.
+
+Carrying `-SNAPSHOT` belongs to `gradle.properties`: it is Gradle's and Maven's way of saying "not
+released yet", and a release takes it off the end of the version, whether the file declares it or
+`--version` hands it in; a version handed in may also leave it out. A version still carrying it
+after that - `1.0.0-SNAPSHOT-SNAPSHOT`, `1.0.0-SNAPSHOT+b`, or `1.0.0-SNAPSHOT` handed to `tags` -
+is refused whatever the source. A repository whose version lives only in its tags has no such
+state, so the version after a release is worked out bare and the source adds the marker where there
+is one.
+
+Under `tags`, with nothing released yet, there is no highest release to follow, and the first
+version is named with `--version`. `set-version` under `tags` refuses rather than reporting a
+success in which nothing was written, and with exit status 3 rather than 1, so that a caller can
+tell "nothing to write to" from a write that failed.
+
+`--tag-prefix` says what release tags are called. Under `gradle.properties` the file says it where
+`--tag-prefix` is not given, in a `tagPrefix` line it then has to carry beside the `version` one:
+`version = 0.2.0-SNAPSHOT` and `tagPrefix = v`, or `tagPrefix =` where the tags carry nothing in
+front, are the two lines it needs. A source naming no file, as `tags` does, has to be told, and
+`--tag-prefix ''` tells it the tags carry nothing in front. `--tag-prefix` has no default, on
+purpose: a repository tagging bare versions, read as though it tagged `v*`, turns up no releases at
+all, and every check over them - all but `version` under `tags` given no version, which finds no
+release to count from - passes having compared nothing. A caller wanting a default declares it where
+its own readers can see it.
+
+Each source is an adapter in [`check-release/sources.py`](check-release/sources.py), and the rules
+know none of them by name. Adding `package.json`, `pyproject.toml` or `Cargo.toml` means one more
+adapter there, filed under the name `--source` gives it, its file carrying the tag prefix beside the
+version as `gradle.properties` carries `tagPrefix`, and nothing in the rules changes unless it marks
+a version being worked on other than with a `-SNAPSHOT` suffix, the one marker they know. A plain
+`VERSION` file has no room for a prefix, which the rules ask of every source naming a file unless
+`--tag-prefix` is given, so it takes more than an adapter. What an adapter has to answer, its file
+and the tag prefix included, is listed at the top of [`sources.py`](check-release/sources.py);
+[`check-release/test_sources.py`](check-release/test_sources.py) holds every adapter to it, and asks
+one that declares a version for a file to try it on.

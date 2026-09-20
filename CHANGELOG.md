@@ -12,6 +12,11 @@ released it, so once a version has a section here, that section may not be edite
 - `check-release`, the rules a release has to pass, as subcommands over a repository: which version
   may be released next, whether a released changelog section still reads as it was released, whether
   every released tag is still reachable, which distribution channel a version goes to, what release
-  tags are called, which version is worked on once one is released, and what a release writes back.
+  tags are called, which version follows a released one, and what a release writes back.
+- `--source`, which says where the version a release is asked to be comes from: `gradle.properties`,
+  or `tags` for a repository that declares no version: it is handed one, or takes the one after its
+  highest release.
+- `--tag-prefix`, which says what release tags carry in front of the version, for a source that
+  declares no prefix of its own.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

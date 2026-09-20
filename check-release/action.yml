@@ -1,0 +1,65 @@
+name: check-release
+description: >-
+  Ask a repository the questions a release has to pass: which version may be released next, whether a
+  released changelog section still reads as it was released, and whether every released tag is still
+  reachable. Runs in the calling workspace and needs python3 3.10 or later, which GitHub-hosted runners
+  carry. Check out with fetch-depth 0: a shallow checkout has neither the history ancestry reads nor the
+  tags every check counts from, and finds nothing rather than failing.
+
+inputs:
+  source:
+    description: >-
+      Where the version a release is asked to be comes from - `gradle.properties`, or `tags` for a
+      repository that is handed its version and records nothing. No default, because a wrong guess here
+      is silent.
+    required: true
+  tag-prefix:
+    description: >-
+      What a release tag carries in front of the version, `v` for `v0.1.0`. Left out where the source
+      declares it - `gradle.properties` does, in `tagPrefix` - because a default here would answer over
+      the top of that declaration, and a repository tagging bare versions would then be read as tagging
+      `v*`: no released tags found, and every check passing having compared nothing.
+
+      Where the source declares nothing and the tags carry no prefix at all, say `^none`. An empty value
+      cannot say it: GitHub hands over an input left out and an input set to nothing as the same empty
+      string. `^` is the point of that spelling rather than decoration - git refuses it in a ref name,
+      so no repository can ever have it as a real prefix and mean something else by it.
+    default: ''
+  checks:
+    description: >-
+      Which checks to run, separated by spaces, out of `version`, `changelog` and `ancestry`. A name
+      that is none of those fails the run rather than being skipped, and so does naming none at all: a
+      check nobody notices was not run is a check that passes having compared nothing.
+    default: changelog ancestry
+  version:
+    description: >-
+      Release this version instead of the one the source declares, spelled the way that source declares
+      one: `0.2.0-SNAPSHOT` under `gradle.properties`, whose marker is then dropped, and a bare `0.2.0`
+      under `tags`. Only read by `version`.
+    default: ''
+
+outputs:
+  version:
+    description: The version that may be released, as `version` answered it. Empty unless it ran.
+    value: ${{ steps.checks.outputs.version }}
+  channel:
+    description: >-
+      The distribution channel that version goes to - `default` for a final release, otherwise the first
+      identifier of its pre-release suffix. Empty unless `version` ran.
+    value: ${{ steps.checks.outputs.channel }}
+
+runs:
+  using: composite
+  steps:
+    # One step calling one script, rather than the steps written out here: the shell is then something a test
+    # can run against a repository of its own, which is not true of anything living inside action.yml.
+    - id: checks
+      shell: bash
+      # Inputs reach the script as environment variables rather than through ${{ }} interpolated into it,
+      # so that a value carrying a quote or a newline is data here and not more script.
+      env:
+        SOURCE: ${{ inputs.source }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+        CHECKS: ${{ inputs.checks }}
+        VERSION: ${{ inputs.version }}
+      run: "$GITHUB_ACTION_PATH/check.sh"

@@ -17,5 +17,7 @@ released it, so once a version has a section here, that section may not be edite
   or `tags` for a repository that is handed the version and records nothing.
 - `--tag-prefix`, which says what release tags carry in front of the version, for a source that
   declares no prefix of its own.
+- `check-release/action.yml`, a composite action, so a project asks for the rules rather than keeping
+  a copy of them.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

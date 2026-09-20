@@ -61,6 +61,42 @@ python3 -m unittest discover -s check-release
 The same command runs on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml).
 
+## Using it from another repository
+
+`check-release/action.yml` is a composite action, so a project asks for the rules rather than keeping a
+copy of them:
+
+```yaml
+- uses: actions/checkout@v7
+  with:
+    fetch-depth: 0
+- uses: loplex/release-ci/check-release@<tag>
+  id: release
+  with:
+    source: gradle.properties
+    checks: version changelog ancestry
+```
+
+Pin to a release tag rather than to a branch, and keep the tag: a consumer pinned to a commit no tag
+reaches will fail to check out, GitHub keeping no promises about unreachable objects. This repository's
+own workflow uses `./check-release`, being the one repository the action already sits in.
+
+`tag-prefix` is left out above because `gradle.properties` declares it, in `tagPrefix`. Giving it to
+the action answers over the top of that: a repository tagging bare versions, told `v`, finds no
+releases at all and every check passes having compared nothing. Give it where the source declares
+nothing, which `tags` does not.
+
+A repository whose tags carry no prefix at all says `tag-prefix: ^none` there. An empty value will
+not do, GitHub handing over an input left out and an input set to nothing as the same empty string,
+and `^none` cannot be mistaken for a real prefix because git refuses `^` in a ref name.
+
+`fetch-depth: 0` is not optional. A shallow checkout has neither the history `ancestry` reads nor the
+tags every check counts from, so the checks find nothing and pass, which is the one outcome worth
+fearing here.
+
+Where `version` is among the checks, the action answers with `steps.<id>.outputs.version`, the version
+that may be released, and `outputs.channel`, where it is published.
+
 ## Where the version comes from
 
 Every invocation says so, with `--source`, because the wrong guess is silent. Two are implemented,

@@ -1,0 +1,6 @@
+# Python bytecode, written beside the scripts whenever the tests are run
+__pycache__/
+*.py[cod]
+
+# The JetBrains project directory, written into the checkout by the IDE rather than by anything here
+/.idea/

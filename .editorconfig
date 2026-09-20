@@ -1,0 +1,6 @@
+# Python here is written to 120 columns, the right margin IntelliJ gives by default and the one this code
+# was written against, rather than PEP 8's 79 or the 99 it lets a team agree on.
+root = true
+
+[*.py]
+max_line_length = 120

@@ -8,7 +8,7 @@ on:
   pull_request:
 
 jobs:
-  check-release:
+  suite:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -16,3 +16,18 @@ jobs:
         with:
           python-version-file: .python-version
       - run: python3 -m unittest discover -s check-release
+
+  guards:
+    # The rules run against this repository, which is the first thing that reads them from here. It declares
+    # no version in a file, so it is its own smallest consumer of the `tags` source. `version` is left out:
+    # it asks what may be released next, which is a question a release asks, not every push.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # ancestry reads the whole history, and both guards read the tags.
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - run: python3 check-release/check-release.py --source tags --tag-prefix v ancestry
+      - run: python3 check-release/check-release.py --source tags --tag-prefix v changelog

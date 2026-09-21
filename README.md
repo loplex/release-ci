@@ -1,8 +1,9 @@
 # release-ci
 
 The release rules a project would otherwise carry its own copy of, and the pipeline that runs them.
-Here today: the guards a release has to pass, and carrying a published release back onto the default branch.
-[What is here](#what-is-here) says where, and [What is planned](#what-is-planned) what is still to come.
+Here today: the guards a release has to pass, cutting the release commit onto a branch of its own, and
+carrying a published release back onto the default branch. [What is here](#what-is-here) says where, and
+[What is planned](#what-is-planned) what is still to come.
 
 What goes where is decided by the ecosystem boundary, not by whichever file is being written:
 
@@ -17,7 +18,7 @@ end up assuming one ecosystem's build.
 | Directory       | Holds                                                                   |
 |-----------------|-------------------------------------------------------------------------|
 | `check-release` | What a release has to be true of, asked as properties over a repository |
-| `release-flow`  | How a published GitHub release is carried back                          |
+| `release-flow`  | How a GitHub release is cut and carried back                            |
 
 Each action's inputs and outputs are listed in full, with what each does, in the `action.yml` beside it;
 the sections below show how they fit together. Every action runs on the runner's own `python3`, 3.10 or
@@ -32,7 +33,7 @@ what keeps a released commit reachable.
 
 | Directory       | Will hold                                                                |
 |-----------------|--------------------------------------------------------------------------|
-| `release-flow`  | How a GitHub release is cut and drafted before it is tagged              |
+| `release-flow`  | How a GitHub release is drafted before it is tagged                      |
 | `intellij`      | How a JetBrains plugin is built, signed and published to the Marketplace |
 
 ## check-release
@@ -163,16 +164,16 @@ The version a release is asked to be, whichever way it is found, is the candidat
 
 Carrying `-SNAPSHOT` belongs to `gradle.properties`: it is Gradle's and Maven's way of saying "not
 released yet", and a release takes it off the end of the version, whether the file declares it or
-`--version`, or the `version` input of `check-release`, hands it in; a version handed in may also
-leave it out. A version still carrying it after that - `1.0.0-SNAPSHOT-SNAPSHOT`,
-`1.0.0-SNAPSHOT+b`, or `1.0.0-SNAPSHOT` handed to `tags` - is refused whatever the source. A
-repository whose version lives only in its tags has no such state, so the version after a release
-is worked out bare and the source adds the marker where there is one.
+`--version`, or the `version` input of `check-release` or `release-flow/prepare`, hands it in; a
+version handed in may also leave it out. A version still carrying it after that -
+`1.0.0-SNAPSHOT-SNAPSHOT`, `1.0.0-SNAPSHOT+b`, or `1.0.0-SNAPSHOT` handed to `tags` - is refused
+whatever the source. A repository whose version lives only in its tags has no such state, so the
+version after a release is worked out bare and the source adds the marker where there is one.
 
 Under `tags`, with nothing released yet, there is no highest release to follow, and the first
-version is named with `--version`, or that `version` input. `set-version` under `tags` refuses
-rather than reporting a success in which nothing was written, and with exit status 3 rather than
-1, so that a caller can tell "nothing to write to" from a write that failed.
+version is named with `--version`, or the `version` input of either action. `set-version` under
+`tags` refuses rather than reporting a success in which nothing was written, and with exit status
+3 rather than 1, so that a caller can tell "nothing to write to" from a write that failed.
 
 `--tag-prefix` says what release tags are called. Under `gradle.properties` the file says it where
 `--tag-prefix` is not given, in a `tagPrefix` line it then has to carry beside the `version` one:
@@ -198,10 +199,64 @@ one that declares a version for a file to try it on.
 
 ## release-flow
 
+Two actions so far, one for each end of a release, because between them sits making the artifact - the
+ecosystem's to say how - and drafting the release with it, which is planned.
+
 Every action in release-flow takes `source` and `tag-prefix` as [check-release's
 action](#using-check-release-from-another-repository) does, `^none` included, runs after a checkout
 with `fetch-depth: 0`, and is pinned the way [What is here](#what-is-here) says, which also lists
 what each needs of the runner.
+
+### release-flow/prepare
+
+[`release-flow/prepare`](release-flow/prepare/action.yml) cuts the release commit onto a branch of its
+own. The rules are asked first - `changelog`, `ancestry` and `version`, all three - and nothing is
+written where one says no, nor where `[Unreleased]` has nothing to release, as
+[check-release](#check-release) says; then `[Unreleased]` is closed into a section for the version
+being released, that version is written back where the source declares one, and the one resulting
+commit is left on `release/<version>` with the workspace on it. Nothing is pushed: the build runs from
+that commit next, and a build that fails should leave neither a branch nor a draft on the remote.
+Pushing comes after the build, with the draft. `release-flow/prepare` writes nothing outside the
+workspace and asks for no permissions of its own. The version comes from the source, or from the
+`version` input, as [Where the version comes from](#where-the-version-comes-from) says for each. Given
+a `repository-url`, `release-flow/prepare` also writes the link definitions of the changelog's versions
+afresh, pointing into the repository; any other definition stays.
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          The version to release, 0.2.0 or 0.2.0-SNAPSHOT; left empty, the one
+          gradle.properties declares
+        default: ''
+# One at a time: two runs would race for the same release branch and the same draft.
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    # A dispatch can be started on any branch, and would cut the release from that one.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    # For pushing the branch and drafting the release after the build; prepare itself takes none.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: loplex/release-ci/release-flow/prepare@<tag>
+        id: cut
+        with:
+          source: gradle.properties
+          version: ${{ inputs.version }}
+          repository-url: ${{ github.server_url }}/${{ github.repository }}
+      # Build from the commit now checked out. Once it has succeeded, push the branch and draft the
+      # release at ${{ steps.cut.outputs.tag }} with the archive attached; the tag itself does not
+      # exist until the draft is published.
+```
 
 ### release-flow/merge-back
 
@@ -292,6 +347,16 @@ stops before anything is carried back rather than land a release nothing checks.
 optional where `token` is left as `GITHUB_TOKEN`, and the `contents: write` the pushes take does not stand
 in for it: asking for a run by hand is a write to Actions, and without it the dispatch is answered 403 and
 the release lands with nothing having checked it.
+
+### Where GitHub reads each workflow from
+
+The release job and the merge-back job sit in workflows of their own, which GitHub reads from different
+commits. One started by a dispatch runs only once its workflow file is on the default branch, and then
+takes the workflow file, and the checkout, from whichever branch it is started on - which is why the
+release job under [release-flow/prepare](#release-flowprepare) runs on the default branch alone: a
+release cut from anywhere else is what merge-back would carry onto it, unreviewed. One started by a
+release runs from the file as it stands in the commit the release tags. Both have to be on the default
+branch before a release is cut from it.
 
 ## Running the tests
 

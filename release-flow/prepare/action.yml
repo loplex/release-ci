@@ -1,0 +1,62 @@
+name: prepare
+description: >-
+  Cut the release commit onto a branch of its own. The rules are asked first - changelog, ancestry and
+  version, all three - and nothing is written where one says no, nor where [Unreleased] has nothing to
+  release. Then [Unreleased] is closed into a section for the version being released, that version is
+  written back where the source declares one, and the one resulting commit is left on a branch named for
+  the version, with the workspace on it. Nothing is built, pushed or drafted: the archive is the
+  ecosystem's to make from this commit, and a build that fails should leave nothing behind on the remote;
+  the branch is pushed, and the release drafted, once the build has succeeded. Runs from a checkout of the
+  default branch with fetch-depth 0, which is the calling job's to make sure of: nothing here asks which
+  branch was checked out. It writes nothing outside the workspace, so it asks for no permissions of its
+  own; `contents: write` is what the step that pushes needs on the job.
+  Needs python3 3.10 or later, which GitHub-hosted runners carry.
+
+inputs:
+  source:
+    description: >-
+      Where the version a release is asked to be comes from, passed to check-release as `--source`:
+      `gradle.properties`, or `tags` for a repository that declares no version.
+    required: true
+  tag-prefix:
+    description: >-
+      What release tags carry in front of the version. Left out where the source declares it; `^none` where
+      the tags carry no prefix at all.
+    default: ''
+  version:
+    description: >-
+      Release this version instead of the one the source declares: `0.2.0` or `0.2.0-SNAPSHOT` under
+      `gradle.properties`, where a marker ending the version is dropped, and a bare `0.2.0` under `tags`.
+      What a dispatch input carries; left empty, a source declaring no version releases the version after
+      the highest release there is. The `version` output is bare under either source.
+    default: ''
+  repository-url:
+    description: >-
+      Write the link definitions of the changelog's versions afresh, pointing into this repository - the way
+      the Gradle changelog plugin writes them; any other definition the changelog carries stays. The usual
+      value is `github.server_url` and `github.repository` joined by a slash.
+      Left empty, whatever link definitions the changelog carries are left alone.
+    default: ''
+
+outputs:
+  version:
+    description: The version being released, with no prefix and no marker.
+    value: ${{ steps.prepare.outputs.version }}
+  tag:
+    description: What the release tag will be called once the draft is published.
+    value: ${{ steps.prepare.outputs.tag }}
+  branch:
+    description: The branch now holding the release commit, which the workspace is left on.
+    value: ${{ steps.prepare.outputs.branch }}
+
+runs:
+  using: composite
+  steps:
+    - id: prepare
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+        VERSION: ${{ inputs.version }}
+        REPOSITORY_URL: ${{ inputs.repository-url }}
+      run: "$GITHUB_ACTION_PATH/prepare.sh"

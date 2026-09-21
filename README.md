@@ -10,8 +10,9 @@ What goes where is decided by the ecosystem boundary, not by whichever file is b
 - A directory whose content is ecosystem-free carries a name that says nothing about an ecosystem.
 - A directory for one ecosystem is named after it, and more will follow, one per ecosystem.
 
-This repository is to be released through its own pipeline, so nothing in the ecosystem-free directories may
-end up assuming one ecosystem's build.
+This repository is released through its own pipeline, as
+[Releasing this repository](#releasing-this-repository) describes, so nothing in the ecosystem-free
+directories may assume one ecosystem's build.
 
 ## What is here
 
@@ -405,5 +406,25 @@ python3 -m unittest discover -s release-flow
 
 Both run on every push and pull request, in [`.github/workflows/test.yml`](.github/workflows/test.yml),
 on the Python [`.python-version`](.python-version) names: they need 3.11 or later, where the actions ask
-only for 3.10. The `guards` job in `test.yml` runs the rules over this repository itself, through the
-action at `./check-release` - unpinned, this being the one repository it already sits in.
+only for 3.10.
+
+## Releasing this repository
+
+Through its own actions, as any other repository would, except that its workflows take them by path,
+unpinned, this being the one repository they already sit in, and its release workflows run them on the
+Python its suites run on rather than the runner's own. It declares its version nowhere, so
+[`release.yml`](.github/workflows/release.yml) asks for one when it is dispatched: left empty, the version
+after the highest release is taken, and the first release has to be named outright. There is nothing to
+build, so `release-flow/draft` follows `release-flow/prepare` directly. Publishing the draft is the
+decision to release, and [`release-publish.yml`](.github/workflows/release-publish.yml) carries the
+release back onto the default branch.
+
+GitHub reads each the way [Where GitHub reads each workflow
+from](#where-github-reads-each-workflow-from) says: `release.yml` only once it has landed on the
+default branch, and then from the branch it is dispatched on, which is why its job runs on the default
+branch alone; and `release-publish.yml` from the commit a release tags, which carries the file because
+a release is cut from the default branch.
+
+The `guards` job in [`test.yml`](.github/workflows/test.yml) runs the rules over this repository
+itself on every push and pull request, through the action at `./check-release`, by path as well,
+on the runner's own `python3`.

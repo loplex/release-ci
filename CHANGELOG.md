@@ -19,5 +19,7 @@ released it, so once a version has a section here, that section may not be edite
   declares no prefix of its own.
 - `check-release/action.yml`, a composite action, so a project asks for the rules rather than keeping
   a copy of them.
+- A note where a tag prefix counts none of the tags a repository carries, rather than an empty list
+  every later check then passes over having compared nothing.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

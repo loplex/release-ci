@@ -444,12 +444,29 @@ def next_candidate(prefix: str) -> str:
 def tags(prefix: str) -> list[str]:
     """Every tag that names a release, with the prefix off. The repository carries tags that are not releases
     - the backups a history rewrite left behind, and a version somebody tagged while it was still being worked
-    on - and those are nothing to be consistent with."""
-    return [
+    on - and those are nothing to be consistent with.
+
+    Counting none out of many is said out loud rather than returned quietly. It is not a failure: a repository
+    may hold nothing but backups, and a first release has nothing to be consistent with either. But it is also
+    exactly what a prefix nobody checked looks like, and every check over the result then passes having
+    compared nothing - the one outcome worth fearing here, being the one nobody is told about.
+
+    Selected by what the tag starts with rather than by a glob, so that the count of what was passed over is
+    had in the same breath as the selection, and so that a prefix is read as text rather than as a pattern.
+    """
+    every = git("tag", "-l").split()
+    releases = [
         tag[len(prefix) :]
-        for tag in git("tag", "-l", f"{prefix}*").split()
-        if VERSION.match(tag[len(prefix) :]) and not being_worked_on(tag[len(prefix) :])
+        for tag in every
+        if tag.startswith(prefix)
+        and VERSION.match(tag[len(prefix) :])
+        and not being_worked_on(tag[len(prefix) :])
     ]
+    if every and not releases:
+        called = f"the prefix '{prefix}'" if prefix else "no prefix at all"
+        print(f"note: this repository has {len(every)} tag(s) and none of them is a release under {called}, "
+              f"so every check over releases is about to compare nothing", file=sys.stderr)
+    return releases
 
 
 def version_command(arguments) -> list[str]:

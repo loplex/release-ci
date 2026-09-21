@@ -682,9 +682,9 @@ class WhichTagsCountAsReleases(unittest.TestCase):
     """A repository carries tags that are not releases - the backups a history rewrite leaves behind - and it
     carries its releases under whichever spelling it tags with. Two things sort that out, and the tests below
     hold both: the prefix, which is what a project tagging `v*` selects by and strips, and the version pattern,
-    which is what keeps `v0.1.0` out of a project that tags bare versions - the glob passes it and the prefix
-    takes nothing off it, so only the pattern refuses it. Getting either wrong is quiet, because what it
-    produces is an empty list and a check that passes having compared nothing."""
+    which is what keeps `v0.1.0` out of a project that tags bare versions - selecting by what the tag starts
+    with passes it and the prefix takes nothing off it, so only the pattern refuses it. Getting either wrong
+    is quiet, because what it produces is an empty list and a check that passes having compared nothing."""
 
     PLANTED = [
         "v0.1.0", "v1.2.3-rc.1", "v1.2", "version-1.0", "v2.0.0-SNAPSHOT",
@@ -711,9 +711,9 @@ class WhichTagsCountAsReleases(unittest.TestCase):
         self.assertEqual(self.tags_under(""), ["0.1.0", "0.9.9", "10.1.0"])
 
     def test_the_prefix_selects_rather_than_merely_being_taken_off(self):
-        """`10.1.0` is what tells the two apart. Selecting by the glob leaves it out of a `v` repository;
-        taking the prefix off whatever is listed would turn it into `0.1.0` - a version, and a second one,
-        silently colliding with the release actually tagged `v0.1.0`."""
+        """`10.1.0` is what tells the two apart. Selecting by what the tag starts with leaves it out of a `v`
+        repository; taking the prefix off whatever is listed would turn it into `0.1.0` - a version, and a
+        second one, silently colliding with the release actually tagged `v0.1.0`."""
         self.assertEqual(self.tags_under("v").count("0.1.0"), 1)
 
     def test_what_is_not_a_version_is_not_a_release_under_either(self):
@@ -730,6 +730,34 @@ class WhichTagsCountAsReleases(unittest.TestCase):
         """Somebody tagged a snapshot. Counting it would open a train on the channel `SNAPSHOT` that every
         later pre-release has to outrank."""
         self.assertNotIn("2.0.0-SNAPSHOT", self.tags_under("v"))
+
+    def test_counting_none_out_of_many_is_said_out_loud(self):
+        """What a prefix nobody checked looks like from the outside, and the shape every check then passes on
+        having compared nothing. Said rather than failed: a repository may hold nothing but backups."""
+        said = io.StringIO()
+        with contextlib.redirect_stderr(said):
+            self.assertEqual(self.tags_under("nonesuch/"), [])
+        self.assertIn("none of them is a release", said.getvalue())
+        self.assertIn(f"{len(self.PLANTED)} tag(s)", said.getvalue())
+
+    def test_a_prefix_that_selects_something_says_nothing(self):
+        said = io.StringIO()
+        with contextlib.redirect_stderr(said):
+            self.assertTrue(self.tags_under("v"))
+        self.assertEqual(said.getvalue(), "")
+
+    def test_a_repository_with_no_tags_at_all_is_not_accused_of_anything(self):
+        """A first release has nothing to be consistent with, which is not the same as having looked in the
+        wrong place for it."""
+        empty = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        subprocess.run(["git", "init", "-q"], cwd=empty, check=True)
+        original = check_release.REPO
+        check_release.REPO = empty
+        self.addCleanup(setattr, check_release, "REPO", original)
+        said = io.StringIO()
+        with contextlib.redirect_stderr(said):
+            self.assertEqual(check_release.tags("v"), [])
+        self.assertEqual(said.getvalue(), "")
 
     def test_a_backup_never_counts_even_when_it_looks_like_a_version(self):
         for prefix in ("v", ""):

@@ -25,5 +25,7 @@ released it, so once a version has a section here, that section may not be edite
   fast-forward, and offers a pull request where it cannot.
 - `close-changelog`, which moves what is under `[Unreleased]` into a released section of its own,
   dated, the way the Gradle changelog plugin does.
+- `release-flow/prepare`, which cuts the release commit onto a branch of its own: the version written
+  back, `[Unreleased]` closed into a section for it, and nothing pushed.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

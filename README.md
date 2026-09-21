@@ -1,9 +1,9 @@
 # release-ci
 
 The release rules a project would otherwise carry its own copy of, and the pipeline that runs them.
-Here today: the guards a release has to pass, and carrying a published release back onto the default
-branch. [What is here](#what-is-here) places draft-before-tag releases and per-ecosystem publishing,
-which are planned.
+Here today: the guards a release has to pass, cutting the release commit onto a branch of its own, and
+carrying a published release back onto the default branch. [What is here](#what-is-here) places
+drafting a release before its tag exists, and per-ecosystem publishing, which are planned.
 
 ## What is here
 
@@ -131,6 +131,36 @@ and a writer for that file. `version` and `set-version` call Gradle's outright, 
 that declares a version, so they are where the choice between the two is then made.
 
 ## release-flow
+
+Two actions, one for each end of a release. Between them sits whatever the ecosystem does - building,
+signing, drafting the release with the archive - which is why they are two.
+
+`release-flow/prepare` cuts the release commit onto a branch of its own. The rules are asked first and
+nothing is written where they say no; then the declared version has its marker dropped and is written
+back, `[Unreleased]` is closed into a section for it, and the one resulting commit is left on
+`release/<version>` with the workspace on it. Nothing is pushed: the build runs from that commit next,
+and a build that fails should leave neither a branch nor a draft on the remote. Pushing comes after the
+build, with the draft.
+
+```yaml
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: loplex/release-ci/release-flow/prepare@<tag>
+        id: cut
+        with:
+          source: gradle.properties
+          repository-url: ${{ github.server_url }}/${{ github.repository }}
+      # Build from the commit now checked out. Once it has succeeded, push the branch and draft the
+      # release at ${{ steps.cut.outputs.tag }} with the archive attached; the tag itself does not
+      # exist until the draft is published.
+```
 
 `release-flow/merge-back` carries a published release back onto the default branch. It opens the next
 version being worked on, takes in whatever landed while the draft waited, and moves the default branch

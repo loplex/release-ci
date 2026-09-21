@@ -44,15 +44,16 @@ everywhere; the third is what a project type decides, and
 
 `check-release.py` holds, as separate subcommands, what a release asks of a repository and does with it:
 
-| Subcommand    | What for                                                                                           |
-|---------------|----------------------------------------------------------------------------------------------------|
-| `version`     | whether the [candidate version](#where-the-version-comes-from) may be released, given the releases |
-| `next`        | the version that follows a released one, with the source's [marker](#where-the-version-comes-from) |
-| `changelog`   | whether every released section of `CHANGELOG.md` still reads the way its tag has it                |
-| `ancestry`    | whether every released tag is still reachable from this history                                    |
-| `prefix`      | what release tags are called here                                                                  |
-| `channel`     | the distribution channel a version goes to                                                         |
-| `set-version` | write a version where it is declared: the one released, then the next                              |
+| Subcommand        | What for                                                                                           |
+|-------------------|----------------------------------------------------------------------------------------------------|
+| `version`         | whether the [candidate version](#where-the-version-comes-from) may be released, given the releases |
+| `next`            | the version that follows a released one, with the source's [marker](#where-the-version-comes-from) |
+| `changelog`       | whether every released section of `CHANGELOG.md` still reads the way its tag has it                |
+| `ancestry`        | whether every released tag is still reachable from this history                                    |
+| `prefix`          | what release tags are called here                                                                  |
+| `channel`         | the distribution channel a version goes to                                                         |
+| `set-version`     | write a version where it is declared: the one released, then the next                              |
+| `close-changelog` | move `[Unreleased]` into a section of its own, dated                                               |
 
 Of these, the composite action [below](#using-check-release-from-another-repository) runs `version`,
 `changelog` and `ancestry`, whichever its `checks` input names, and `channel` after a `version` that says
@@ -80,7 +81,10 @@ inside one, so `1.0.0-eap-2` goes to a channel of its own, `eap-2`, where `1.0.0
 metadata plays no part.
 
 `CHANGELOG.md` is read in the shape [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) gives it:
-a `## [Unreleased]` section on top, and a `## [<version>]` section for each release below it.
+a `## [Unreleased]` section on top, and a `## [<version>]` section for each release below it. A
+release closes `[Unreleased]` into a section of its own, so there has to be something under it: an
+empty one is refused, unless there are pre-releases of the version to take in: a final release takes
+their entries into its own section.
 
 ## Using check-release from another repository
 

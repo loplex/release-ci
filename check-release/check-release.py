@@ -9,12 +9,15 @@
   the workflows do not have to say it a second time.
 - `channel` - the distribution channel a version goes to, read off its pre-release suffix.
 - `set-version` - write a version where the project declares it: the one released, then the next.
+- `close-changelog` - move what is under `[Unreleased]` into a section of its own, the other half of what a
+  release writes.
 
 All of it sits on plain functions over text, tags and booleans, so that the rules can be exercised without a
 repository to release. The tests beside this file are what exercises them.
 """
 
 import argparse
+import datetime
 import re
 import subprocess
 import sys
@@ -76,6 +79,14 @@ SEMVER = re.compile(
 )
 
 SECTION_HEADING = re.compile(r"^## \[([^\]]+)\]", re.MULTILINE)
+UNRELEASED_HEADING = re.compile(r"^## \[Unreleased\][^\n]*\n", re.MULTILINE)
+GROUP_HEADING = re.compile(r"^### (.+?)[ \t]*$", re.MULTILINE)
+
+# The kinds of change Keep a Changelog names, in the order it names them - which is the order a section put
+# together from several is written in. A group of any other name keeps the place it was first met in, after
+# these, rather than being dropped: the text under it was released too.
+KINDS = ("Added", "Changed", "Deprecated", "Removed", "Fixed", "Security")
+
 LINK_DEFINITION = re.compile(r"^\[[^\]]+\]:\s.*$", re.MULTILINE)
 
 
@@ -280,6 +291,125 @@ def uncompared(at_tag: dict[str, str]) -> list[str]:
     to. Named in the report rather than counted among the compared: a check that says it compared what it
     passed over is a check that passes having compared nothing, and nobody can tell from the outside."""
     return sorted((version for version, text in at_tag.items() if version not in sections(text)), key=precedence)
+
+
+def bodies(changelog: str) -> dict[str, str]:
+    """Each section's text below its heading line, by the label its heading carries. What sections() holds
+    without the rest of the heading - the date - which here would read as the first entry. Link definitions
+    left out, as there."""
+    text = LINK_DEFINITION.sub("", changelog)
+    marks = list(SECTION_HEADING.finditer(text))
+    found = {}
+    for index, mark in enumerate(marks):
+        start = text.find("\n", mark.end())
+        start = len(text) if start < 0 else start + 1
+        end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
+        found[mark.group(1)] = text[start:end].strip("\n")
+    return found
+
+
+def combined(texts: list[str]) -> str:
+    """Several sections' text as one: whatever stands before a first `###` kept at the top, and each group's
+    entries together under one heading of its name, in the order the texts come in."""
+    leads, merged = [], {}
+    for text in texts:
+        marks = list(GROUP_HEADING.finditer(text))
+        lead = (text[: marks[0].start()] if marks else text).strip("\n")
+        if lead:
+            leads.append(lead)
+        for index, mark in enumerate(marks):
+            end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
+            entries = text[mark.end() : end].strip("\n")
+            if entries:
+                merged.setdefault(mark.group(1), []).append(entries)
+    order = [kind for kind in KINDS if kind in merged] + [name for name in merged if name not in KINDS]
+    return "\n\n".join(leads + [f"### {name}\n\n" + "\n".join(merged[name]) for name in order])
+
+
+def linked(changelog: str, repository_url: str, prefix: str) -> str:
+    """The changelog with its link definitions written afresh, the way the Gradle changelog plugin writes them:
+    [Unreleased] compared from the newest release to HEAD, each release compared from the one below it in the
+    file, and the oldest pointing at its own commits. Rewritten whole rather than added to, because every
+    release moves the first of them - which is also why check_changelog leaves them out. Only the definitions
+    written here are replaced: one the changelog keeps for a link of its own, to Keep a Changelog say, is
+    left where it stands."""
+    versions = [version for version in sections(changelog) if version != "Unreleased"]
+    definitions = []
+    if versions:
+        definitions.append(f"[Unreleased]: {repository_url}/compare/{prefix}{versions[0]}...HEAD")
+    for index, version in enumerate(versions):
+        below = versions[index + 1] if index + 1 < len(versions) else None
+        target = f"compare/{prefix}{below}...{prefix}{version}" if below else f"commits/{prefix}{version}"
+        definitions.append(f"[{version}]: {repository_url}/{target}")
+    labels = {"Unreleased", *versions}
+    kept = [line for line in changelog.split("\n")
+            if not (LINK_DEFINITION.fullmatch(line) and line[1 : line.index("]")] in labels)]
+    text = "\n".join(kept).rstrip("\n")
+    return text + ("\n\n" + "\n".join(definitions) if definitions else "") + "\n"
+
+
+def closed(changelog: str, version: str, on: str, repository_url: str | None = None, prefix: str = "") -> str:
+    """The changelog with everything under `[Unreleased]` moved into a section of its own, dated `on`.
+
+    What a release does to the file before it is one, and the counterpart of check_changelog: the section this
+    writes is the section that may never be edited again, because the tag is about to hold a copy of it.
+
+    Three things are refused rather than written. A file with no `[Unreleased]` section has nothing to close.
+    A version that already has a section means this has run twice, or that a section was written by hand, and
+    closing again would bury one of them. An empty `[Unreleased]` means a release with nothing to say about
+    itself, and that emptiness would be compared against ever after.
+
+    Link definitions at the foot of the file belong to the file rather than to the section being closed, so
+    they stay where they are. Both shapes are in use - a changelog carrying them, and one that does not. Given
+    the repository's URL, they are written afresh instead, the way the Gradle changelog plugin writes them.
+
+    A final release closing a pre-release train takes the train's entries into its own section, which is what
+    the Gradle changelog plugin's `combinePreReleases` does and has on by default: whoever skipped the betas is
+    told in one place everything 0.3.0 brings. The pre-release sections stay as they were, released and held to
+    their tags. Emptiness is then judged on the section that results, so a train with nothing new to say at
+    its end still closes. Only a final release does this. The plugin's own code does not check for it and
+    would let 0.3.0-beta.2 take in 0.3.0-beta.1 as well, repeating to a channel what it was already offered;
+    its documentation speaks of the final release, and so does this.
+    """
+    mark = UNRELEASED_HEADING.search(changelog)
+    if mark is None:
+        raise SystemExit("CHANGELOG.md has no [Unreleased] section, so there is nothing to close")
+    if version in sections(changelog):
+        raise SystemExit(f"CHANGELOG.md already has a section for {version}")
+
+    rest = changelog[mark.end() :]
+    following = SECTION_HEADING.search(rest)
+    pending, after = (rest[: following.start()], rest[following.start() :]) if following else (rest, "")
+
+    lines = pending.split("\n")
+    foot_lines = []
+    while lines and (not lines[-1].strip() or LINK_DEFINITION.fullmatch(lines[-1])):
+        foot_lines.insert(0, lines.pop())
+
+    entries = "\n".join(lines).strip("\n")
+    is_final = SEMVER.match(version) is not None and SEMVER.match(version).group(4) is None
+    if is_final:
+        train_entries = [
+            text for label, text in bodies(changelog).items()
+            if SEMVER.match(label) and SEMVER.match(label).group(4) is not None
+            and core(label) == core(version)
+        ]
+        if train_entries:
+            entries = combined([entries, *train_entries])
+    if not entries:
+        raise SystemExit("nothing is under [Unreleased], and no pre-release of it to take in, so there is "
+                         "nothing to release")
+
+    # The blank line before whatever follows is put back rather than inherited: the run of blank lines that
+    # separated [Unreleased] from the section below it was just taken off the end of the entries.
+    foot = "\n".join(foot_lines).strip("\n")
+    replacement = f"\n## [{version}] - {on}\n\n{entries}\n"
+    if foot:
+        replacement += f"\n{foot}\n"
+    if after:
+        replacement += "\n"
+    written = changelog[: mark.end()] + replacement + after
+    return linked(written, repository_url.rstrip("/"), prefix) if repository_url else written
 
 
 def check_ancestry(reachability: dict[str, bool], prefix: str, held_by: dict[str, str] | None = None) -> list[str]:
@@ -521,6 +651,24 @@ def set_version_command(arguments) -> list[str]:
     return []
 
 
+def close_changelog_command(arguments) -> list[str]:
+    """Close [Unreleased] into a section for the version being released, which is what a release does to the
+    file before it is one."""
+    path = repository() / "CHANGELOG.md"
+    on = arguments.date or datetime.date.today().isoformat()
+    # Asked for only where links are to be written: a changelog without them has no use for the prefix, and a
+    # source that declares none should not have to be told one just to close a section.
+    prefix = prefix_from(arguments.source, arguments.tag_prefix) if arguments.repository_url else ""
+    text = read_file("CHANGELOG.md", "the released sections")
+    # Closed before the file is opened: opening it for writing empties it, and a refusal raised in between would
+    # leave no changelog at all where the one it had should stand.
+    written = closed(text, arguments.version, on, arguments.repository_url, prefix)
+    with open(path, "w", encoding="utf-8") as stream:
+        stream.write(written)
+    print(f"[{arguments.version}] - {on}")
+    return []
+
+
 def channel_command(arguments) -> list[str]:
     version = arguments.version.removeprefix(prefix_from(arguments.source, arguments.tag_prefix))
     if not SEMVER.match(version):
@@ -608,6 +756,14 @@ def main() -> int:
     set_version_parser = commands.add_parser("set-version", help="write a version where the source declares one")
     set_version_parser.add_argument("version", help="the version to write")
     set_version_parser.set_defaults(run=set_version_command)
+
+    close_changelog_parser = commands.add_parser("close-changelog", help="close [Unreleased] into a released section")
+    close_changelog_parser.add_argument("version", help="the version being released")
+    close_changelog_parser.add_argument("--date", help="the date to give the section, today by default")
+    close_changelog_parser.add_argument("--repository-url", help="write the versions' link definitions afresh, "
+                                                                 "pointing into this repository; left alone "
+                                                                 "without it")
+    close_changelog_parser.set_defaults(run=close_changelog_command)
 
     prefix_parser = commands.add_parser("prefix", help="what release tags carry in front of the version")
     prefix_parser.set_defaults(run=prefix_command)

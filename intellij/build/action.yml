@@ -1,0 +1,85 @@
+name: build-plugin
+description: >-
+  Build, check, verify and sign an IntelliJ platform plugin from the commit the workspace is on, and say
+  where the signed archive landed. Everything between release-flow/prepare and release-flow/draft for a
+  JetBrains plugin, and nothing that is not: the version and the changelog were settled before this ran, and
+  the draft that carries the archive comes after. Needs the signing certificate chain and private key, without
+  which there is no signed archive to hand on.
+
+inputs:
+  java-version:
+    description: >-
+      The JDK Gradle runs on, which is a property of this pipeline rather than of the plugin: what a plugin
+      compiles against is its own `jvmToolchain`, declared in its build script, and one targeting something
+      older still builds here.
+    default: '21'
+  java-distribution:
+    description: The JDK distribution setup-java is asked for.
+    default: zulu
+  certificate-chain:
+    description: The certificate chain the plugin is signed with, as `signPlugin` reads it.
+    required: true
+  private-key:
+    description: The private key the plugin is signed with.
+    required: true
+  private-key-password:
+    description: The password of that private key.
+    required: true
+  free-disk-space:
+    description: >-
+      Make room before the Plugin Verifier runs. It downloads an IDE for every release it checks against, and
+      the runner's disk does not hold them beside what it ships with. Turn off where the job has room already.
+    default: 'true'
+  archive-pattern:
+    description: Where the signed archive lands, as a pattern under the workspace.
+    default: build/distributions/*-signed.zip
+
+outputs:
+  archive:
+    description: The signed archive, by path, for release-flow/draft to attach to the draft.
+    value: ${{ steps.signed.outputs.archive }}
+
+runs:
+  using: composite
+  steps:
+    - if: inputs.free-disk-space == 'true'
+      uses: jlumbroso/free-disk-space@v1.3.1
+      with:
+        tool-cache: false
+        large-packages: false
+
+    - uses: actions/setup-java@v6
+      with:
+        distribution: ${{ inputs.java-distribution }}
+        java-version: ${{ inputs.java-version }}
+
+    - uses: gradle/actions/setup-gradle@v6
+
+    - shell: bash
+      run: ./gradlew check
+
+    # The check the Marketplace runs itself before it serves a version, run here first and on the very commit
+    # that is going to be published: an internal-API usage or an incompatibility with a supported IDE build
+    # goes red here rather than after the release has been accepted. `check` does not include it.
+    - shell: bash
+      run: ./gradlew verifyPlugin
+
+    - if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: pluginVerifier-result
+        path: build/reports/pluginVerifier
+        if-no-files-found: ignore
+
+    - shell: bash
+      env:
+        CERTIFICATE_CHAIN: ${{ inputs.certificate-chain }}
+        PRIVATE_KEY: ${{ inputs.private-key }}
+        PRIVATE_KEY_PASSWORD: ${{ inputs.private-key-password }}
+      run: ./gradlew signPlugin
+
+    - id: signed
+      shell: bash
+      env:
+        PATTERN: ${{ inputs.archive-pattern }}
+      run: "$GITHUB_ACTION_PATH/archive.sh"

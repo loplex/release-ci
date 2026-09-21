@@ -1,25 +1,25 @@
 # release-ci
 
-The release rules a project would otherwise carry its own copy of, and the pipeline that runs them.
-Here today: the guards a release has to pass, and draft-before-tag releases cut, drafted and carried
-back. [What is here](#what-is-here) places per-ecosystem publishing, which is planned.
+The release rules a project would otherwise carry its own copy of, and the pipeline that runs them:
+the guards a release has to pass, draft-before-tag releases cut, drafted and carried back, and
+per-ecosystem publishing. [What is here](#what-is-here) says which directory holds which.
 
 ## What is here
 
-| Directory       | Holds                                                                    |
-|-----------------|--------------------------------------------------------------------------|
-| `check-release` | What a release has to be true of, asked as properties over a repository  |
-| `release-flow`  | The shape a release is cut in and carried back, as steps over a workflow |
+| Directory       | Holds                                                                       |
+|-----------------|-----------------------------------------------------------------------------|
+| `check-release` | What a release has to be true of, asked as properties over a repository     |
+| `release-flow`  | The shape a release is cut in and carried back, as steps over a workflow    |
+| `intellij`      | Building, signing and publishing a JetBrains plugin, which is one ecosystem |
 
 `check-release` reads the tags and `CHANGELOG.md` out of the repository it is asked about, and takes the
 version a release is asked to be from whichever source that project declares. The first two are the same
 everywhere; the third is what a project type decides, and [check-release](#check-release) says where
 that line is drawn.
 
-One more directory is planned and named ahead of time, so that what goes where is decided by the boundary
-rather than by whichever file is being written: one per ecosystem, `intellij` first, for building, signing
-and publishing. A directory whose content is ecosystem-free carries a name that says nothing about an
-ecosystem; an adapter's name says which one it is.
+More directories will follow, one per ecosystem, so that what goes where is decided by the boundary rather
+than by whichever file is being written. A directory whose content is ecosystem-free carries a name that
+says nothing about an ecosystem; an adapter's name says which one it is.
 
 ## check-release
 
@@ -60,12 +60,14 @@ whatever is called out:
 ```
 python3 -m unittest discover -s check-release
 python3 -m unittest discover -s release-flow
+python3 -m unittest discover -s intellij
 ```
 
-Both run on every push and pull request, in
+All three run on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml). The second builds a bare repository to push
 against and puts a stub `gh` on the path, so that a refused fast-forward is a real refusal and nothing is
-sent anywhere.
+sent anywhere. The third puts a stub `curl` there for the same reason: the Marketplace is answered from a
+file the test writes, and nothing is uploaded.
 
 ## Using it from another repository
 
@@ -215,6 +217,81 @@ is pushed, because a three-way merge can put an entry added to `[Unreleased]` in
 `actions: write` is not optional and is not about the contents: asking for a build run by hand is a write
 to Actions, and without it the dispatch is answered 403 and the release lands with nothing having checked
 it. The dispatch is there because a push made with `GITHUB_TOKEN` starts no workflow run at all.
+
+## intellij
+
+The one ecosystem so far. `intellij/build` goes between `release-flow/prepare` and `release-flow/draft`:
+`check`, then the Plugin Verifier - the check the Marketplace runs itself, run here first and on the very
+commit that will be published - then `signPlugin`, and it says where the signed archive landed.
+`intellij/publish` goes after the draft has been published, beside `release-flow/merge-back`.
+
+```yaml
+- uses: loplex/release-ci/intellij/build@<tag>
+  id: built
+  with:
+    certificate-chain: ${{ secrets.CERTIFICATE_CHAIN }}
+    private-key: ${{ secrets.PRIVATE_KEY }}
+    private-key-password: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+- uses: loplex/release-ci/release-flow/draft@<tag>
+  with:
+    source: gradle.properties
+    version: ${{ steps.cut.outputs.version }}
+    tag: ${{ steps.cut.outputs.tag }}
+    branch: ${{ steps.cut.outputs.branch }}
+    files: ${{ steps.built.outputs.archive }}
+```
+
+The draft attaches what the build says it signed, rather than a pattern of its own: where the two are
+written out separately they can come to disagree, and the one that matters is the file that was signed.
+The pattern in [the release-flow example](#release-flow) is for a build that names nothing.
+
+Publishing does not trust its own upload. What a release needs to be true is that the Marketplace ends up
+serving the archive that was accepted, so that is asked of the Marketplace itself, and the answer is
+compared **by payload rather than by bytes**: the Marketplace counter-signs what it is given, and a
+signature sits in a block of its own between the entry data and the central directory, rewriting the
+directory and every offset in the file while leaving each entry's name, size and CRC exactly as they were.
+A byte comparison would fail on that, and fail again whenever the certificate behind it changed.
+
+A plugin with no listing yet cannot be uploaded over the API at all - its first version is uploaded, and
+reviewed, by a person. `intellij/publish` cannot tell that apart from an upload that did not happen, so it
+waits out its attempts either way and then names both causes.
+
+The job that carries a published release back publishes it too, with the very file the draft carried -
+downloaded from the release, not built again. Its permissions and checkout are those of
+[the release-flow example](#release-flow):
+
+```yaml
+on:
+  release:
+    types: [published]
+jobs:
+  merge-back:
+    runs-on: ubuntu-latest
+    # permissions and checkout as in release-flow above
+    steps:
+      - uses: loplex/release-ci/release-flow/merge-back@<tag>
+        id: back
+        with:
+          source: gradle.properties
+          tag: ${{ github.event.release.tag_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+      - id: accepted
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release download "$TAG" --pattern '*.zip' --dir "$RUNNER_TEMP/accepted"
+          echo "archive=$(ls "$RUNNER_TEMP"/accepted/*.zip)" >> "$GITHUB_OUTPUT"
+      - uses: loplex/release-ci/intellij/publish@<tag>
+        with:
+          plugin-id: cz.example.plugin
+          version: ${{ steps.back.outputs.version }}
+          archive: ${{ steps.accepted.outputs.archive }}
+          token: ${{ secrets.PUBLISH_TOKEN }}
+```
+
+The channel is not passed: `intellij/publish` reads it off the version by the rule the draft was marked
+with, so the two cannot come to disagree.
 
 ## Releasing this repository
 

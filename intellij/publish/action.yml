@@ -1,0 +1,45 @@
+name: publish-plugin
+description: >-
+  Upload an accepted plugin archive to the JetBrains Marketplace and hold the Marketplace to it. The upload's
+  own answer is reported but does not decide: what the release needs to be true is that the Marketplace ends
+  up serving the archive that was accepted, which is asked of the Marketplace itself and compared by payload
+  - a counter-signature rewrites the file without touching any entry. A plugin with no listing yet cannot be
+  uploaded this way at all; its first version is uploaded by a person. That is found out the way a missing
+  version is, once the attempts run out, and the error then names both causes it cannot tell apart.
+  Needs `curl` and python3 3.10 or later, which GitHub-hosted runners carry.
+
+inputs:
+  plugin-id:
+    description: The plugin as the Marketplace knows it, its `xmlId`.
+    required: true
+  version:
+    description: >-
+      The version being published, with no tag prefix, as release-flow/merge-back gives it. The channel it
+      goes to is read off its pre-release suffix by `check-release channel`; a final release names none,
+      which is what the Marketplace serves under no name.
+    required: true
+  archive:
+    description: The accepted archive, by path - the very file the draft carried.
+    required: true
+  token:
+    description: The Marketplace permanent token the upload is made with.
+    required: true
+  attempts:
+    description: How many times to ask the Marketplace for the version before giving up.
+    default: '10'
+  wait:
+    description: Seconds between those attempts.
+    default: '30'
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PUBLISH_TOKEN: ${{ inputs.token }}
+        PLUGIN_ID: ${{ inputs.plugin-id }}
+        VERSION: ${{ inputs.version }}
+        ARCHIVE: ${{ inputs.archive }}
+        ATTEMPTS: ${{ inputs.attempts }}
+        WAIT: ${{ inputs.wait }}
+      run: "$GITHUB_ACTION_PATH/publish.sh"

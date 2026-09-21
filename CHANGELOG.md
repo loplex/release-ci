@@ -31,5 +31,7 @@ released it, so once a version has a section here, that section may not be edite
   changelog cannot come to say different things.
 - `release-flow/draft`, which pushes the release branch and drafts the release from it once the build
   has succeeded.
+- `intellij`, the first ecosystem: building and signing a JetBrains plugin between prepare and draft,
+  and publishing it to the Marketplace once the release is accepted.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

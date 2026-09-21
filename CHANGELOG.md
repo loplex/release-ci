@@ -23,5 +23,7 @@ released it, so once a version has a section here, that section may not be edite
 - A note, on stderr, where a tag prefix counts none of the tags a repository carries: every check
   over the empty list but `version` under `tags` with no version given still passes, and the note
   says there is no release to compare against.
+- `release-flow/merge-back`, which carries a published release back onto the default branch by
+  fast-forward, and offers a pull request where it cannot.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

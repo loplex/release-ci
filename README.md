@@ -1,8 +1,8 @@
 # release-ci
 
 The release rules a project would otherwise carry its own copy of, and the pipeline that runs them.
-Here today: the guards a release has to pass. [What is here](#what-is-here) says where, and
-[What is planned](#what-is-planned) what is still to come.
+Here today: the guards a release has to pass, and carrying a published release back onto the default branch.
+[What is here](#what-is-here) says where, and [What is planned](#what-is-planned) what is still to come.
 
 What goes where is decided by the ecosystem boundary, not by whichever file is being written:
 
@@ -17,15 +17,11 @@ end up assuming one ecosystem's build.
 | Directory       | Holds                                                                   |
 |-----------------|-------------------------------------------------------------------------|
 | `check-release` | What a release has to be true of, asked as properties over a repository |
-
-It reads the tags and `CHANGELOG.md` out of the repository it is asked about, and takes the version a
-release is asked to be from whichever source the invocation names. The first two are the same
-everywhere; the third is what a project type decides, and
-[Where the version comes from](#where-the-version-comes-from) says where the rules stop and the source begins.
+| `release-flow`  | How a published GitHub release is carried back                          |
 
 Each action's inputs and outputs are listed in full, with what each does, in the `action.yml` beside it;
 the sections below show how they fit together. Every action runs on the runner's own `python3`, 3.10 or
-later, which GitHub-hosted runners carry.
+later; `release-flow/merge-back` needs `gh` as well, and GitHub-hosted runners carry both.
 
 Pin an action of this repository to one of its release tags, `v` and a version, rather than to a branch
 or a bare commit. A branch moves, so what runs would change under the pin; a commit that nothing reaches
@@ -34,12 +30,17 @@ what keeps a released commit reachable.
 
 ## What is planned
 
-| Directory       | Will hold                                                                  |
-|-----------------|----------------------------------------------------------------------------|
-| `release-flow`  | How a GitHub release is cut, drafted before it is tagged, and carried back |
-| `intellij`      | How a JetBrains plugin is built, signed and published to the Marketplace   |
+| Directory       | Will hold                                                                |
+|-----------------|--------------------------------------------------------------------------|
+| `release-flow`  | How a GitHub release is cut and drafted before it is tagged              |
+| `intellij`      | How a JetBrains plugin is built, signed and published to the Marketplace |
 
 ## check-release
+
+`check-release` reads the tags and `CHANGELOG.md` out of the repository it is asked about, and takes the
+version a release is asked to be from whichever source the invocation names. The first two are the same
+everywhere; the third is what a project type decides, and
+[Where the version comes from](#where-the-version-comes-from) says where the rules stop and the source begins.
 
 `check-release.py` holds, as separate subcommands, what a release asks of a repository and does with it:
 
@@ -81,23 +82,6 @@ metadata plays no part.
 `CHANGELOG.md` is read in the shape [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) gives it:
 a `## [Unreleased]` section on top, and a `## [<version>]` section for each release below it.
 
-The rules are plain functions over text, tags and booleans, and
-[`check-release/test_check_release.py`](check-release/test_check_release.py) exercises them without a
-repository to release, as [`test_sources.py`](check-release/test_sources.py) does the adapters for
-where the version comes from; the helpers beside them that face git get one built for the purpose,
-and [`check-release/test_check.py`](check-release/test_check.py) runs the action's script,
-[`check.sh`](check-release/check.sh), against one:
-
-```
-python3 -m unittest discover -s check-release
-```
-
-The same command runs on every push and pull request, in
-[`.github/workflows/test.yml`](.github/workflows/test.yml), on the Python
-[`.python-version`](.python-version) names: the tests need 3.11 or later, where the action asks only for
-3.10. The `guards` job in `test.yml` runs the rules over this repository itself, through the action at
-`./check-release` - unpinned, this being the one repository it already sits in.
-
 ## Using check-release from another repository
 
 [`check-release/action.yml`](check-release/action.yml) is a composite action, so a project asks for the
@@ -108,6 +92,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # release-flow/merge-back starts this workflow by hand, as its check-workflow, once a release has landed.
+  workflow_dispatch:
 
 jobs:
   release-rules:
@@ -205,3 +191,121 @@ a version being worked on other than with a `-SNAPSHOT` suffix, the one marker t
 and the tag prefix included, is listed at the top of [`sources.py`](check-release/sources.py);
 [`check-release/test_sources.py`](check-release/test_sources.py) holds every adapter to it, and asks
 one that declares a version for a file to try it on.
+
+## release-flow
+
+Every action in release-flow takes `source` and `tag-prefix` as [check-release's
+action](#using-check-release-from-another-repository) does, `^none` included, runs after a checkout
+with `fetch-depth: 0`, and is pinned the way [What is here](#what-is-here) says, which also lists
+what each needs of the runner.
+
+### release-flow/merge-back
+
+[`release-flow/merge-back`](release-flow/merge-back/action.yml) carries a published release back onto the
+default branch. It opens the next version being worked on where the source declares one, takes in
+whatever landed since the release was cut, and moves the default branch onto the release branch -
+`release/<version>`, named after the tag's version: the release commit and whatever it takes on above it -
+with a **fast-forward** push:
+
+```yaml
+on:
+  release:
+    types: [published]
+# One run per release at a time: two runs for one release would race to land it.
+concurrency:
+  group: merge-back-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+jobs:
+  merge-back:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: loplex/release-ci/release-flow/merge-back@<tag>
+        with:
+          source: gradle.properties
+          tag: ${{ github.event.release.tag_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+          check-workflow: ci.yml
+```
+
+The fast-forward is the point, and so is that push not being forced. A release tag names the commit the
+release was made from; *Squash and merge* and *Rebase and merge* replace that commit with a copy, which
+takes the tag off the default branch's history and turns `ancestry` red for every commit after it. A
+merge commit keeps the tag reachable, but only through its second parent, off the default branch's
+first-parent line, which is why merge-back pushes rather than opening a pull request. A push moves the
+default branch onto the release branch as it stands, so the release commit stays on that line, with at
+most the commit opening the next version and a merge of what landed meanwhile above it. Where what
+landed meanwhile would not merge in cleanly, the merge is undone and a pull request carries the release
+instead. Where the default branch moved under that push, git refuses it, and a pull request carries the
+release all the same - that refusal is a race with another push being caught, not an error to push past.
+A merge whose result the rules refuse goes to a pull request too: `changelog` and `ancestry` are asked
+of the merged tree before it is pushed, because a three-way merge can put an entry added to
+`[Unreleased]` into the released section. And a default branch that takes no push from the credential
+`actions/checkout` left in the workspace - a protected one requiring pull requests, say - sends every
+release to one. That credential is `GITHUB_TOKEN` unless the checkout is given a `token` of its own;
+merge-back's own `token` does not push.
+
+That pull request is opened with the action's `token`, `GITHUB_TOKEN` unless it is set, and opened with
+`GITHUB_TOKEN` it takes more than the job's `pull-requests: write`: the repository has to allow it,
+with *Allow GitHub Actions to create and approve pull requests* under Settings > Actions > General. A
+new personal repository has it off, and one in an organization takes whatever the organization says.
+Merging it with a merge commit has to be allowed as well, under Settings > General > Pull Requests; and
+a default branch whose protection requires a linear history takes neither that merge nor merge-back's
+own push, once that push carries a merge of what landed meanwhile.
+
+The merge-back step succeeds whether it landed the release or opened a pull request for it, and `landed`
+says which: `true` where the release commit is on the default branch - carried there by this run, or
+found there by a run repeated after the release landed, whichever way it landed - and `false` where a
+pull request carries it instead, opened by this run or by an earlier one and still open. A step that
+failed may leave `landed` unset. A run repeated while that pull request is still open tries to land the
+release again: where it now can, it does, with `landed` as `true`, and GitHub marks the pull request
+[merged](https://docs.github.com/en/pull-requests/reference/pull-request-merges), its head being on the
+default branch; where it still cannot, the pull request goes on carrying it. The run that lands the
+release deletes the release branch, and a deletion that fails - a rule over the branch forbidding it,
+say - only warns; where a pull request carries the release from that branch instead, the branch is left
+to whoever merges it, and a run that cannot push that branch, or cannot open the pull request, fails.
+
+Merge a pull request merge-back opens with a merge commit, as the pull request's body says: the tag then
+stays reachable, which is all `ancestry` asks, where *Squash and merge* and *Rebase and merge* take it
+off the history. Until it is merged the default branch does not reach the release's tag, so `ancestry`
+and `changelog` fail on it and on every other pull request into it - `version` too, where the source
+declares a version, which on the default branch is still the one just released - and no next release can
+be prepared. The workflows on merge-back's own pull request may wait to be approved rather than run, as
+the pull request's body says too: GitHub holds the runs of a pull request opened with `GITHUB_TOKEN`
+until someone with write access approves them.
+
+`check-workflow` names the workflow that checks the default branch, by file name: a push made with
+`GITHUB_TOKEN` starts no workflow run at all, so merge-back asks for that one by hand once the release has
+landed. It has to list `workflow_dispatch` among its triggers - GitHub refuses to start one that does not,
+and the release has landed by then, so the run only warns - and it has to be named: left out, the run
+stops before anything is carried back rather than land a release nothing checks. `actions: write` is not
+optional where `token` is left as `GITHUB_TOKEN`, and the `contents: write` the pushes take does not stand
+in for it: asking for a run by hand is a write to Actions, and without it the dispatch is answered 403 and
+the release lands with nothing having checked it.
+
+## Running the tests
+
+The rules in `check-release` are plain functions over text, tags and booleans, and
+[`test_check_release.py`](check-release/test_check_release.py) exercises them without a repository to
+release, as [`test_sources.py`](check-release/test_sources.py) does the adapters for where the version
+comes from; the helpers beside them that face git get one built for the purpose, and
+[`test_check.py`](check-release/test_check.py) runs the action's script,
+[`check.sh`](check-release/check.sh), against one. The suite in `release-flow` builds what each of its
+actions needs - a repository, a bare remote to push to, so that a refused fast-forward is a real
+refusal, and a stub for whatever is called out, so that nothing is sent anywhere:
+
+```
+python3 -m unittest discover -s check-release
+python3 -m unittest discover -s release-flow
+```
+
+Both run on every push and pull request, in [`.github/workflows/test.yml`](.github/workflows/test.yml),
+on the Python [`.python-version`](.python-version) names: they need 3.11 or later, where the actions ask
+only for 3.10. The `guards` job in `test.yml` runs the rules over this repository itself, through the
+action at `./check-release` - unpinned, this being the one repository it already sits in.

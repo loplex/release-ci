@@ -30,5 +30,7 @@ released it, so once a version has a section here, that section may not be edite
 - `release-flow/prepare`, which cuts the release commit onto a branch of its own: `[Unreleased]`
   closed into a section for the version, the version written back where the source declares one, and
   nothing pushed.
+- `notes`, which prints one released section without its heading, so the release notes and the
+  changelog cannot come to say different things.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

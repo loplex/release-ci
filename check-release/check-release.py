@@ -11,6 +11,7 @@
 - `set-version` - write a version where the project declares it: the one released, then the next.
 - `close-changelog` - move what is under `[Unreleased]` into a section of its own, the other half of what a
   release writes.
+- `notes` - the text below one released section's heading, which is what its release notes say.
 
 All of it sits on plain functions over text, tags and booleans, so that the rules can be exercised without a
 repository to release. The tests beside this file are what exercises them.
@@ -669,6 +670,18 @@ def close_changelog_command(arguments) -> list[str]:
     return []
 
 
+def notes_command(arguments) -> list[str]:
+    """The text of one released section, below its heading: what the release notes say. Taken from the same
+    file the changelog check holds to the tag, so the release page and the changelog cannot come to say
+    different things - and refused where there is nothing to say, a release whose notes are empty being one
+    nobody meant to make."""
+    text = bodies(read_file("CHANGELOG.md", "the released sections")).get(arguments.version, "")
+    if not text.strip():
+        return [f"CHANGELOG.md holds nothing for {arguments.version}, so there are no notes to release it with"]
+    print(text)
+    return []
+
+
 def channel_command(arguments) -> list[str]:
     version = arguments.version.removeprefix(prefix_from(arguments.source, arguments.tag_prefix))
     if not SEMVER.match(version):
@@ -764,6 +777,11 @@ def main() -> int:
                                                                  "pointing into this repository; left alone "
                                                                  "without it")
     close_changelog_parser.set_defaults(run=close_changelog_command)
+
+    notes_parser = commands.add_parser("notes", help="the text below one released section's heading, as "
+                                                     "release notes")
+    notes_parser.add_argument("version", help="the version whose notes to print")
+    notes_parser.set_defaults(run=notes_command)
 
     prefix_parser = commands.add_parser("prefix", help="what release tags carry in front of the version")
     prefix_parser.set_defaults(run=prefix_command)

@@ -55,6 +55,7 @@ everywhere; the third is what a project type decides, and
 | `channel`         | the distribution channel a version goes to                                                         |
 | `set-version`     | write a version where it is declared: the one released, then the next                              |
 | `close-changelog` | move `[Unreleased]` into a section of its own, dated                                               |
+| `notes`           | the text below one released section's heading, which is what its release notes say                 |
 
 Of these, the composite action [below](#using-check-release-from-another-repository) runs `version`,
 `changelog` and `ancestry`, whichever its `checks` input names, and `channel` after a `version` that says

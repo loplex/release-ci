@@ -6,6 +6,8 @@ name: test
 on:
   push:
   pull_request:
+  # Asked for by release-publish.yml once a release has landed: a push made with GITHUB_TOKEN starts no run.
+  workflow_dispatch:
 
 jobs:
   suite:

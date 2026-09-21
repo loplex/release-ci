@@ -215,3 +215,15 @@ is pushed, because a three-way merge can put an entry added to `[Unreleased]` in
 `actions: write` is not optional and is not about the contents: asking for a build run by hand is a write
 to Actions, and without it the dispatch is answered 403 and the release lands with nothing having checked
 it. The dispatch is there because a push made with `GITHUB_TOKEN` starts no workflow run at all.
+
+## Releasing this repository
+
+Through its own actions, the way it asks any other repository to. It declares its version nowhere, so
+[`release.yml`](.github/workflows/release.yml) asks for one when it is dispatched: left empty, the version
+after the highest release is taken, and the first release has to be named outright. There is nothing to
+build, so the draft follows the cut directly. Publishing the draft is the decision, and
+[`release-publish.yml`](.github/workflows/release-publish.yml) carries it back onto the default branch.
+
+GitHub starts a dispatched workflow only when its file is on the default branch, so `release.yml` can run
+once it has landed there, and not before. `release-publish.yml` is started by the release instead, from
+the file as it stands in the commit the release tags - which a release cut from the default branch holds.

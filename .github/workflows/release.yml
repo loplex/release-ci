@@ -1,0 +1,47 @@
+name: release
+
+# Cuts a release of this repository through release-flow, the way it asks any other repository to. It
+# declares its version nowhere, so the version is asked for here: left empty, the version after the
+# highest release is taken, and the first release has to be named outright. There is nothing to build,
+# so the draft follows the cut directly; publishing it is the decision, and release-publish.yml carries
+# it back.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to release. Left empty, the version after the highest release.
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+# One at a time: two runs would race for the same release branch and the same draft.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - uses: ./release-flow/prepare
+        id: cut
+        with:
+          source: tags
+          tag-prefix: v
+          version: ${{ inputs.version }}
+          repository-url: ${{ github.server_url }}/${{ github.repository }}
+      - uses: ./release-flow/draft
+        with:
+          source: tags
+          tag-prefix: v
+          version: ${{ steps.cut.outputs.version }}
+          tag: ${{ steps.cut.outputs.tag }}
+          branch: ${{ steps.cut.outputs.branch }}

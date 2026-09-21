@@ -23,5 +23,7 @@ released it, so once a version has a section here, that section may not be edite
   every later check then passes over having compared nothing.
 - `release-flow/merge-back`, which carries a published release back onto the default branch by
   fast-forward, and offers a pull request where it cannot.
+- `close-changelog`, which moves what is under `[Unreleased]` into a released section of its own,
+  dated, the way the Gradle changelog plugin does.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

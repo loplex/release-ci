@@ -29,6 +29,9 @@ version_after = check_release.version_after
 check_ancestry = check_release.check_ancestry
 channel_of = check_release.channel_of
 unprotected = check_release.unprotected
+closed = check_release.closed
+linked = check_release.linked
+sections = check_release.sections
 read_properties = check_release.gradle_properties
 being_worked_on = check_release.being_worked_on
 with_version = check_release.gradle_with_version
@@ -385,6 +388,159 @@ class ReleasedSections(unittest.TestCase):
         self.assertIn("is gone", problems[0])
 
 
+class ClosingTheUnreleasedSection(unittest.TestCase):
+    """What a release does to the changelog before it is one, and the counterpart of check_changelog: what
+    this writes is what the tag is about to hold a copy of, and what may never be edited again."""
+
+    FOLLOWED = "# Log\n\n## [Unreleased]\n\n### Added\n\n- X\n\n## [0.1.0] - 2026-01-01\n\n- old\n"
+    LINKED = "# Log\n\n## [Unreleased]\n\n### Added\n\n- X\n\n[Unreleased]: https://example.invalid/x\n"
+
+    def test_the_entries_become_a_section_of_their_own(self):
+        """The date stays part of the section, which is `sections()` reading the rest of the heading line as
+        body: it may not change afterwards either, the tag holding a copy of it."""
+        written = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
+        self.assertIn("## [0.2.0] - 2026-09-21\n\n### Added\n\n- X\n", written)
+        self.assertEqual(sections(written)["Unreleased"], "")
+
+    def test_what_was_already_released_is_left_alone(self):
+        written = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
+        self.assertIn("## [0.1.0] - 2026-01-01\n\n- old\n", written)
+        self.assertIn("- X\n\n## [0.1.0]", written)  # The blank line between them is not eaten.
+
+    def test_link_definitions_stay_at_the_foot_of_the_file(self):
+        """They belong to the file and are rewritten on every release, so a section closing over them would
+        carry them into text that may never be edited again."""
+        written = closed(self.LINKED, "0.2.0", "2026-09-21")
+        self.assertTrue(written.rstrip("\n").endswith("[Unreleased]: https://example.invalid/x"))
+        self.assertIn("## [0.2.0] - 2026-09-21\n\n### Added\n\n- X\n", written)
+
+    def test_closing_twice_is_refused_rather_than_burying_one(self):
+        once = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
+        with self.assertRaises(SystemExit) as raised:
+            closed(once, "0.2.0", "2026-09-22")
+        # Which refusal matters: closing an emptied [Unreleased] is refused too, and that reading would let
+        # a second close through on a changelog that still had entries under it.
+        self.assertIn("already has a section", str(raised.exception))
+
+    def test_a_release_with_nothing_to_say_is_refused(self):
+        """An empty section is not a section: check_changelog would compare that emptiness against the tag
+        ever after, and nobody reading the release notes learns anything."""
+        with self.assertRaises(SystemExit):
+            closed("# Log\n\n## [Unreleased]\n\n## [0.1.0] - x\n\n- old\n", "0.2.0", "2026-09-21")
+
+    def test_a_link_definition_is_not_something_to_release(self):
+        """The one input that tells the two readings apart: with nothing but a link definition under
+        [Unreleased], peeling only blank lines would make a released section out of it. `sections()` strips
+        link definitions before comparing, so the mistake is invisible from there - it has to be caught here."""
+        with self.assertRaises(SystemExit) as raised:
+            closed("# Log\n\n## [Unreleased]\n\n[Unreleased]: https://example.invalid/x\n", "0.2.0", "2026-09-21")
+        self.assertIn("nothing is under [Unreleased]", str(raised.exception))
+
+    def test_a_file_with_no_unreleased_section_is_refused(self):
+        with self.assertRaises(SystemExit):
+            closed("# Log\n\n## [0.1.0] - x\n\n- old\n", "0.2.0", "2026-09-21")
+
+    def test_what_is_closed_is_what_check_changelog_then_holds(self):
+        """The two halves have to agree: the section this writes is the one compared against the tag, so a
+        tag taken of this text must find it unchanged.
+
+        Comparing the text with itself passes on a heading `sections()` cannot read, there being no section
+        either side to compare - so the section is asked for by name first, and the check is made to fail on
+        an edit, which is the half that says it compares anything at all."""
+        written = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
+        self.assertIn("0.2.0", sections(written))
+        self.assertEqual(check_changelog(written, {"0.2.0": written}), [])
+        self.assertNotEqual(check_changelog(written.replace("- X", "- Y"), {"0.2.0": written}), [])
+
+
+class ClosingAPreReleaseTrain(unittest.TestCase):
+    """What the Gradle changelog plugin's `combinePreReleases` does, on by default there and relied on by the
+    projects moving here: a final release takes its train's entries into its own section, and the train's
+    sections stay as released."""
+
+    TRAIN = (
+        "# Log\n\n## [Unreleased]\n\n### Fixed\n\n- F\n\n"
+        "## [0.3.0-beta.2] - 2026-09-10\n\n### Added\n\n- B2\n\n"
+        "## [0.3.0-beta.1] - 2026-09-05\n\n### Added\n\n- B1\n\n### Removed\n\n- R\n\n"
+        "## [0.2.0] - 2026-09-01\n\n### Added\n\n- old\n"
+    )
+
+    def section(self, text, version):
+        return check_release.bodies(text)[version]
+
+    def test_a_final_release_takes_its_train_in_grouped_by_kind(self):
+        """In Keep a Changelog's order of kinds, each kind once, entries in the order the sections come."""
+        written = closed(self.TRAIN, "0.3.0", "2026-09-21")
+        self.assertEqual(self.section(written, "0.3.0"),
+                         "### Added\n\n- B2\n- B1\n\n### Removed\n\n- R\n\n### Fixed\n\n- F")
+
+    def test_the_train_s_sections_stay_as_they_were_released(self):
+        """What makes this safe beside check_changelog: nothing released is edited, only read."""
+        written = closed(self.TRAIN, "0.3.0", "2026-09-21")
+        self.assertEqual(check_changelog(written, {"0.3.0-beta.1": self.TRAIN, "0.3.0-beta.2": self.TRAIN}), [])
+
+    def test_a_train_with_nothing_new_at_its_end_still_closes(self):
+        """Emptiness is judged on the section that results, not on what stood under [Unreleased]."""
+        quiet = self.TRAIN.replace("### Fixed\n\n- F\n\n", "")
+        written = closed(quiet, "0.3.0", "2026-09-21")
+        self.assertIn("- B1", self.section(written, "0.3.0"))
+
+    def test_a_pre_release_takes_nothing_in(self):
+        """Where this parts from the plugin's code and keeps to its documentation: a channel was offered
+        beta.1 already, and beta.2's notes repeating it would tell them nothing."""
+        written = closed(self.TRAIN.replace("0.3.0-beta.2", "0.3.0-beta.0"), "0.3.0-beta.2", "2026-09-21")
+        self.assertEqual(self.section(written, "0.3.0-beta.2"), "### Fixed\n\n- F")
+
+    def test_another_core_s_train_is_not_this_one(self):
+        written = closed(self.TRAIN, "0.3.1", "2026-09-21")
+        self.assertEqual(self.section(written, "0.3.1"), "### Fixed\n\n- F")
+
+    def test_nothing_new_and_no_train_is_still_refused(self):
+        with self.assertRaises(SystemExit) as raised:
+            closed(self.TRAIN.replace("### Fixed\n\n- F\n\n", ""), "0.3.1", "2026-09-21")
+        self.assertIn("nothing is under [Unreleased]", str(raised.exception))
+
+    def test_a_group_of_another_name_is_kept_after_the_known_kinds(self):
+        """Its text was released too; dropping it for not being one of the six would lose it."""
+        odd = self.TRAIN.replace("### Removed\n\n- R", "### Notes\n\n- N")
+        written = closed(odd, "0.3.0", "2026-09-21")
+        self.assertTrue(self.section(written, "0.3.0").endswith("### Fixed\n\n- F\n\n### Notes\n\n- N"))
+
+
+class TheLinksAtTheFoot(unittest.TestCase):
+    """Written the way the Gradle changelog plugin writes them, so that a project moving here keeps them."""
+
+    def test_the_gradle_plugin_s_own_footer_is_reproduced(self):
+        """Taken from a changelog that plugin wrote, with a prefix declared empty: the comparison runs from the
+        section below, and the oldest release points at its own commits."""
+        text = ("# Log\n\n## [Unreleased]\n\n## [0.2.1] - 2026-09-19\n\n- f\n\n"
+                "## [0.2.0] - 2026-09-15\n\n- a\n\n## [0.1.0] - 2026-09-13\n\n- b\n")
+        repository = "https://github.com/loplex/intellij-maven-lens"
+        self.assertTrue(linked(text, repository, "").endswith(
+            "[Unreleased]: https://github.com/loplex/intellij-maven-lens/compare/0.2.1...HEAD\n"
+            "[0.2.1]: https://github.com/loplex/intellij-maven-lens/compare/0.2.0...0.2.1\n"
+            "[0.2.0]: https://github.com/loplex/intellij-maven-lens/compare/0.1.0...0.2.0\n"
+            "[0.1.0]: https://github.com/loplex/intellij-maven-lens/commits/0.1.0\n"
+        ))
+
+    def test_the_prefix_is_on_every_tag_and_nowhere_else(self):
+        text = "# Log\n\n## [Unreleased]\n\n## [0.2.0] - x\n\n- a\n\n## [0.1.0] - x\n\n- b\n"
+        written = linked(text, "https://example.invalid/r", "v")
+        self.assertIn("[0.2.0]: https://example.invalid/r/compare/v0.1.0...v0.2.0\n", written)
+        self.assertIn("[Unreleased]: https://example.invalid/r/compare/v0.2.0...HEAD\n", written)
+
+    def test_closing_writes_the_new_release_into_them(self):
+        text = "# Log\n\n## [Unreleased]\n\n- n\n\n## [0.1.0] - x\n\n- b\n\n[Unreleased]: https://example.invalid/r/compare/v0.1.0...HEAD\n"
+        written = closed(text, "0.2.0", "2026-09-21", "https://example.invalid/r/", "v")
+        self.assertIn("[Unreleased]: https://example.invalid/r/compare/v0.2.0...HEAD\n", written)
+        self.assertIn("[0.2.0]: https://example.invalid/r/compare/v0.1.0...v0.2.0\n", written)
+        self.assertEqual(written.count("[Unreleased]:"), 1, "the old definition is replaced, not kept beside")
+
+    def test_without_the_repository_the_footer_is_left_alone(self):
+        text = "# Log\n\n## [Unreleased]\n\n- n\n\n[Unreleased]: https://example.invalid/custom\n"
+        self.assertIn("[Unreleased]: https://example.invalid/custom\n", closed(text, "0.1.0", "2026-09-21"))
+
+
 class ReachableTags(unittest.TestCase):
     def test_tags_that_are_still_on_the_history_pass(self):
         self.assertEqual(check_ancestry({"0.1.0": True, "0.2.0": True}, "v"), [])
@@ -557,6 +713,39 @@ class WritingTheVersionBack(unittest.TestCase):
             problems = self.set_version("0.1.1")
         self.assertTrue(problems)
         self.assertIn("still does not name 0.1.1", problems[0])
+
+
+class WritingTheChangelogBack(unittest.TestCase):
+    """`close-changelog` against a file, which is where the line endings live; closed() itself is exercised
+    over text above."""
+
+    def repository_logging(self, text: str) -> Path:
+        here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        (here / "CHANGELOG.md").write_bytes(text.encode("utf-8"))
+        original = check_release.REPO
+        check_release.REPO = here
+        self.addCleanup(setattr, check_release, "REPO", original)
+        return here / "CHANGELOG.md"
+
+    def test_a_crlf_file_stays_crlf(self):
+        """The same reason set-version keeps them: a release commit should change one section of the file,
+        not every line of it."""
+        path = self.repository_logging("# Log\r\n\r\n## [Unreleased]\r\n\r\n### Added\r\n\r\n- A\r\n")
+        with contextlib.redirect_stdout(io.StringIO()):
+            problems = check_release.close_changelog_command(argparse.Namespace(
+                version="0.1.0", date="2026-09-21", repository_url=None, source="tags", tag_prefix="v"))
+        self.assertEqual(problems, [])
+        self.assertEqual(path.read_bytes(),
+                         b"# Log\r\n\r\n## [Unreleased]\r\n\r\n## [0.1.0] - 2026-09-21\r\n\r\n### Added\r\n\r\n- A\r\n")
+
+    def test_a_refused_close_leaves_the_file_as_it_was(self):
+        """A refusal is the rules saying no, and the changelog they said it about is still the one to fix."""
+        text = "# Log\n\n## [Unreleased]\n\n## [0.1.0] - 2026-09-01\n\n- A\n"
+        path = self.repository_logging(text)
+        with self.assertRaises(SystemExit):
+            check_release.close_changelog_command(argparse.Namespace(
+                version="0.2.0", date="2026-09-21", repository_url=None, source="tags", tag_prefix="v"))
+        self.assertEqual(path.read_bytes(), text.encode("utf-8"))
 
 
 class WhereTheRefusedVersionCameFrom(unittest.TestCase):

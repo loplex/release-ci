@@ -29,5 +29,7 @@ released it, so once a version has a section here, that section may not be edite
   back, `[Unreleased]` closed into a section for it, and nothing pushed.
 - `section`, which prints one released section without its heading, so the release notes and the
   changelog cannot come to say different things.
+- `release-flow/draft`, which pushes the release branch and drafts the release from it once the build
+  has succeeded.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

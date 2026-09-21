@@ -1,9 +1,8 @@
 # release-ci
 
 The release rules a project would otherwise carry its own copy of, and the pipeline that runs them.
-Here today: the guards a release has to pass, cutting the release commit onto a branch of its own, and
-carrying a published release back onto the default branch. [What is here](#what-is-here) places
-drafting a release before its tag exists, and per-ecosystem publishing, which are planned.
+Here today: the guards a release has to pass, and draft-before-tag releases cut, drafted and carried
+back. [What is here](#what-is-here) places per-ecosystem publishing, which is planned.
 
 ## What is here
 
@@ -133,8 +132,8 @@ that declares a version, so they are where the choice between the two is then ma
 
 ## release-flow
 
-Two actions, one for each end of a release. Between them sits whatever the ecosystem does - building,
-signing, drafting the release with the archive - which is why they are two.
+Three actions, in the order a release runs them. Between the first two sits whatever the ecosystem does -
+building and signing - and between the last two, someone deciding to publish the draft.
 
 `release-flow/prepare` cuts the release commit onto a branch of its own. The rules are asked first and
 nothing is written where they say no; then the declared version has its marker dropped and is written
@@ -158,10 +157,26 @@ jobs:
         with:
           source: gradle.properties
           repository-url: ${{ github.server_url }}/${{ github.repository }}
-      # Build from the commit now checked out. Once it has succeeded, push the branch and draft the
-      # release at ${{ steps.cut.outputs.tag }} with the archive attached; the tag itself does not
-      # exist until the draft is published.
+      # Build and sign from the commit now checked out, then:
+      - uses: loplex/release-ci/release-flow/draft@<tag>
+        with:
+          source: gradle.properties
+          version: ${{ steps.cut.outputs.version }}
+          tag: ${{ steps.cut.outputs.tag }}
+          branch: ${{ steps.cut.outputs.branch }}
+          files: build/distributions/*-signed.zip
 ```
+
+`release-flow/draft` pushes the branch and drafts the release from it: the notes are the released section of
+`CHANGELOG.md`, the files are whatever the build made, and a version with a pre-release suffix is marked as
+one. What can be answered here - the notes, the files, the channel - is asked before the push, so a draft
+refused over one of them leaves no branch behind, and a pattern that matches no file, or a path that names
+none, stops the run rather than letting the release go out without it. What GitHub answers comes after
+the push, a draft having to point at a commit GitHub has: a draft it refuses leaves the branch standing,
+and running again replaces both. The push is forced - the one forced push in the flow, the branch being
+the release's own and a draft standing from an earlier run being what a second one replaces. The tag is
+named but not created: GitHub creates it when the draft is published, so a draft thrown away leaves no
+tag behind.
 
 `release-flow/merge-back` carries a published release back onto the default branch. It opens the next
 version being worked on, takes in whatever landed while the draft waited, and moves the default branch

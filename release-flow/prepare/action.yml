@@ -5,9 +5,10 @@ description: >-
   [Unreleased] is closed into a section for it, and the one resulting commit is left on a branch named for
   the version, with the workspace on it. Nothing is built, pushed or drafted: the archive is the
   ecosystem's to make from this commit, and a build that fails should leave nothing behind on the remote:
-  the branch is pushed, and the release drafted, once the build has succeeded. Runs from a checkout of the
-  default branch with fetch-depth 0. It writes nothing outside the workspace, so it asks for no permissions
-  of its own; `contents: write` is what the step that pushes needs on the job.
+  release-flow/draft pushes the branch and drafts the release once the build has succeeded. Runs from a
+  checkout of the default branch with fetch-depth 0. It writes nothing outside the workspace, so it asks
+  for no permissions of its own; `contents: write` is what release-flow/draft needs on the job the two
+  share.
 
 inputs:
   source:

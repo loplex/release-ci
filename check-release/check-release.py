@@ -9,6 +9,7 @@
 - `channel` - the distribution channel a version goes to, read off its pre-release suffix.
 - `set-version` - write the version the project declares, which is what a release does.
 - `close-changelog` - move what is under `[Unreleased]` into a section of its own, the other half of one.
+- `section` - the text of one released section, which is what its release notes say.
 
 All of it sits on plain functions over text, tags and booleans, so that the rules can be exercised without a
 repository to release. The tests beside this file are what exercises them.
@@ -700,6 +701,18 @@ def close_changelog_command(arguments) -> list[str]:
     return []
 
 
+def section_command(arguments) -> list[str]:
+    """The text of one released section, below its heading: what the release notes say. Taken from the same
+    file the changelog check holds to the tag, so the release page and the changelog cannot come to say
+    different things - and refused where there is nothing to say, a release whose notes are empty being one
+    nobody meant to make."""
+    text = bodies(declared("CHANGELOG.md", "the released sections are")).get(arguments.version, "")
+    if not text.strip():
+        return [f"CHANGELOG.md holds nothing for {arguments.version}, so there are no notes to release it with"]
+    print(text)
+    return []
+
+
 def channel_command(arguments) -> list[str]:
     version = arguments.version.removeprefix(prefix_from(arguments.source, arguments.tag_prefix))
     if not VERSION.match(version):
@@ -789,6 +802,10 @@ def main() -> int:
     closing.add_argument("--repository-url", help="write the link definitions afresh, pointing into this "
                                                   "repository; left alone without it")
     closing.set_defaults(run=close_changelog_command)
+
+    showing = commands.add_parser("section", help="the text of one released section, as release notes")
+    showing.add_argument("version", help="the version whose section to print")
+    showing.set_defaults(run=section_command)
 
     prefix = commands.add_parser("prefix", help="what release tags carry in front of the version")
     prefix.set_defaults(run=prefix_command)

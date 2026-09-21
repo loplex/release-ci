@@ -507,6 +507,55 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
         self.assertTrue(self.section(written, "0.3.0").endswith("### Fixed\n\n- F\n\n### Notes\n\n- N"))
 
 
+class TheReleaseNotes(unittest.TestCase):
+    """One released section's text, printed for the release page, from the file the changelog check holds to
+    the tag - so the two cannot come to say different things."""
+
+    def notes_of(self, changelog, version):
+        written = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (written / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
+        original = check_release.REPO
+        check_release.REPO = written
+        self.addCleanup(setattr, check_release, "REPO", original)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            problems = check_release.section_command(argparse.Namespace(version=version))
+        return out.getvalue(), problems
+
+    TEXT = ("# Log\n\n## [Unreleased]\n\n## [0.2.0] - 2026-09-21\n\n### Added\n\n- A\n\n"
+            "## [0.1.0] - 2026-09-01\n\n- old\n\n[0.2.0]: https://example.invalid/x\n")
+
+    def test_the_notes_are_the_section_without_its_heading(self):
+        """No `## [0.2.0] - date` line: the release page has a title of its own, and the date would read as
+        the first entry."""
+        notes, problems = self.notes_of(self.TEXT, "0.2.0")
+        self.assertEqual(problems, [])
+        self.assertEqual(notes, "### Added\n\n- A\n")
+
+    def test_link_definitions_are_not_notes(self):
+        """Asked of the last section, which is the one whose body the definitions at the foot fall into. Any
+        other section ends at the heading below it, so the definitions are outside it however it is read, and
+        the question goes unasked."""
+        notes, _ = self.notes_of(self.TEXT, "0.1.0")
+        self.assertNotIn("example.invalid", notes)
+
+    def test_a_version_with_nothing_to_say_is_refused(self):
+        _, problems = self.notes_of(self.TEXT.replace("### Added\n\n- A\n\n", ""), "0.2.0")
+        self.assertTrue(problems)
+        self.assertIn("holds nothing for 0.2.0", problems[0])
+
+    def test_a_section_holding_only_blanks_is_refused_too(self):
+        """Blank lines are taken off a body's ends, but spaces are not: a line of them is still nothing to
+        say."""
+        _, problems = self.notes_of(self.TEXT.replace("### Added\n\n- A\n", "   \n"), "0.2.0")
+        self.assertTrue(problems)
+        self.assertIn("holds nothing for 0.2.0", problems[0])
+
+    def test_a_version_with_no_section_is_refused(self):
+        _, problems = self.notes_of(self.TEXT, "0.3.0")
+        self.assertIn("holds nothing for 0.3.0", problems[0])
+
+
 class TheLinksAtTheFoot(unittest.TestCase):
     """Written the way the Gradle changelog plugin writes them, so that a project moving here keeps them."""
 

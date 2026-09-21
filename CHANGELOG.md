@@ -27,5 +27,7 @@ released it, so once a version has a section here, that section may not be edite
   dated, the way the Gradle changelog plugin does.
 - `release-flow/prepare`, which cuts the release commit onto a branch of its own: the version written
   back, `[Unreleased]` closed into a section for it, and nothing pushed.
+- `section`, which prints one released section without its heading, so the release notes and the
+  changelog cannot come to say different things.
 
 [Unreleased]: https://github.com/loplex/release-ci/commits/main

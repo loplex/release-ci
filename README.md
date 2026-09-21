@@ -26,16 +26,17 @@ ecosystem; an adapter's name says which one it is.
 
 `check-release.py` answers, as separate subcommands, the questions a release has to pass:
 
-| Subcommand        | Asks                                                              |
-|-------------------|-------------------------------------------------------------------|
-| `version`         | whether the declared version may be released, given every tag     |
-| `next`            | the version that follows a released one                           |
-| `changelog`       | whether every released section still reads the way its tag has it |
-| `ancestry`        | whether every released tag is still reachable from this history   |
-| `prefix`          | what release tags are called here                                 |
-| `channel`         | the distribution channel a version goes to                        |
-| `set-version`     | write the declared version, which is what a release does          |
-| `close-changelog` | move `[Unreleased]` into a section of its own, dated              |
+| Subcommand        | Asks                                                                  |
+|-------------------|-----------------------------------------------------------------------|
+| `version`         | whether the declared version may be released, given every tag         |
+| `next`            | the version that follows a released one                               |
+| `changelog`       | whether every released section still reads the way its tag has it     |
+| `ancestry`        | whether every released tag is still reachable from this history       |
+| `prefix`          | what release tags are called here                                     |
+| `channel`         | the distribution channel a version goes to                            |
+| `set-version`     | write the declared version, which is what a release does              |
+| `close-changelog` | move `[Unreleased]` into a section of its own, dated                  |
+| `section`         | the text of one released section, which is what its release notes say |
 
 A version here is a semantic version: `1.0.0`, `1.0.0-rc.1`, `1.0.0-eap-2`, `1.0.0+dfsg1`. The
 grammar is SemVer 2.0.0's own, so a leading zero and an empty identifier are refused rather than

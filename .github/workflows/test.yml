@@ -19,6 +19,7 @@ jobs:
           python-version-file: .python-version
       - run: python3 -m unittest discover -s check-release
       - run: python3 -m unittest discover -s release-flow
+      - run: python3 -m unittest discover -s intellij
 
   guards:
     # The rules run against this repository through the action that offers them, which makes this their first

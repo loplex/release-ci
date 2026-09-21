@@ -378,10 +378,11 @@ def prefix_from(source: str, given: str | None) -> str:
     """What a release tag carries in front of its version - `v0.1.0` against `0.1.0`.
 
     Declared rather than assumed, and with no default here, because both spellings are in use and the wrong
-    guess is silent: a repository that tags bare versions, read as though it tagged `v*`, turns up no released
+    guess passes: a repository that tags bare versions, read as though it tagged `v*`, turns up no released
     tags at all, and every check over them - all but `version` under `tags` given no version, which finds no
-    release to count from - then passes having compared nothing. A caller that wants a default declares it
-    where its own readers can see it, rather than having this file guess on everyone's behalf.
+    release to count from - then passes having compared nothing, with no more than a note on stderr to say
+    so. A caller that wants a default declares it where its own readers can see it, rather than having this
+    file guess on everyone's behalf.
     """
     if given is not None:
         return given
@@ -406,12 +407,30 @@ def next_candidate(prefix: str) -> str:
 def released_versions(prefix: str) -> list[str]:
     """Every tag that names a release, with the prefix off. The repository carries tags that are not releases
     - another component's, a deployment's, a milestone's, and a version somebody tagged while it was still
-    being worked on - and those are nothing to be consistent with."""
-    return [
+    being worked on - and those are nothing to be consistent with.
+
+    Counting none out of many is said out loud rather than returned quietly. It is not a failure: a repository
+    may carry tags of other kinds only, and a first release has nothing to be consistent with either. But it is
+    also exactly what a prefix nobody checked looks like, and every check over the result then passes having
+    compared nothing, the one outcome worth fearing here. Only `version` under `tags`, given no version, fails
+    instead, finding no release to count from.
+
+    Selected by what the tag starts with rather than by a glob, so that the count of what was passed over is
+    had in the same breath as the selection, and so that a prefix is read as text rather than as a pattern.
+    """
+    tags = git("tag", "-l").split()
+    releases = [
         tag[len(prefix) :]
-        for tag in git("tag", "-l", f"{prefix}*").split()
-        if SEMVER.match(tag[len(prefix) :]) and not being_worked_on(tag[len(prefix) :])
+        for tag in tags
+        if tag.startswith(prefix)
+        and SEMVER.match(tag[len(prefix) :])
+        and not being_worked_on(tag[len(prefix) :])
     ]
+    if tags and not releases:
+        called = f"the prefix '{prefix}'" if prefix else "no prefix at all"
+        print(f"note: this repository has {len(tags)} tag(s) and none of them is a release under {called}, "
+              f"so there is no release to compare against", file=sys.stderr)
+    return releases
 
 
 def version_command(arguments) -> list[str]:

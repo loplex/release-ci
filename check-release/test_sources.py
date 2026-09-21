@@ -196,8 +196,8 @@ class ReadingGradleProperties(unittest.TestCase):
             GRADLE_PROPERTIES.tag_prefix("version = 1.0.0\n")
 
     def test_a_file_that_says_nothing_about_the_prefix_is_refused(self):
-        """No default, because the wrong guess is silent: a repository tagging bare versions, read as tagging
-        `v*`, turns up no released tags at all and every check over them then passes having compared nothing."""
+        """No default, because the wrong guess passes: a repository tagging bare versions, read as tagging `v*`,
+        turns up no released tags at all and every check over them then passes having compared nothing."""
         with self.assertRaises(SystemExit):
             GRADLE_PROPERTIES.tag_prefix("version = 1.0.0\n")
 

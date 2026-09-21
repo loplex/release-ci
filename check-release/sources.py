@@ -155,7 +155,7 @@ class GradleProperties:
 
     def tag_prefix(self, text: str) -> str:
         """What release tags carry in front of the version. Declared empty is a prefix too - a project that tags
-        bare versions says so - and left out is refused, the wrong guess being silent."""
+        bare versions says so - and left out is refused, the wrong guess passing every check."""
         prefix = self.properties(text).get("tagPrefix")
         if prefix is None:
             raise SystemExit("gradle.properties does not say, in tagPrefix, what release tags are called")

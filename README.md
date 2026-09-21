@@ -1,9 +1,9 @@
 # release-ci
 
 The release rules a project would otherwise carry its own copy of, and the pipeline that runs them.
-Here today: the guards a release has to pass, cutting the release commit onto a branch of its own, and
-carrying a published release back onto the default branch. [What is here](#what-is-here) says where, and
-[What is planned](#what-is-planned) what is still to come.
+Here today: the guards a release has to pass, and draft-before-tag GitHub releases cut, drafted and carried
+back. [What is here](#what-is-here) says where, and [What is planned](#what-is-planned) what is still to
+come.
 
 What goes where is decided by the ecosystem boundary, not by whichever file is being written:
 
@@ -15,14 +15,15 @@ end up assuming one ecosystem's build.
 
 ## What is here
 
-| Directory       | Holds                                                                   |
-|-----------------|-------------------------------------------------------------------------|
-| `check-release` | What a release has to be true of, asked as properties over a repository |
-| `release-flow`  | How a GitHub release is cut and carried back                            |
+| Directory       | Holds                                                                      |
+|-----------------|----------------------------------------------------------------------------|
+| `check-release` | What a release has to be true of, asked as properties over a repository    |
+| `release-flow`  | How a GitHub release is cut, drafted before it is tagged, and carried back |
 
 Each action's inputs and outputs are listed in full, with what each does, in the `action.yml` beside it;
 the sections below show how they fit together. Every action runs on the runner's own `python3`, 3.10 or
-later; `release-flow/merge-back` needs `gh` as well, and GitHub-hosted runners carry both.
+later; `release-flow/draft` and `release-flow/merge-back` need `gh` as well, and GitHub-hosted runners
+carry both.
 
 Pin an action of this repository to one of its release tags, `v` and a version, rather than to a branch
 or a bare commit. A branch moves, so what runs would change under the pin; a commit that nothing reaches
@@ -33,7 +34,6 @@ what keeps a released commit reachable.
 
 | Directory       | Will hold                                                                |
 |-----------------|--------------------------------------------------------------------------|
-| `release-flow`  | How a GitHub release is drafted before it is tagged                      |
 | `intellij`      | How a JetBrains plugin is built, signed and published to the Marketplace |
 
 ## check-release
@@ -172,9 +172,10 @@ whatever the source. A repository whose version lives only in its tags has no su
 version after a release is worked out bare and the source adds the marker where there is one.
 
 Under `tags`, with nothing released yet, there is no highest release to follow, and the first
-version is named with `--version`, or the `version` input of either action. `set-version` under
-`tags` refuses rather than reporting a success in which nothing was written, and with exit status
-3 rather than 1, so that a caller can tell "nothing to write to" from a write that failed.
+version is named with `--version`, or the `version` input of `check-release` or
+`release-flow/prepare`. `set-version` under `tags` refuses rather than reporting a success in
+which nothing was written, and with exit status 3 rather than 1, so that a caller can tell
+"nothing to write to" from a write that failed.
 
 `--tag-prefix` says what release tags are called. Under `gradle.properties` the file says it where
 `--tag-prefix` is not given, in a `tagPrefix` line it then has to carry beside the `version` one:
@@ -200,8 +201,9 @@ one that declares a version for a file to try it on.
 
 ## release-flow
 
-Two actions so far, one for each end of a release, because between them sits making the artifact - the
-ecosystem's to say how - and drafting the release with it, which is planned.
+Three actions, `release-flow/prepare`, `release-flow/draft` and `release-flow/merge-back`, in the order a
+release runs them. Between the first two sits whatever the ecosystem does - building and signing - and
+between the last two, someone deciding to publish the draft.
 
 Every action in release-flow takes `source` and `tag-prefix` as [check-release's
 action](#using-check-release-from-another-repository) does, `^none` included, runs after a checkout
@@ -254,10 +256,36 @@ jobs:
           source: gradle.properties
           version: ${{ inputs.version }}
           repository-url: ${{ github.server_url }}/${{ github.repository }}
-      # Build from the commit now checked out. Once it has succeeded, push the branch and draft the
-      # release at ${{ steps.cut.outputs.tag }} with the archive attached; the tag itself does not
-      # exist until the draft is published.
+      # Build from the commit now checked out, then:
+      - uses: loplex/release-ci/release-flow/draft@<tag>
+        with:
+          source: gradle.properties
+          version: ${{ steps.cut.outputs.version }}
+          tag: ${{ steps.cut.outputs.tag }}
+          branch: ${{ steps.cut.outputs.branch }}
+          files: build/distributions/*.zip
 ```
+
+### release-flow/draft
+
+[`release-flow/draft`](release-flow/draft/action.yml) pushes the branch and drafts the release from it: the
+notes are the released section of `CHANGELOG.md`, the files are those `files` names - the build's, by
+pattern or path, one a line, a pattern being a bash glob, in which `**` goes no deeper than `*`, and none
+where it is left empty - and a version with a pre-release suffix is marked as one, by the channel
+`check-release channel` reads off it under the rule in [check-release](#check-release). What can be
+answered on the runner - the notes, the files, that channel - is asked before the push, so a draft refused
+over one of them leaves no branch behind, and a pattern that matches no file, or a path that names none,
+stops the run rather than letting the release go out without it. What GitHub answers comes after the push,
+a draft having to point at a commit GitHub has: a draft it refuses leaves the branch standing, and running
+again replaces the branch and drafts the release from it. A draft already standing under the tag, left by
+an earlier run or made by hand, is deleted before the new one is made; a published release is left alone.
+The push is forced - the one forced push in the flow, the branch being the release's own, and one left
+standing by a run whose draft was thrown away being what a second run replaces. A protection rule or
+ruleset over `release/*` has to let the checkout's credential force-push there, which GitHub's branch
+protection does not by default. The tag is named but not created: GitHub creates it when the draft is
+published, so a draft thrown away leaves no tag behind. The job needs `contents: write` for the push and
+the draft. The release job under [release-flow/prepare](#release-flowprepare) runs it after the build that
+follows `prepare`, handing on the `version`, `tag` and `branch` that `prepare` answers with.
 
 ### release-flow/merge-back
 

@@ -1,0 +1,69 @@
+name: merge-back
+description: >-
+  Carry a published release back onto the default branch: open the next version being worked on, take in
+  whatever landed while the draft waited, and move the default branch onto the release commit by
+  fast-forward, so that the tag the archive was built from stays on the history. Where that cannot be done,
+  because of a conflict, a merged tree the release rules refuse or a race, it opens a pull request instead.
+  Runs in the calling workspace, after a checkout with fetch-depth 0, and the calling job needs `contents:
+  write`, `pull-requests: write` and `actions: write` - the last because asking for a workflow run is a
+  write to Actions and is answered 403 without it.
+
+inputs:
+  source:
+    description: Where the version is declared, passed to check-release as `--source`.
+    required: true
+  tag-prefix:
+    description: >-
+      What release tags carry in front of the version. Left out where the source declares it; `^none` where
+      the tags carry no prefix at all.
+    default: ''
+  tag:
+    description: The tag of the release that was published, as `github.event.release.tag_name` gives it.
+    required: true
+  default-branch:
+    description: >-
+      The branch a release is carried back onto, as `github.event.repository.default_branch` gives it. Asked
+      of the repository rather than written down, so that this says the same thing where it is called `main`
+      and where it is called something else.
+    required: true
+  release-branch-prefix:
+    description: What the branch holding the release commit is called, in front of the version.
+    default: release/
+  build-workflow:
+    description: >-
+      The workflow to ask for once the release has landed, by file name. A push made with GITHUB_TOKEN starts
+      no workflow run, so the branch would otherwise arrive unchecked. Leave empty to ask for nothing.
+    default: build.yml
+  token:
+    description: The token `gh` acts with.
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: The released version, with the tag prefix off.
+    value: ${{ steps.merge-back.outputs.version }}
+  next:
+    description: The version now being worked on, as the source declares it.
+    value: ${{ steps.merge-back.outputs.next }}
+  landed:
+    description: >-
+      `true` where the default branch was moved onto the release commit. `false` says a pull request carries
+      it instead, which is a thing to look at rather than a step of the process.
+    value: ${{ steps.merge-back.outputs.landed }}
+
+runs:
+  using: composite
+  steps:
+    # One step calling one script, rather than the steps written out here: the shell is then something a test
+    # can run against a repository of its own, which is not true of anything living inside action.yml.
+    - id: merge-back
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+        TAG: ${{ inputs.tag }}
+        DEFAULT_BRANCH: ${{ inputs.default-branch }}
+        BRANCH_PREFIX: ${{ inputs.release-branch-prefix }}
+        BUILD_WORKFLOW: ${{ inputs.build-workflow }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: "$GITHUB_ACTION_PATH/merge-back.sh"

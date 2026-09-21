@@ -1,5 +1,5 @@
-# The suite that holds check-release to its word, run on every push and pull request. Its Python comes from
-# .python-version so that the version the tests are written against and the one they run on cannot
+# The suites that hold this repository to its word, run on every push and pull request. Their Python
+# comes from .python-version so that the version the tests are written against and the one they run on cannot
 # drift apart. The guards take the runner's own python3 instead, as any repository using the action does.
 name: test
 
@@ -16,6 +16,7 @@ jobs:
         with:
           python-version-file: .python-version
       - run: python3 -m unittest discover -s check-release
+      - run: python3 -m unittest discover -s release-flow
 
   guards:
     # The rules run against this repository through the action that offers them, which makes this their first

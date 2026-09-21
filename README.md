@@ -1,24 +1,25 @@
 # release-ci
 
-The release rules a project would otherwise carry its own copy of, and in time the pipeline that runs
-them. Here today: the guards a release has to pass. [What is here](#what-is-here) places
-draft-before-tag releases and per-ecosystem publishing, which are planned.
+The release rules a project would otherwise carry its own copy of, and the pipeline that runs them.
+Here today: the guards a release has to pass, and carrying a published release back onto the default
+branch. [What is here](#what-is-here) places draft-before-tag releases and per-ecosystem publishing,
+which are planned.
 
 ## What is here
 
-| Directory       | Holds                                                                   |
-|-----------------|-------------------------------------------------------------------------|
-| `check-release` | What a release has to be true of, asked as properties over a repository |
+| Directory       | Holds                                                                    |
+|-----------------|--------------------------------------------------------------------------|
+| `check-release` | What a release has to be true of, asked as properties over a repository  |
+| `release-flow`  | The shape a release is cut in and carried back, as steps over a workflow |
 
-It reads the tags and `CHANGELOG.md` out of the repository it is asked about, and takes the version a
-release is asked to be from whichever source that project declares. The first two are the same
+`check-release` reads the tags and `CHANGELOG.md` out of the repository it is asked about, and takes the
+version a release is asked to be from whichever source that project declares. The first two are the same
 everywhere; the third is what a project type decides, and [check-release](#check-release) says where
 that line is drawn.
 
-Two more directories are planned and named ahead of time, so that what goes where is decided by the boundary
-rather than by whichever file is being written: `release-flow`, for the shape a release is cut and
-carried back in, and one directory per ecosystem, `intellij` first, for building, signing and
-publishing. A directory whose content is ecosystem-free carries a name that says nothing about an
+One more directory is planned and named ahead of time, so that what goes where is decided by the boundary
+rather than by whichever file is being written: one per ecosystem, `intellij` first, for building, signing
+and publishing. A directory whose content is ecosystem-free carries a name that says nothing about an
 ecosystem; an adapter's name says which one it is.
 
 ## check-release
@@ -52,14 +53,18 @@ define, and `precedence` is where that rule would go.
 
 The rules are plain functions over text, tags and booleans, and `test_check_release.py` exercises
 them without a repository to release; the helpers beside them that face git get one built for the
-purpose:
+purpose. The suites beside it build what each step needs - a repository, a bare remote, a stub for
+whatever is called out:
 
 ```
 python3 -m unittest discover -s check-release
+python3 -m unittest discover -s release-flow
 ```
 
-The same command runs on every push and pull request, in
-[`.github/workflows/test.yml`](.github/workflows/test.yml).
+Both run on every push and pull request, in
+[`.github/workflows/test.yml`](.github/workflows/test.yml). The second builds a bare repository to push
+against and puts a stub `gh` on the path, so that a refused fast-forward is a real refusal and nothing is
+sent anywhere.
 
 ## Using it from another repository
 
@@ -123,3 +128,43 @@ Adding `package.json`, `pyproject.toml`, `Cargo.toml` or a plain `VERSION` file 
 `declares_a_version`, `marker_of` and `prefix_from`, which sit together for that reason, and a reader
 and a writer for that file. `version` and `set-version` call Gradle's outright, it being the one source
 that declares a version, so they are where the choice between the two is then made.
+
+## release-flow
+
+`release-flow/merge-back` carries a published release back onto the default branch. It opens the next
+version being worked on, takes in whatever landed while the draft waited, and moves the default branch
+onto the release commit by **fast-forward**:
+
+```yaml
+jobs:
+  merge-back:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: loplex/release-ci/release-flow/merge-back@<tag>
+        with:
+          source: gradle.properties
+          tag: ${{ github.event.release.tag_name }}
+          default-branch: ${{ github.event.repository.default_branch }}
+```
+
+The fast-forward is the point, and so is the push not being forced. A release tag names the commit the
+archive was built and signed from; *Squash and merge* and *Rebase and merge* replace that commit with a
+copy, which takes the tag off the default branch's history and turns `ancestry` red for every commit
+after it. A merge commit keeps the tag reachable, but only through its second parent, off the default
+branch's first-parent line. A push moves the default branch onto the release branch as it stands, so
+the release commit stays on that line, with at most a merge of what landed meanwhile above it. Where
+the default branch moved under that push, or would not merge in cleanly, git refuses and a pull request
+carries the release instead - that refusal is the race being caught, not an error to push past. So does
+a merge whose result the rules refuse: `changelog` and `ancestry` are asked of the merged tree before it
+is pushed, because a three-way merge can put an entry added to `[Unreleased]` into the released section.
+
+`actions: write` is not optional and is not about the contents: asking for a build run by hand is a write
+to Actions, and without it the dispatch is answered 403 and the release lands with nothing having checked
+it. The dispatch is there because a push made with `GITHUB_TOKEN` starts no workflow run at all.

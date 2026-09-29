@@ -7,6 +7,8 @@ released it, so once a version has a section here, that section may not be edite
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-29
+
 ### Added
 
 - `release-flow/warn`, which says at the top of a published release's notes that publishing it
@@ -45,5 +47,6 @@ released it, so once a version has a section here, that section may not be edite
 - `intellij`, the first ecosystem: building and signing a JetBrains plugin between prepare and draft,
   and publishing it to the Marketplace once its draft is published.
 
-[Unreleased]: https://github.com/loplex/release-ci/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/loplex/release-ci/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/loplex/release-ci/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/loplex/release-ci/commits/v0.1.0

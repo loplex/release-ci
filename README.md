@@ -34,6 +34,15 @@ release tag is what keeps a released commit reachable. The pin holds this reposi
 actions `intellij/build` calls in turn, `actions/setup-java` and the rest, run at the tags its
 `action.yml` names for them, which their owners can move.
 
+The pin is to an exact version, such as `@v0.1.0`, not to a major version such as `@v4`. This diverges from
+[GitHub's guide to versioning actions](https://github.com/actions/toolkit/blob/main/docs/action-versioning.md),
+where the author moves a major version tag to each release that keeps its inputs and behavior, so that a
+pin to it takes fixes without being changed. This repository keeps no such tag while its version is below
+1.0, because [item 4 of the SemVer
+specification](https://semver.org/#semantic-versioning-specification-semver) says that anything may change
+in `0.y.z`: a moving `v0` would promise nothing a pin could rely on. A moving major version tag belongs to
+1.0 and later.
+
 ## check-release
 
 `check-release` reads the tags and `CHANGELOG.md` out of the repository it is asked about, and takes the

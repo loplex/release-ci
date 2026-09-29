@@ -1,0 +1,45 @@
+name: warn
+description: >-
+  Say on a published release that publishing it somewhere else did not complete, or take that back once it
+  has. Given the outcome of the step that publishes, it puts a warning linking this run at the start of the
+  release notes where that step failed or did not run, and takes it off where it succeeded; the notes around
+  the warning are left as they are, and a run that finds them saying what it would say already leaves them
+  alone. The warning is looked for at the start of the notes alone: a line holding nothing but one of its
+  markers anywhere else fails the run, and the notes are left for a warning there to be taken off by hand.
+  Meant to follow that step in the same job, under an `if` of `!cancelled()` so that it runs whatever failed
+  before it; needs no checkout, and needs `contents: write` on the job. Needs `gh` and python3 3.10 or
+  later, which GitHub-hosted runners carry.
+
+inputs:
+  tag:
+    description: The tag of the published release whose notes carry the warning.
+    required: true
+  outcome:
+    description: >-
+      The outcome of the step that publishes, as `steps.<id>.outcome` gives it: `success` takes the warning
+      off, `failure` and `skipped` put it on. `outcome` rather than `conclusion`, so that a step allowed to
+      fail with `continue-on-error` still counts as failed. Anything else, the empty one an id naming no step
+      gives included, fails the run.
+    required: true
+  to:
+    description: >-
+      What the release is published to, as it stands in the middle of a sentence, on one line:
+      `the JetBrains Marketplace`, say.
+    required: true
+  token:
+    description: The token `gh` acts with, to read and write the release notes.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
+        OUTCOME: ${{ inputs.outcome }}
+        TO: ${{ inputs.to }}
+        RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        GH_TOKEN: ${{ inputs.token }}
+        # The release is asked for in this repository by name, so that no checkout is needed to say which.
+        GH_REPO: ${{ github.repository }}
+      run: python3 "$GITHUB_ACTION_PATH/warn.py"

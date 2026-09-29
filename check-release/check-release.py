@@ -673,7 +673,8 @@ def close_changelog_command(arguments) -> list[str]:
 def notes_command(arguments) -> list[str]:
     """The text of one released section, below its heading: what the release notes say. Taken from the same
     file the changelog check holds to the tag, so the release page and the changelog cannot come to say
-    different things - and refused where there is nothing to say, a release whose notes are empty being one
+    different things, but for the warning release-flow/warn puts above the notes while publishing the release
+    elsewhere has not completed - and refused where there is nothing to say, a release whose notes are empty being one
     nobody meant to make."""
     text = bodies(read_file("CHANGELOG.md", "the released sections")).get(arguments.version, "")
     if not text.strip():

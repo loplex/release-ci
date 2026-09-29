@@ -596,7 +596,8 @@ class TheLinksAtTheFoot(unittest.TestCase):
 
 class TheReleaseNotes(unittest.TestCase):
     """One released section's text, printed for the release page, from the file the changelog check holds to
-    the tag - so the two cannot come to say different things."""
+    the tag - so the two cannot come to say different things, but for the warning release-flow/warn puts above
+    the notes while publishing the release elsewhere has not completed."""
 
     def notes_of(self, changelog, version):
         here = Path(self.enterContext(tempfile.TemporaryDirectory()))

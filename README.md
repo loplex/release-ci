@@ -16,16 +16,16 @@ directories may assume one ecosystem's build.
 
 ## What is here
 
-| Directory       | Holds                                                                      |
-|-----------------|----------------------------------------------------------------------------|
-| `check-release` | What a release has to be true of, asked as properties over a repository    |
-| `release-flow`  | How a GitHub release is cut, drafted before it is tagged, and carried back |
-| `intellij`      | How a JetBrains plugin is built, signed and published to the Marketplace   |
+| Directory       | Holds                                                                                                      |
+|-----------------|------------------------------------------------------------------------------------------------------------|
+| `check-release` | What a release has to be true of, asked as properties over a repository                                    |
+| `release-flow`  | How a GitHub release is cut, drafted before it is tagged, carried back, and flagged where a publish failed |
+| `intellij`      | How a JetBrains plugin is built, signed and published to the Marketplace                                   |
 
 Each action's inputs and outputs are listed in full, with what each does, in the `action.yml` beside it;
 the sections below show how they fit together. Every action but `intellij/build` runs on the runner's
-own `python3`, 3.10 or later; `release-flow/draft` and `release-flow/merge-back` need `gh` as well, and
-`intellij/publish` `curl`, and GitHub-hosted runners carry all three.
+own `python3`, 3.10 or later; `release-flow/draft`, `release-flow/merge-back` and `release-flow/warn` need
+`gh` as well, and `intellij/publish` `curl`, and GitHub-hosted runners carry all three.
 
 Pin an action of this repository to one of its release tags, `v` and a version, rather than to a branch or
 a bare commit. A branch moves, so this repository's code would change under the pin; a commit that nothing
@@ -202,12 +202,14 @@ one that declares a version for a file to try it on.
 Three actions, `release-flow/prepare`, `release-flow/draft` and `release-flow/merge-back`, in the order a
 release runs them. Between the first two sits whatever the ecosystem does - building and signing, which
 [intellij](#intellij) does for a JetBrains plugin - and between the last two, someone deciding to publish
-the draft.
+the draft. A fourth, `release-flow/warn`, follows whatever publishes the release somewhere other than
+GitHub, and says on the release when that did not complete.
 
-Every action in release-flow takes `source` and `tag-prefix` as [check-release's
-action](#using-check-release-from-another-repository) does, `^none` included, runs after a checkout
-with `fetch-depth: 0`, and is pinned the way [What is here](#what-is-here) says, which also lists
-what each needs of the runner.
+`release-flow/prepare`, `release-flow/draft` and `release-flow/merge-back` take `source` and `tag-prefix`
+as [check-release's action](#using-check-release-from-another-repository) does, `^none` included, and run
+after a checkout with `fetch-depth: 0`; `release-flow/warn` takes neither and needs no checkout, as
+[its section](#release-flowwarn) says. Every one of them is pinned the way [What is here](#what-is-here)
+says, which also lists what each needs of the runner.
 
 ### release-flow/prepare
 
@@ -376,6 +378,63 @@ optional where `token` is left as `GITHUB_TOKEN`, and the `contents: write` the 
 in for it: asking for a run by hand is a write to Actions, and without it the dispatch is answered 403 and
 the release lands with nothing having checked it.
 
+### release-flow/warn
+
+[`release-flow/warn`](release-flow/warn/action.yml) says on a published release that publishing it
+somewhere other than GitHub did not complete, and takes that back once it has.\
+Whoever has the release's files in hand looks at the release, not through the runs of a workflow.\
+So a publish that went red is said where they will look: a `> [!WARNING]` at the start of the notes,
+naming where the release was to go and linking the run.
+
+It follows the step that publishes, in the same job, with `if: ${{ !cancelled() }}` so that a failure
+before it does not stop it, and is handed that step's `outcome`:
+
+| `outcome` | The notes                                     |
+|-----------|-----------------------------------------------|
+| `success` | lose the warning, where they carry one        |
+| `failure` | gain the warning at the start                 |
+| `skipped` | gain it too: a step before the publish failed |
+
+- Anything else fails the run. That includes the empty `outcome` an id naming no step gives, which read
+  as a failure would put the warning on every release.
+- `outcome` rather than `conclusion`, so that a publish step allowed to fail with `continue-on-error` still
+  counts as failed.
+- The publish step's outcome decides, not the job's. A merge-back that failed while the publish completed
+  puts no warning on the release: the release is served all the same, and the job going red says the rest.
+- A run whose notes already say what it would say leaves them alone. Running the job again - once a first
+  version uploaded by hand is approved, say - takes the warning off where the publish now completes, and
+  says it once where it fails again.
+
+The warning sits between two HTML comments, `<!-- release-flow/warn -->` and `<!-- /release-flow/warn -->`,
+which GitHub keeps in the notes and does not show. It is looked for only where `release-flow/warn` puts it:
+at the very start of the notes, the markers on lines of their own around nothing but quoted lines.
+
+- A line that starts the notes from its first column cannot stand in a code block, a list or a quote, so
+  the notes need no parsing to know the warning there is this action's.
+- The words between the markers do not matter: a warning written by another version of the action is the
+  one taken off or replaced.
+- Taking it off takes the blank line after it too, and gives the rest of the notes back with their line
+  ends as they were.
+
+A line holding nothing but either marker anywhere else fails the run and leaves the notes as they are, for
+a warning there to be taken off by hand. So does a warning at the start that is not closed, or that holds
+a line that is not quoted. Such a line may be the warning after someone wrote above it, or an example the
+notes show as code, and the action does not guess which. The step runs last, after the release and
+everything before it are done, so failing it undoes nothing.
+
+The release is asked for by the repository's name, so no checkout is needed, and the job needs
+`contents: write` to write the notes. The job under [intellij/publish](#intellijpublish) shows the step
+after an upload to the JetBrains Marketplace.
+
+#### The warning is the one thing the notes say that the changelog does not
+
+A release's notes are its released section of `CHANGELOG.md` - `release-flow/draft` writes them with
+`check-release notes` - so that the two cannot come to say different things. The warning is the exception:
+it is the one thing release-flow writes into the notes of a release already published, and no changelog
+carries it. A released section may not be edited, and whether a publish completed is not a change to the
+project. It stands until a run whose publish completes takes it off, or, where that run cannot tell it
+for this action's, until it is taken off by hand.
+
 ### Where GitHub reads each workflow from
 
 The release job and the merge-back job sit in workflows of their own, which GitHub reads from different
@@ -515,12 +574,19 @@ jobs:
           fi
           echo "archive=${archives[0]}" >> "$GITHUB_OUTPUT"
       - uses: loplex/release-ci/intellij/publish@<tag>
+        id: publish
         if: ${{ !cancelled() && steps.accepted.outcome == 'success' }}
         with:
           plugin-id: cz.example.plugin
           version: ${{ steps.back.outputs.version }}
           archive: ${{ steps.accepted.outputs.archive }}
           token: ${{ secrets.PUBLISH_TOKEN }}
+      - uses: loplex/release-ci/release-flow/warn@<tag>
+        if: ${{ !cancelled() }}
+        with:
+          tag: ${{ github.event.release.tag_name }}
+          outcome: ${{ steps.publish.outcome }}
+          to: the JetBrains Marketplace
 ```
 
 The channel is not passed: `intellij/publish` reads it off the version with `check-release channel`, by
@@ -536,6 +602,10 @@ again - once a first version is approved, say, and within those 30 days - is saf
 that finds its release on the default branch already says so, with `landed` as `true`, and carries
 nothing back a second time, and one that finds the pull request an earlier run opened still open tries
 to land the release again, as [release-flow/merge-back](#release-flowmerge-back) says.
+
+The last step puts a warning on the release where the Marketplace did not end up serving the accepted
+archive, or where nothing was uploaded because a step before the upload failed, and a run repeated once
+the Marketplace serves it takes the warning off, as [release-flow/warn](#release-flowwarn) says.
 
 ## Running the tests
 

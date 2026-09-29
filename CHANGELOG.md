@@ -7,6 +7,12 @@ released it, so once a version has a section here, that section may not be edite
 
 ## [Unreleased]
 
+### Added
+
+- `release-flow/warn`, which says at the top of a published release's notes that publishing it
+  somewhere other than GitHub did not complete, linking the run, and takes that back once a run
+  repeated later publishes it.
+
 ## [0.1.0] - 2026-09-29
 
 ### Added

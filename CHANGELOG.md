@@ -7,6 +7,8 @@ released it, so once a version has a section here, that section may not be edite
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-29
+
 ### Added
 
 - `check-release`, the rules a release has to pass, as subcommands over a repository: which version
@@ -37,4 +39,5 @@ released it, so once a version has a section here, that section may not be edite
 - `intellij`, the first ecosystem: building and signing a JetBrains plugin between prepare and draft,
   and publishing it to the Marketplace once its draft is published.
 
-[Unreleased]: https://github.com/loplex/release-ci/commits/main
+[Unreleased]: https://github.com/loplex/release-ci/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/loplex/release-ci/commits/v0.1.0

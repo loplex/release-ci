@@ -3,15 +3,18 @@
 ## Running the tests
 
 ```
+python3 -m pip install -r .github/requirements.txt
 python3 -m unittest discover -s check-release
 python3 -m unittest discover -s release-flow
 python3 -m unittest discover -s intellij
+python3 -m unittest discover -s .github
 ```
 
-All three run on every push and pull request, in
+The first line installs what the `.github` suite needs.\
+All four suites run on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml), on the Python
 [`.python-version`](.python-version) names.\
-They need 3.11 or later, where the actions ask only for 3.10.
+The first three need 3.11 or later, where the actions ask only for 3.10.
 
 ### The `check-release` suite
 
@@ -40,6 +43,19 @@ It builds:
 - a Plugin Verifier report;
 - a stub `curl`, which answers for the Marketplace from a file the test writes, so that nothing is
   uploaded.
+
+### The `.github` suite
+
+It reads the repository as text: [`test_line_length.py`](.github/test_line_length.py) holds every
+tracked file git does not take for binary to the line length [`.editorconfig`](.editorconfig) sets
+for it, but for the lines the comment there lists, and refuses one that is not UTF-8 by name.
+
+The suite reads Markdown through [cmarkgfm](https://github.com/theacodes/cmarkgfm), the Python
+binding of GitHub's own cmark-gfm, so that code, tables and headings are what GitHub renders.\
+The length test renders a line opening with a link alone, so a link whose definition stands
+elsewhere, or one written in HTML, does not count as one there.\
+cmarkgfm and the packages it needs are pinned in
+[`.github/requirements.txt`](.github/requirements.txt), and no other suite needs a package.
 
 ## Releasing this repository
 

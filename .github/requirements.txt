@@ -1,0 +1,5 @@
+cffi==2.1.1
+    # via cmarkgfm
+cmarkgfm==2025.10.22
+pycparser==3.0
+    # via cffi

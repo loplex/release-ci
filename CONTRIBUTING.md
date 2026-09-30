@@ -14,7 +14,10 @@ The first line installs what the `.github` suite needs.\
 All four suites run on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml), on the Python
 [`.python-version`](.python-version) names.\
-The first three need 3.11 or later, where the actions ask only for 3.10.
+The first three need 3.11 or later, where the actions ask only for 3.10.\
+Those three run again on 3.10, through [`.github/unittest-3.10.py`](.github/unittest-3.10.py), which
+puts back the one 3.11 method the tests set themselves up with and nothing the actions run, so that
+anything newer than 3.10 in the actions' code the tests reach fails there.
 
 ### The `check-release` suite
 

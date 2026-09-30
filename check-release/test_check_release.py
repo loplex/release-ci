@@ -9,6 +9,7 @@ import argparse
 import contextlib
 import importlib.util
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -1158,14 +1159,19 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
     taken from the script's own path would name that checkout instead - and quietly so, because it carries a
     CHANGELOG.md of its own for the checks to read."""
 
+    def working_in(self, directory):
+        # contextlib.chdir would do, but it arrived in 3.11 and the suite runs on the 3.10 the actions ask for.
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(directory)
+
     def test_the_root_is_the_repository_the_run_is_in(self):
         elsewhere = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         subprocess.run(["git", "init", "-q"], cwd=elsewhere, check=True)
-        self.enterContext(contextlib.chdir(elsewhere))
+        self.working_in(elsewhere)
         self.assertEqual(repository_root(), elsewhere)
         (elsewhere / "sub").mkdir()
-        with contextlib.chdir(elsewhere / "sub"):
-            self.assertEqual(repository_root(), elsewhere, "the root, not the directory the run is in")
+        self.working_in(elsewhere / "sub")
+        self.assertEqual(repository_root(), elsewhere, "the root, not the directory the run is in")
 
     def test_help_answers_outside_a_repository(self):
         """The repository is resolved when a subcommand first reads it, not when the file is loaded: nobody
@@ -1196,7 +1202,7 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
 
     def test_running_outside_a_repository_is_refused(self):
         nowhere = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        self.enterContext(contextlib.chdir(nowhere))
+        self.working_in(nowhere)
         with self.assertRaises(SystemExit):
             repository_root()
 

@@ -1,6 +1,7 @@
 # The suites that hold this repository to its word, run on every push and pull request. Their Python comes
 # from .python-version so that the version the tests are written against and the one they run on cannot
-# drift apart. The guards take the runner's own python3 instead, as any repository using the action does.
+# drift apart, and those that run the actions' code run again on the oldest python3 the actions ask for. The
+# guards take the runner's own python3 instead, as any repository using the action does.
 name: test
 
 on:
@@ -22,6 +23,20 @@ jobs:
       - run: python3 -m unittest discover -s intellij
       - run: python3 -m pip install -r .github/requirements.txt
       - run: python3 -m unittest discover -s .github
+
+  oldest-python:
+    # The actions run on the caller's own python3, and their descriptions ask for 3.10 or later. The suites run
+    # the actions' code in-process and through python3 on PATH, which setup-python makes 3.10 here, so anything
+    # newer than 3.10 in the code they reach fails this job while `suite` passes.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+      - run: python3 .github/unittest-3.10.py check-release
+      - run: python3 .github/unittest-3.10.py release-flow
+      - run: python3 .github/unittest-3.10.py intellij
 
   guards:
     # The rules run against this repository through the action that offers them, which makes this their first

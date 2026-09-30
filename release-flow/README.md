@@ -21,7 +21,8 @@ GitHub, and says on the release when that did not complete.
 
 `release-flow/warn` takes neither and needs no checkout, as [its section](#release-flowwarn) says.
 
-Every one of them is pinned the way [Pinning](../README.md#pinning) says.\
+What pinning one of them to a release tag or to another ref gets is under
+[Pinning](../README.md#pinning).\
 What each needs of the runner is listed under
 [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
 

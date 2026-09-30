@@ -38,23 +38,26 @@ ecosystem-free directories may assume one ecosystem's build.
 
 ## Pinning
 
-### Pin to a release tag, not to a branch or a bare commit
+The examples in these READMEs pin an action of this repository to one of its release tags, `v` and a
+version, as `@<tag>`.\
+What a workflow pins to is its own choice, and each ref gets something different:
 
-Pin an action of this repository to one of its release tags, `v` and a version:
-
+- A release tag names a released commit, and is what keeps it reachable.
+- The full SHA of the commit a release tag names is the same code, and nothing can move it, where a
+  tag can be moved; GitHub's
+  [security guide](https://docs.github.com/en/actions/reference/security/secure-use) recommends it
+  for that reason.
 - A branch moves, so this repository's code would change under the pin.
 - A commit that nothing reaches any more may fail to check out, GitHub keeping no promises about
   unreachable objects.
-- A release tag is what keeps a released commit reachable.
 
 The pin holds this repository's code only: the actions `intellij/build` calls in turn,
 `actions/setup-java` and the rest, run at the tags its `action.yml` names for them, which their
 owners can move.
 
-### An exact version, not a moving `v0`
+### No moving `v0`
 
-The pin is to an exact version, such as `@v0.1.0`, not to a major version such as `@v4`.
-
+This repository keeps no major version tag, such as `v4`, for a pin to follow.\
 This diverges from
 [GitHub's guide to versioning actions](https://github.com/actions/toolkit/blob/main/docs/action-versioning.md).\
 There the author moves a major version tag to each release that keeps its inputs and behavior, so

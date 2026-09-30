@@ -6,7 +6,8 @@ The one ecosystem so far, in two actions:
 - `intellij/publish`, which goes after the draft has been published, beside
   `release-flow/merge-back`.
 
-Both are pinned the way [Pinning](../README.md#pinning) says.\
+What pinning either of them to a release tag or to another ref gets is under
+[Pinning](../README.md#pinning).\
 What `intellij/publish` needs of the runner is listed under
 [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
 

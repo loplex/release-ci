@@ -128,8 +128,8 @@ already; a version handed in is still asked about.
 
 ### `<tag>` is a release tag
 
-`<tag>` is one of this repository's release tags, for the reasons [Pinning](../README.md#pinning)
-gives.\
+`<tag>` is one of this repository's release tags, as in every example here;
+[Pinning](../README.md#pinning) says what other refs get.\
 What the action needs of the runner is listed under
 [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
 

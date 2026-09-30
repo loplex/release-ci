@@ -52,8 +52,9 @@ class Precedence(unittest.TestCase):
         self.assertLess(precedence("1.0.0-9"), precedence("1.0.0-10a"))
 
     def test_build_metadata_does_not_figure_into_precedence(self):
-        """The spec's requirement, quoted in README: two versions differing only in build metadata have the
-        same precedence. Ranking it instead would order releases by a field the spec says orders nothing."""
+        """The spec's requirement, quoted in the README beside this file: two versions differing only in build
+        metadata have the same precedence. Ranking it instead would order releases by a field the spec says orders
+        nothing."""
         self.assertEqual(precedence("1.0.0+a"), precedence("1.0.0+b"))
         self.assertEqual(precedence("1.0.0"), precedence("1.0.0+dfsg1"))
         self.assertLess(precedence("1.0.0-rc.1+z"), precedence("1.0.0+a"))

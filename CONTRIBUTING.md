@@ -1,0 +1,45 @@
+# Contributing to release-ci
+
+## Running the tests
+
+The rules in `check-release` are plain functions over text, tags and booleans, and
+[`test_check_release.py`](check-release/test_check_release.py) exercises them without a repository to
+release, as [`test_sources.py`](check-release/test_sources.py) does the adapters for where the version
+comes from; the helpers beside them that face git get one built for the purpose, and
+[`test_check.py`](check-release/test_check.py) runs the action's script,
+[`check.sh`](check-release/check.sh), against one. The suite in `release-flow` builds what each of its
+actions needs - a repository, a bare remote to push to, so that a refused fast-forward is a real
+refusal, and a stub for whatever is called out, so that nothing is sent anywhere - and the one in
+`intellij` builds archives, a Plugin Verifier report and a stub `curl`, which answers for the
+Marketplace from a file the test writes, so that nothing is uploaded:
+
+```
+python3 -m unittest discover -s check-release
+python3 -m unittest discover -s release-flow
+python3 -m unittest discover -s intellij
+```
+
+All three run on every push and pull request, in
+[`.github/workflows/test.yml`](.github/workflows/test.yml), on the Python
+[`.python-version`](.python-version) names: they need 3.11 or later, where the actions ask only for 3.10.
+
+## Releasing this repository
+
+Through its own actions, as any other repository would, except that its workflows take them by path,
+unpinned, this being the one repository they already sit in, and its release workflows run them on the
+Python its suites run on rather than the runner's own. It declares its version nowhere, so
+[`release.yml`](.github/workflows/release.yml) asks for one when it is dispatched: left empty, the version
+after the highest release is taken, and the first release has to be named outright. There is nothing to
+build, so `release-flow/draft` follows `release-flow/prepare` directly. Publishing the draft is the
+decision to release, and [`release-publish.yml`](.github/workflows/release-publish.yml) carries the
+release back onto the default branch.
+
+GitHub reads each the way [Where GitHub reads each workflow
+from](release-flow/README.md#where-github-reads-each-workflow-from) says: `release.yml` only once it has landed on the
+default branch, and then from the branch it is dispatched on, which is why its job runs on the default
+branch alone; and `release-publish.yml` from the commit a release tags, which carries the file because
+a release is cut from the default branch.
+
+The `guards` job in [`test.yml`](.github/workflows/test.yml) runs the rules over this repository
+itself on every push and pull request, through the action at `./check-release`, by path as well,
+on the runner's own `python3`.

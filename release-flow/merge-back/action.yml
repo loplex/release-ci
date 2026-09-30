@@ -72,7 +72,7 @@ outputs:
       a run repeated after the release landed, whichever way it landed. `false` where it is not: a pull
       request carries the release instead, opened by this run or by an earlier one and still open, which is a
       thing to look at rather than a step of the process. Read it only after a step that succeeded: one that
-      failed may have left it unset.
+      failed may have left it unset, or `false` with no pull request opened.
     value: ${{ steps.merge-back.outputs.landed }}
 
 runs:

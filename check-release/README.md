@@ -78,8 +78,9 @@ it:
 - a `## [<version>]` section for each release below it.
 
 A release closes `[Unreleased]` into a section of its own, so there has to be something under it.\
-An empty one is refused, unless there are pre-releases of the version to take in: a final release
-takes their entries into its own section.
+`close-changelog`, which `release-flow/prepare` runs, refuses an empty one, unless there are
+pre-releases of the version to take in: a final release takes their entries into its own section.\
+The `changelog` check reads only the released sections, not `[Unreleased]`.
 
 ## Using check-release from another repository
 
@@ -112,8 +113,10 @@ jobs:
 
 Publishing a release creates its tag, and a workflow on `push` with no filter runs for that tag too,
 where there is nothing to ask.\
-The commit a release tags names the version it released, and `version` read off the source there
-passes as that release, with a note saying so, rather than refusing it as released already.
+The commit a release tags names the version it released.\
+Where the source declares a version and no `version` input is handed in, `version` read off the
+source there passes as that release, with a note saying so, rather than refusing it as released
+already; a version handed in is still asked about.
 
 ### `checks` names `version`, which its default leaves out
 

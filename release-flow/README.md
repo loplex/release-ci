@@ -229,7 +229,8 @@ The merge-back step succeeds whether it landed the release or opened a pull requ
 - `false` where a pull request carries it instead, opened by this run or by an earlier one and still
   open.
 
-A step that failed may leave `landed` unset.
+Read `landed` only after the step succeeded: one that failed may have left it unset, or `false` with
+no pull request opened.
 
 ### Running it again
 

@@ -7,6 +7,11 @@ released it, so once a version has a section here, that section may not be edite
 
 ## [Unreleased]
 
+### Fixed
+
+- A `tagPrefix` in `gradle.properties` holding an unpaired `\uD800`-`\uDFFF` escape is refused.
+  `prefix` ended in a traceback printing it, and the other checks passed having found no release.
+
 ## [0.2.0] - 2026-09-29
 
 ### Added

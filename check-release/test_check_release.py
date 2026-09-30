@@ -1047,6 +1047,16 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertEqual(prefix_from("gradle.properties", "release-"), "release-")
         self.assertEqual(prefix_from("gradle.properties", None), "v")
 
+    def test_a_declared_prefix_holding_a_lone_surrogate_is_refused(self):
+        """The reader keeps an unpaired `\\uD83D` as Java keeps it. Taken as a prefix, `prefix` ended in a
+        traceback printing it; a pair is one character and is taken."""
+        self.repository_with(declaring="version = 1.0.0-SNAPSHOT\ntagPrefix = \\uD83D\n")
+        with self.assertRaises(SystemExit) as raised:
+            prefix_from("gradle.properties", None)
+        self.assertIn("tagPrefix in gradle.properties is '\\ud83d'", str(raised.exception))
+        self.repository_with(declaring="version = 1.0.0-SNAPSHOT\ntagPrefix = \\uD83D\\uDE00\n")
+        self.assertEqual(prefix_from("gradle.properties", None), "\U0001F600")
+
 
 class WhichTagsCountAsReleases(unittest.TestCase):
     """A repository carries tags that are not releases - another component's, a deployment's - and it carries

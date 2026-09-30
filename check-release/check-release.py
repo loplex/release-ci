@@ -505,6 +505,16 @@ def declared_version(source: str) -> str:
     return adapter.version(read_declared(adapter))
 
 
+def as_text(value: str, named_in: str) -> str:
+    """The value as it was given, or a refusal where it holds a lone UTF-16 surrogate: what gradle.properties reads
+    an unpaired `\\uD800`-`\\uDFFF` escape into, as Java does. Neither UTF-8 nor UTF-16 encodes one, so it would end
+    in a traceback wherever it is printed or written."""
+    if any("\ud800" <= character <= "\udfff" for character in value):
+        raise SystemExit(f"{named_in} is {ascii(value)}, which holds a lone UTF-16 surrogate - an unpaired "
+                         "\\uD800-\\uDFFF escape - and is no text")
+    return value
+
+
 def prefix_from(source: str, given: str | None) -> str:
     """What a release tag carries in front of its version - `v0.1.0` against `0.1.0`.
 
@@ -514,12 +524,15 @@ def prefix_from(source: str, given: str | None) -> str:
     release to count from - then passes having compared nothing, with no more than a note on stderr to say
     so. A caller that wants a default declares it where its own readers can see it, rather than having this
     file guess on everyone's behalf.
+
+    A declared prefix that is not text (see as_text) is refused here: no tag name is spelled in it, so `prefix`
+    would end in a traceback printing it, and every other check would pass having found no release.
     """
     if given is not None:
         return given
     adapter = SOURCES[source]
     if adapter.file is not None:
-        return adapter.tag_prefix(read_declared(adapter))
+        return as_text(adapter.tag_prefix(read_declared(adapter)), f"tagPrefix in {adapter.file}")
     raise SystemExit(f"--tag-prefix says what release tags are called, which {source} does not declare")
 
 

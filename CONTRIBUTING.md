@@ -64,6 +64,14 @@ whose `\p{...}` classes Python's own `re` does not have.\
 cmarkgfm, the packages it needs and regex are pinned in
 [`.github/requirements.txt`](.github/requirements.txt), and no other suite needs a package.
 
+## Recording a change
+
+A change a user of the actions would notice gets an entry under `## [Unreleased]` in
+[`CHANGELOG.md`](CHANGELOG.md), in the group Keep a Changelog gives its kind: `### Added`,
+`### Changed`, `### Deprecated`, `### Removed`, `### Fixed` or `### Security`.\
+A release with nothing under `[Unreleased]` is refused, unless it is a final release taking in the
+entries of its pre-releases, as [The changelog](check-release/README.md#the-changelog) says.
+
 ## Releasing this repository
 
 This repository is released through its own actions, as any other repository would be, except that:

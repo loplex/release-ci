@@ -7,6 +7,18 @@ released it, so once a version has a section here, that section may not be edite
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING** `check-release version` holds the version to what waits under `[Unreleased]`, and
+  under an open pre-release train whose sections the changelog holds: `### Added`, `### Changed` or
+  `### Deprecated` asks for at least a minor, and `### Removed` or an entry starting with
+  `**BREAKING**` for a major, or a minor below 1.0. A release that moves less is refused, and so is
+  one with an entry under no `###` group. Under `tags`, left without a version, the default is the
+  version after the highest release, or the least one `[Unreleased]` allows where that is further.
+  A note on stderr says where `CHANGELOG.md` or its `[Unreleased]` is missing, or where a `###`
+  group is not a kind Keep a Changelog names. merge-back's pull request that starts the next version
+  tells whoever merges it to raise that version where the check refuses it.
+
 ### Fixed
 
 - A `tagPrefix` in `gradle.properties` holding an unpaired `\uD800`-`\uDFFF` escape is refused.

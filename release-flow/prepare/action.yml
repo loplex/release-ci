@@ -28,7 +28,8 @@ inputs:
       Release this version instead of the one the source declares: `0.2.0` or `0.2.0-SNAPSHOT` under
       `gradle.properties`, where a marker ending the version is dropped, and a bare `0.2.0` under `tags`.
       What a dispatch input carries; left empty, a source declaring no version releases the version after
-      the highest release there is. The `version` output is bare under either source.
+      the highest release there is, or a later one where `[Unreleased]` asks for more. The `version` output
+      is bare under either source.
     default: ''
   repository-url:
     description: >-

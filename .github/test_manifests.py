@@ -57,8 +57,8 @@ class Manifests(unittest.TestCase):
     def test_a_change_to_the_required_inputs_is_made_on_purpose(self):
         """An input that comes to be required breaks every caller whose workflow does not pass it by the time its
         pin moves: a workflow started by a release runs from the file in the commit the release tags, so a release
-        cut before then runs without the input however often it is run again. CHANGELOG.md lists such an input
-        under Changed, saying a caller has to pass it, before REQUIRED follows. GitHub does not hold a caller to
+        cut before then runs without the input however often it is run again. CHANGELOG.md marks such an input
+        **BREAKING**, saying a caller has to pass it, before REQUIRED follows. GitHub does not hold a caller to
         `required`, so this reads what a manifest promises; refusing an input left out is up to each script."""
         self.assertEqual(sorted(REQUIRED), MANIFESTS)
         for manifest in MANIFESTS:

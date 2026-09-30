@@ -15,17 +15,17 @@ source begins.
 `check-release.py` holds, as separate subcommands, what a release asks of a repository and does with
 it:
 
-| Subcommand        | What for                                                                                           |
-|-------------------|----------------------------------------------------------------------------------------------------|
-| `version`         | whether the [candidate version](#where-the-version-comes-from) may be released, given the releases |
-| `next`            | the version that follows a released one, with the source's [marker](#where-the-version-comes-from) |
-| `changelog`       | whether every released section of `CHANGELOG.md` still reads the way its tag has it                |
-| `ancestry`        | whether every released tag is still reachable from this history                                    |
-| `prefix`          | what release tags are called here                                                                  |
-| `channel`         | the distribution channel a version goes to                                                         |
-| `set-version`     | write a version where it is declared: the one released, then the next                              |
-| `close-changelog` | move `[Unreleased]` into a section of its own, dated                                               |
-| `notes`           | the text below one released section's heading, which is what its release notes say                 |
+| Subcommand        | What for                                                                                                              |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------|
+| `version`         | whether the [candidate version](#where-the-version-comes-from) may be released, given the releases and `[Unreleased]` |
+| `next`            | the version that follows a released one, with the source's [marker](#where-the-version-comes-from)                    |
+| `changelog`       | whether every released section of `CHANGELOG.md` still reads the way its tag has it                                   |
+| `ancestry`        | whether every released tag is still reachable from this history                                                       |
+| `prefix`          | what release tags are called here                                                                                     |
+| `channel`         | the distribution channel a version goes to                                                                            |
+| `set-version`     | write a version where it is declared: the one released, then the next                                                 |
+| `close-changelog` | move `[Unreleased]` into a section of its own, dated                                                                  |
+| `notes`           | the text below one released section's heading, which is what its release notes say                                    |
 
 Of these, the composite action [below](#using-check-release-from-another-repository) runs:
 
@@ -81,6 +81,35 @@ A release closes `[Unreleased]` into a section of its own, so there has to be so
 `close-changelog`, which `release-flow/prepare` runs, refuses an empty one, unless there are
 pre-releases of the version to take in: a final release takes their entries into its own section.\
 The `changelog` check reads only the released sections, not `[Unreleased]`.
+
+### What `[Unreleased]` asks of the version
+
+What waits under `[Unreleased]`, and under any pre-release above the last final release whose
+section the changelog already holds, also says how far the release has to move past the last final
+release, by [SemVer's rules 6 to 8](https://semver.org/#semantic-versioning-specification-semver)
+over Keep a Changelog's kinds of change:
+
+| Under `[Unreleased]`                                   | The release is at least              |
+|--------------------------------------------------------|--------------------------------------|
+| `### Added`, `### Changed`, `### Deprecated`           | a minor                              |
+| `### Removed`, or an entry marked `**BREAKING**`       | a major, and a minor while below 1.0 |
+| `### Fixed`, `### Security`, a group of any other name | a patch                              |
+
+- `version` refuses a candidate that moves less, naming the group that asks for more.
+- Under `tags` left without a version, it takes the version after the highest release, or the least
+  one `[Unreleased]` allows where that is further.
+- A change that breaks something a caller relied on is marked by starting its entry with
+  `**BREAKING**`, under whichever kind it is.\
+  That is a convention of this repository: Keep a Changelog has no marker of its own, and a group
+  such as release-please's `### ⚠ BREAKING CHANGES` is read here as a group of another name.
+- Below 1.0 such a change moves the minor, as Cargo and npm read `^0.y`: SemVer's rule 4 promises
+  nothing about `0.y.z`, and 1.0 is a step taken on purpose.
+- A group of a name Keep a Changelog does not give - `### Documentation`, say - is taken and named
+  in a note on stderr, so that a feature filed under `### Add` can still be seen.
+- An entry standing under no group at all is refused, since nothing then says what kind of change it
+  is.
+- A repository with no `CHANGELOG.md`, or with no `[Unreleased]` section in it, is asked for no more
+  than a patch, and told so on stderr.
 
 ## Using check-release from another repository
 
@@ -170,7 +199,8 @@ Where `version` is among the checks and says yes, the action answers with:
 The `version` input hands the `version` check a version of its own - a dispatch input, say:
 
 - in place of the one the source declares;
-- or, under `tags`, in place of the one after the highest release.
+- or, under `tags`, in place of the one after the highest release, or a later one where
+  `[Unreleased]` asks for more.
 
 How one is spelled under each source is under
 [Where the version comes from](#where-the-version-comes-from).
@@ -181,10 +211,10 @@ Every invocation names its source, with `--source` or an action's `source` input
 guess is silent.\
 Two are implemented, and they differ in more than a filename:
 
-| `--source`          | The version a release is asked to be                                              | After a release           |
-|---------------------|-----------------------------------------------------------------------------------|---------------------------|
-| `gradle.properties` | read from the file or handed in with `--version`, a `-SNAPSHOT` ending it dropped | the next one written back |
-| `tags`              | handed in with `--version`, or the version after the highest release              | nothing to write          |
+| `--source`          | The version a release is asked to be                                                                         | After a release           |
+|---------------------|--------------------------------------------------------------------------------------------------------------|---------------------------|
+| `gradle.properties` | read from the file or handed in with `--version`, a `-SNAPSHOT` ending it dropped                            | the next one written back |
+| `tags`              | handed in with `--version`, or the version after the highest release, or a later one `[Unreleased]` asks for | nothing to write          |
 
 The version a release is asked to be, whichever way it is found, is the candidate version: what
 `check-release version` holds to the rules.

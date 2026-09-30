@@ -2,15 +2,17 @@ name: release
 
 # Cuts a release of this repository through release-flow, as any other repository would, except that it
 # takes the actions by path, unpinned, this being the one repository they already sit in, and runs them
-# on the Python its suites run on. It declares its version nowhere, so the version is asked for here:
-# left empty, the version after the highest release is taken, and the first release has to be named
-# outright. There is nothing to build, so the draft follows the cut directly; publishing it is the
-# decision, and release-publish.yml carries the release back.
+# on the Python its suites run on. It declares its version nowhere, so the version is asked for here: left
+# empty, the version after the highest release is taken, or a later one where [Unreleased] asks for more, and
+# the first release has to be named outright. There is nothing to build, so the draft follows the cut
+# directly; publishing it is the decision, and release-publish.yml carries the release back.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: The version to release. Left empty, the version after the highest release.
+        description: >-
+          The version to release. Left empty, the version after the highest release, or a later one where
+          [Unreleased] asks for more.
         required: false
         default: ''
 

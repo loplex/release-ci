@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """What a release has to be true of, checked before and after it is one.
 
-- `version` - whether the candidate version may be released next, given the releases already tagged.
+- `version` - whether the candidate version may be released next, given the releases already tagged and what
+  waits under `[Unreleased]`.
 - `next` - the version that follows a released one, carrying the source's marker.
 - `changelog` - whether every section already released still reads the way it was released.
 - `ancestry` - whether every released tag is still reachable, a rewrite being able to take one off the history.
@@ -23,6 +24,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 import sources
 
@@ -87,6 +89,23 @@ GROUP_HEADING = re.compile(r"^### (.+?)[ \t]*$", re.MULTILINE)
 # together from several is written in. A group of any other name keeps the place it was first met in, after
 # these, rather than being dropped: the text under it was released too.
 KINDS = ("Added", "Changed", "Deprecated", "Removed", "Fixed", "Security")
+
+# How far past the last final release each kind asks the version to move, read off SemVer's rules 6 to 8: a
+# patch for backward compatible bug fixes and nothing else (rule 6), so that a change to existing functionality
+# asks for more; a minor for functionality added or deprecated (rule 7), and for a change too; and a major for
+# whatever a caller relied on and no longer has - among Keep a Changelog's kinds a removal, anywhere
+# else an entry marked **BREAKING**. A group of any other name - `### Documentation`, `### Dependencies` - asks for
+# no more than a patch, which is what every release is past the last one anyway: a release here is always asked
+# for by someone, so nothing needs to say that there is nothing to release, and the groups people add are not
+# new functionality. The indices are the ones successors() lists the three steps in.
+PATCH, MINOR, MAJOR = 0, 1, 2
+STEP_NAMES = ("patch", "minor", "major")
+STEP_OF_KIND = {"Added": MINOR, "Changed": MINOR, "Deprecated": MINOR, "Removed": MAJOR, "Fixed": PATCH,
+                "Security": PATCH}
+# An entry is a list item; a line of dashes or stars alone is a thematic break, which CommonMark reads first.
+LIST_ITEM = re.compile(r"^(?![ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$)[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\S.*$", re.MULTILINE)
+BREAKING_ENTRY = re.compile(r"^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\*\*BREAKING:?\*\*", re.MULTILINE | re.IGNORECASE)
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 LINK_DEFINITION = re.compile(r"^\[[^\]]+\]:\s.*$", re.MULTILINE)
 
@@ -154,15 +173,16 @@ def check_version(candidate: str, releases: list[str]) -> list[str]:
     finals = [version for version in ordered if SEMVER.match(version).group(4) is None]
     is_final = SEMVER.match(candidate).group(4) is None
 
-    # The base invariant, and the one the rest rests on. An update check - an IDE's, a package manager's -
-    # offers a release by comparing versions, so a release that does not outrank the last one is a release
-    # nobody is offered. "The last one" is the last one offered to the same people: a final release goes to
-    # everyone and has to outrank the last final release, not the pre-releases, which only their channel's
-    # subscribers ever see - so a stable hotfix 0.2.1 may go out while 0.3.0-beta.1 is open, and nobody on
-    # either channel is offered a downgrade. A pre-release goes to subscribers, who see everything, so it has
-    # to outrank the highest tag of all. The other side of that coin: while a train is open, a hotfix can go
-    # out but not be tried on a channel first - 0.2.1-rc.1 sorts below 0.3.0-beta.1 and is refused, where 0.2.1
-    # itself passes.
+    # The base invariant, and the one the rest rests on. An update check - an IDE's, a package manager's - offers
+    # a release by comparing versions, so a release that does not outrank the last one is a release nobody is
+    # offered. "The last one" is the last one offered to the same people: a final release goes to everyone and
+    # has to outrank the last final release, not the pre-releases, which only their channel's subscribers ever
+    # see - so a stable hotfix 0.2.1 may go out while 0.3.0-beta.1 is open, and nobody on either channel is
+    # offered a downgrade. Only from a branch the train has not reached, though: check_step refuses it where the
+    # train's sections stand, since it would carry the train's changes. A pre-release goes to subscribers, who
+    # see everything, so it has to outrank the highest tag of all. The other side of that coin: while a train is
+    # open, a hotfix can go out but not be tried on a channel first - 0.2.1-rc.1 sorts below 0.3.0-beta.1 and is
+    # refused, where 0.2.1 itself passes.
     to_outrank = finals[-1] if is_final and finals else ordered[-1]
     if precedence(candidate) == precedence(to_outrank) and candidate != to_outrank:
         # Equal precedence and different text can only be build metadata, which the spec has ordering ignore.
@@ -204,15 +224,113 @@ def version_after(released: str) -> str:
     default when a release is asked for. The marker, where there is one, is the source's to add.
 
     A pre-release does not advance anything: `0.2.0-rc.1` was a step towards `0.2.0`, so work goes on heading
-    for it. A final release is followed by the smallest claim that can be made about what comes next, a patch;
-    where the source declares a version, whoever lands a feature raises it to a minor in the same pull
-    request, where a reviewer can see the line, and where it declares none, whoever asks for the release names
-    the minor.
+    for it. A final release is followed by the smallest claim that can be made about what comes next, a patch.
+    What `[Unreleased]` holds by the time of the release may ask for more, and check_step holds the release to
+    it: where the source declares a version, whoever lands a feature raises it to a minor in the same pull
+    request, where a reviewer can see the line - or, for one that landed while a release was out, in the pull
+    request carrying that release back, whose body says so - and where it declares none, next_candidate moves
+    the default as far as `[Unreleased]` asks.
     """
     major, minor, patch, suffix, _ = SEMVER.match(released).groups()  # Metadata names a build, not what follows it.
     if suffix is not None:
         return f"{major}.{minor}.{patch}"
     return f"{major}.{minor}.{int(patch) + 1}"
+
+
+class Asked(NamedTuple):
+    """What the entries under `[Unreleased]` ask of the version released with them."""
+    step: int  # PATCH, MINOR or MAJOR
+    why: str  # What asks for the step, the way a refusal names it; empty for a patch, which nothing refuses.
+    unknown: list[str]  # Groups of a name Keep a Changelog does not give, read as a patch: none marked BREAKING.
+    loose: list[str]  # Entries standing under no group at all.
+    where: str = "[Unreleased]"  # The section `why` stands in.
+
+
+NOTHING_ASKED = Asked(PATCH, "", [], [])
+
+
+def asked_by(unreleased: str) -> Asked:
+    """What the text under `[Unreleased]` asks of the next release: the largest step any of its groups asks for,
+    and what asks for it.
+
+    Comments are read as nothing. Only a group holding something else asks: an empty `### Removed` left in
+    place as a reminder removes nothing. An entry above the first group is not placed under any kind, so
+    nothing says how far it moves the version; it is handed back rather than counted as a patch, for the caller
+    to refuse. Text there that is not an entry - a sentence introducing the section - is left alone.
+    """
+    unreleased = HTML_COMMENT.sub("", unreleased)
+    marks = list(GROUP_HEADING.finditer(unreleased))
+    lead = unreleased[: marks[0].start()] if marks else unreleased
+    loose = [item.group(0).strip() for item in LIST_ITEM.finditer(lead)]
+    step, why, unknown = PATCH, "", []
+    for index, mark in enumerate(marks):
+        name = mark.group(1)
+        end = marks[index + 1].start() if index + 1 < len(marks) else len(unreleased)
+        text = unreleased[mark.end() : end]
+        if not text.strip():
+            continue
+        if BREAKING_ENTRY.search(text):
+            asks, reason = MAJOR, f"an entry marked **BREAKING** under ### {name}"
+        else:
+            asks, reason = STEP_OF_KIND.get(name, PATCH), f"### {name}"
+            if name not in STEP_OF_KIND:
+                unknown.append(name)
+        if asks > step:
+            step, why = asks, reason
+    return Asked(step, why, unknown, loose)
+
+
+def least_step(asked: int, released: str) -> int:
+    """The step `asked` comes to after the final release `released`. Below 1.0 a change that breaks something
+    moves the minor, as Cargo and npm read `^0.y`: SemVer's rule 4 promises nothing about 0.y.z, and 1.0 is a
+    step taken on purpose rather than because something was removed."""
+    return MINOR if asked == MAJOR and core(released)[0] == 0 else asked
+
+
+def check_step(candidate: str, releases: list[str], asked: Asked) -> list[str]:
+    """Whether `candidate` moves far enough past the last final release for what `asked` says is released with
+    it. Measured against the last final release, as the step in check_version is, so that a pre-release of the
+    version it heads for passes where that version would. Where nothing final is released there is no step to
+    take, and a candidate that is not one of the steps permitted is check_version's to refuse, not this.
+
+    What `asked` holds is what train_asks makes of the changelog: `[Unreleased]`, and the pre-releases above the
+    last final release, which whatever is released from where their sections stand carries as well.
+    """
+    finals = sorted((version for version in releases if SEMVER.match(version) and SEMVER.match(version).group(4)
+                     is None), key=precedence)
+    if not finals:
+        return []
+    permitted = successors(core(finals[-1]))
+    least = least_step(asked.step, finals[-1])
+    if core(candidate) not in permitted or permitted.index(core(candidate)) >= least:
+        return []
+    return [f"{asked.where} holds {asked.why}, so the release after {finals[-1]} is at least a "
+            f"{STEP_NAMES[least]}, {core_text(permitted[least])}, and {candidate} is not"]
+
+
+def train_asks(found: dict[str, str], releases: list[str]) -> Asked:
+    """What a changelog, by section as bodies() gives it, asks of the next release: `[Unreleased]`, and each
+    pre-release section above the last final release, whichever asks for most.
+
+    A release is cut from a branch, and the changelog on it says what that branch carries. Where it holds the
+    sections of an open train - 0.3.0-beta.1 with `### Added` - the branch carries that train's changes, and a
+    hotfix 0.2.1 cut from it would release them as a patch; one cut from a branch the train never reached has
+    no such section, and is held to its `[Unreleased]` alone. Closing the train, or going on with it, moves the
+    core as far anyway. Only `[Unreleased]` has its entries under no group handed back, and its groups of other
+    names: a released section is not this release's to refuse.
+    """
+    asked = asked_by(found.get("Unreleased", ""))
+    finals = sorted((version for version in releases if SEMVER.match(version) and SEMVER.match(version).group(4)
+                     is None), key=precedence)
+    if not finals:
+        return asked
+    for label, text in found.items():
+        if SEMVER.match(label) and SEMVER.match(label).group(4) is not None \
+                and precedence(label) > precedence(finals[-1]):
+            train = asked_by(text)
+            if train.step > asked.step:
+                asked = asked._replace(step=train.step, why=train.why, where=f"[{label}]")
+    return asked
 
 
 def channel_of(version: str) -> str:
@@ -541,16 +659,45 @@ def prefix_from(source: str, given: str | None) -> str:
     raise SystemExit(f"--tag-prefix says what release tags are called, which {source} does not declare")
 
 
-def next_candidate(prefix: str) -> str:
-    """The version to release when nobody says which: the one following the highest release there is.
+def next_candidate(releases: list[str], asked: Asked = NOTHING_ASKED) -> str:
+    """The version to release when nobody says which: the one following the highest release there is, or the
+    least step past the last final release that what `asked` holds allows, where that is further.
 
     A dispatch form cannot compute a default, so its field is left empty and this answers it. With nothing
     released there is nothing to count from, and the first version is named outright rather than guessed at.
     """
-    releases = released_versions(prefix)
     if not releases:
         raise SystemExit("nothing is released here to count from, so say which version to release")
-    return version_after(sorted(releases, key=precedence)[-1])
+    after = version_after(sorted(releases, key=precedence)[-1])
+    finals = sorted((version for version in releases if SEMVER.match(version).group(4) is None), key=precedence)
+    if not finals or not check_step(after, releases, asked):
+        return after
+    return core_text(successors(core(finals[-1]))[least_step(asked.step, finals[-1])])
+
+
+def unreleased_asks(releases: list[str]) -> Asked:
+    """What CHANGELOG.md asks of the next release, by train_asks, the groups of other names under `[Unreleased]`
+    noted on stderr.
+
+    A repository without the file is asked for no more than a patch, and told so on stderr rather than
+    refused: `version` over its tags still compares what it can, and a project is not made to keep a changelog
+    by a check that only reads one. Nor is one whose file has no `[Unreleased]` section - `## Unreleased`
+    without the brackets, say - which is told the same way.
+    """
+    if not (repository() / "CHANGELOG.md").exists():
+        print("note: there is no CHANGELOG.md here, so nothing under [Unreleased] says how far the version has to "
+              "move", file=sys.stderr)
+        return NOTHING_ASKED
+    found = bodies(read_file("CHANGELOG.md", "what waits to be released"))
+    if "Unreleased" not in found:
+        print("note: CHANGELOG.md has no [Unreleased] section, so nothing under it says how far the version has "
+              "to move", file=sys.stderr)
+        return NOTHING_ASKED
+    asked = train_asks(found, releases)
+    for name in asked.unknown:
+        print(f"note: [Unreleased] has a group '### {name}', which is not a kind of change Keep a Changelog names, "
+              f"so it asks for no more than a patch", file=sys.stderr)
+    return asked
 
 
 def released_versions(prefix: str) -> list[str]:
@@ -601,11 +748,17 @@ def version_command(arguments) -> list[str]:
             print(f"note: this commit is the release of {candidate}, tagged {prefix}{candidate}", file=sys.stderr)
             print(candidate)
             return []
+        releases = released_versions(prefix)
+        asked = unreleased_asks(releases)
     else:
-        # Handed in, or the default a dispatch leaves empty. No file is read, and nothing will be written.
-        candidate = arguments.version or next_candidate(prefix)
+        # Handed in, or the default a dispatch leaves empty. No version file is read, and nothing will be written.
+        releases = released_versions(prefix)
+        asked = unreleased_asks(releases)
+        candidate = arguments.version or next_candidate(releases, asked)
 
-    problems = check_version(candidate, released_versions(prefix))
+    problems = check_version(candidate, releases) or check_step(candidate, releases, asked)
+    problems += [f"[Unreleased] has an entry under no ### group, so nothing says what kind of change it is: {entry}"
+                 for entry in asked.loose]
     if not problems:
         print(candidate)
     return problems
@@ -782,8 +935,9 @@ def main() -> int:
     version_parser = commands.add_parser("version", help="whether the candidate version may be released next")
     version_parser.add_argument("--version", help="the version to release, not this program's: the one to "
                                                   "check instead of what the source declares, or of the version "
-                                                  "after the highest release where it declares none, with or "
-                                                  "without the marker that source puts on a declaration")
+                                                  "after the highest release, or a later one [Unreleased] asks "
+                                                  "for, where it declares none, with or without the marker that "
+                                                  "source puts on a declaration")
     version_parser.set_defaults(run=version_command)
 
     next_parser = commands.add_parser("next", help="the version that follows a released one, with the source's marker")

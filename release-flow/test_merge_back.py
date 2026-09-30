@@ -239,9 +239,13 @@ class MergeBack(Staged):
         self.assertIn("records no version", done.stdout)
 
     def test_a_pull_request_names_the_version_it_opened(self):
+        """And says that a feature which landed while the release was out asks for more than that version, so
+        that the version check refusing it here is not read as the release's fault."""
         self.land_elsewhere("won the race")
         self.carry_back(fetch=False)
         self.assertIn("--title Release 0.1.0, and start 0.1.1-SNAPSHOT --body", self.gh_said())
+        self.assertIn("This branch starts `0.1.1-SNAPSHOT`, counted from `0.1.0` alone.", self.gh_said())
+        self.assertIn("followed by the marker `0.1.1-SNAPSHOT` carries", self.gh_said())
 
     def test_a_pull_request_under_a_source_declaring_no_version_claims_none_opened(self):
         """Nothing was written back, so a title saying the next version was started would name a commit the
@@ -249,6 +253,7 @@ class MergeBack(Staged):
         self.land_elsewhere("won the race")
         self.carry_back(source="tags", tag_prefix="v", fetch=False)
         self.assertIn("--title Release 0.1.0 --body", self.gh_said())
+        self.assertNotIn("This branch starts", self.gh_said())
 
     def test_a_release_branch_that_cannot_be_pushed_opens_no_pull_request(self):
         """Opened anyway, the pull request would carry the branch as the remote holds it, without the commit

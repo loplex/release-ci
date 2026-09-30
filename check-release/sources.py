@@ -9,7 +9,8 @@ Two kinds, and they differ in more than a filename. A source that declares a ver
 file between releases, marked as being worked on where its ecosystem has a marker for that, so a release reads
 the version off that file and writes the following one back. A source that declares nothing is handed the
 version when a release is asked for, or takes the one after the highest release there is where none is handed
-in, and records nothing afterwards, because there is no file to record it in.
+in - a later one where `[Unreleased]` asks for more - and records nothing afterwards, because there is no file to
+record it in.
 
 What an adapter answers: `name`, the one `--source` gives it; `declares_a_version`; `marker`, the ending a
 version carries while it is being worked on, hyphen and all - `-SNAPSHOT` for gradle.properties - or empty
@@ -102,8 +103,8 @@ def stored(value: str) -> str:
 
 class Tags:
     """A repository whose version lives only in its tags. It declares no version and no tag prefix: the prefix is
-    handed in, the version is handed in or taken as the one after the highest release, and there is no version
-    being worked on for a marker to sit on."""
+    handed in, the version is handed in or taken as the one after the highest release, or a later one where
+    `[Unreleased]` asks for more, and there is no version being worked on for a marker to sit on."""
 
     name = "tags"
     declares_a_version = False

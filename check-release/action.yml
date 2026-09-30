@@ -12,7 +12,8 @@ inputs:
     description: >-
       Where the version a release is asked to be comes from - `gradle.properties`, or `tags` for a
       repository that declares no version: it is handed one, or takes the one after its highest
-      release. No default, because a wrong guess here is silent.
+      release, or a later one where `[Unreleased]` asks for more. No default, because a wrong guess here is
+      silent.
     required: true
   tag-prefix:
     description: >-
@@ -37,8 +38,9 @@ inputs:
     description: >-
       Check this version instead of the one the source declares: `0.2.0` or `0.2.0-SNAPSHOT` under
       `gradle.properties`, where a marker ending the version is dropped, and a bare `0.2.0` under `tags`,
-      which declares none: left empty there, the version after the highest release is checked. Only read
-      by `version`. The `version` output is bare under either source.
+      which declares none: left empty there, the version after the highest release is checked, or a later
+      one where `[Unreleased]` asks for more. Only read by `version`. The `version` output is bare under
+      either source.
     default: ''
 
 outputs:

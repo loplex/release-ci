@@ -16,7 +16,7 @@ from pathlib import Path
 
 PREPARE = Path(__file__).resolve().parent / "prepare" / "prepare.sh"
 
-PENDING = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- A\n\n## [0.1.0] - 2026-09-01\n\n- old\n"
+PENDING = "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- F\n\n## [0.1.0] - 2026-09-01\n\n- old\n"
 
 
 def git(*arguments, cwd, check=True):
@@ -108,7 +108,7 @@ class Prepare(Staged):
         self.prepare()
         changelog = self.file_on("release/0.1.1", "CHANGELOG.md")
         self.assertIn("## [0.1.1] - ", changelog)
-        self.assertIn("### Added\n\n- A\n", changelog)
+        self.assertIn("### Fixed\n\n- F\n", changelog)
         self.assertRegex(changelog, r"## \[Unreleased\]\n\n## \[0\.1\.1\]")  # Nothing is left pending.
 
     def test_the_default_branch_is_not_touched(self):
@@ -128,10 +128,10 @@ class Prepare(Staged):
         self.assertIn("## [0.2.0] - ", self.file_on("release/0.2.0", "CHANGELOG.md"))
 
     def test_a_source_declaring_no_version_defaults_to_the_version_after_the_highest(self):
-        """A patch here because the highest, 0.10.0, is a final release. What follows an open pre-release train
-        is the release it was heading for, and that is pinned beside `next_candidate` in check-release, not
-        here. Lower releases beside it, 0.9.0 listed after it by name, so that the highest is neither the only
-        one nor the last `git tag -l` gives."""
+        """A patch here because the highest, 0.10.0, is a final release and [Unreleased] holds only a fix. What
+        follows an open pre-release train is the release it was heading for, and that is pinned beside
+        `next_candidate` in check-release, not here. Lower releases beside it, 0.9.0 listed after it by name, so
+        that the highest is neither the only one nor the last `git tag -l` gives."""
         self.stage(properties=None)
         for tag in ("v0.0.9", "v0.9.0", "v0.10.0"):
             git("tag", tag, cwd=self.work)
@@ -197,6 +197,11 @@ class NothingIsCutWhereTheRulesSayNo(Staged):
         outputs, done = self.prepare(version="0.4.0-SNAPSHOT")
         self.assert_nothing_was_cut(outputs, done, "does not follow 0.1.0")
 
+    def test_a_patch_over_an_addition(self):
+        self.stage(changelog=PENDING.replace("### Fixed\n\n- F\n", "### Added\n\n- A\n"))
+        outputs, done = self.prepare()
+        self.assert_nothing_was_cut(outputs, done, "[Unreleased] holds ### Added")
+
     def test_a_released_section_that_was_edited(self):
         (self.work / "CHANGELOG.md").write_text(PENDING.replace("- old", "- old, said better"), encoding="utf-8")
         git("commit", "-qam", "edit", cwd=self.work)
@@ -205,7 +210,7 @@ class NothingIsCutWhereTheRulesSayNo(Staged):
         self.assert_nothing_was_cut(outputs, done, "no longer reads as the tag has it")
 
     def test_nothing_under_unreleased(self):
-        nothing_pending = PENDING.replace("### Added\n\n- A\n\n", "")
+        nothing_pending = PENDING.replace("### Fixed\n\n- F\n\n", "")
         self.stage(changelog=nothing_pending)
         outputs, done = self.prepare()
         self.assert_nothing_was_cut(outputs, done, "nothing is under [Unreleased]")

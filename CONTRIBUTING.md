@@ -74,6 +74,8 @@ cmarkgfm, the packages it needs and regex are pinned in
 A change a user of the actions would notice gets an entry under `## [Unreleased]` in
 [`CHANGELOG.md`](CHANGELOG.md), in the group Keep a Changelog gives its kind: `### Added`,
 `### Changed`, `### Deprecated`, `### Removed`, `### Fixed` or `### Security`.\
+An entry for a change that breaks something a caller relied on starts with `**BREAKING**`, as
+[What `[Unreleased]` asks of the version](check-release/README.md#what-unreleased-asks-of-the-version) says.\
 A release with nothing under `[Unreleased]` is refused, unless it is a final release taking in the
 entries of its pre-releases, as [The changelog](check-release/README.md#the-changelog) says.
 
@@ -87,7 +89,8 @@ This repository is released through its own actions, as any other repository wou
 It declares its version nowhere, so [`release.yml`](.github/workflows/release.yml) asks for one when
 it is dispatched:
 
-- left empty, the version after the highest release is taken;
+- left empty, the version after the highest release is taken, or a later one where `[Unreleased]`
+  asks for more;
 - the first release has to be named outright.
 
 There is nothing to build, so `release-flow/draft` follows `release-flow/prepare` directly.

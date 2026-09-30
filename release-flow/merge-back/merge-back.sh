@@ -83,10 +83,27 @@ fi
 # Titled by what the branch holds rather than by what this run wrote. A run repeated after an earlier one
 # pushed the branch and was refused the pull request finds the next version opened already, by the commit that
 # earlier run made, and writes nothing.
+#
+# The version opened is counted from the release alone. An entry that landed on the default branch while the
+# release was out, and asks [Unreleased] for more - an `### Added` - never lands here on its own: the merge
+# below conflicts in CHANGELOG.md, or puts it in the released section, which the changelog check refuses. So it
+# reaches the pull request. Once it stands under [Unreleased] there - the conflict resolved, or the entry moved
+# back out of the released section - a version check refuses the version opened, and the body says why.
 if git log --format=%s "${TAG}..HEAD" | grep -xF "chore: start ${next}" >/dev/null; then
   title="Release ${version}, and start ${next}"
+  opened="
+This branch starts \`${next}\`, counted from \`${version}\` alone. Where \`${DEFAULT_BRANCH}\` brings an entry
+under \`[Unreleased]\` that asks for more - an \`### Added\` that landed while the release was out, say - it
+stands under \`[Unreleased]\` here only once the conflict is resolved, or once it is moved back out of the
+released section the \`changelog\` check names. From then on the \`version\` check of this pull request, where
+it runs one, refuses the version this branch starts and names the least version it takes: raise the declared
+version to that one here, followed by the marker \`${next}\` carries. The check takes the marker off before it
+compares, so one declared without it passes as well, and the default branch then builds as that release before
+it is one.
+"
 else
   title="Release ${version}"
+  opened=""
 fi
 
 # Work that landed on the default branch since the release was cut is merged in here, and the result is held to
@@ -187,7 +204,7 @@ every commit afterwards if that happens.
 Until this is merged, \`${DEFAULT_BRANCH}\` does not reach \`${TAG}\`: \`ancestry\` and \`changelog\` fail there
 and on every other pull request into it - \`version\` too, where the source declares a version, which
 \`${DEFAULT_BRANCH}\` still declares as the one just released - and no next release can be prepared.
-
+${opened}
 The checks here may be waiting to be approved rather than running: where the Actions bot opened this pull
 request, GitHub holds its runs until someone with write access approves them, from the banner on this pull
 request (**Approve workflows to run**).

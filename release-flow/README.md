@@ -374,6 +374,6 @@ different commits:
 
 Both have to be on the default branch before a release is cut from it.
 
-A version of this repository that makes an input required says so under Changed in
+A version of this repository that makes an input required marks it `**BREAKING**` in
 [`CHANGELOG.md`](../CHANGELOG.md), so that a workflow moving its pin to that version can pass the
 input in the same commit.

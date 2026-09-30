@@ -82,9 +82,9 @@ def stored(value: str) -> str:
     and no character of text fails to encode: a backslash doubled, a tab, a line break or a form feed as its escape, a
     leading space and `=`, `:`, `#`, `!` behind a backslash, and every other character below a space or above `~` as
     `\\uXXXX`, a character outside the first 65536 as the two of its UTF-16 pair. A lone surrogate is no character of
-    text: it is what Python makes of a command-line byte its filesystem encoding cannot decode, and the UTF-16
-    encoding below refuses it before the file is opened for writing. Properties.store(OutputStream) would write it as
-    `\\uXXXX` instead."""
+    text. On the command line it is what Python makes of a byte its filesystem encoding cannot decode, and main()
+    refuses it there; one handed here any other way is refused by the UTF-16 encoding below, before the file is
+    opened for writing. Properties.store(OutputStream) would write it as `\\uXXXX` instead."""
     escapes = {"\\": "\\\\", "\t": "\\t", "\n": "\\n", "\r": "\\r", "\f": "\\f"}
     written = []
     for at, character in enumerate(value):

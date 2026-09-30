@@ -506,12 +506,13 @@ def declared_version(source: str) -> str:
 
 
 def as_text(value: str, named_in: str) -> str:
-    """The value as it was given, or a refusal where it holds a lone UTF-16 surrogate: what gradle.properties reads
-    an unpaired `\\uD800`-`\\uDFFF` escape into, as Java does. Neither UTF-8 nor UTF-16 encodes one, so it would end
-    in a traceback wherever it is printed or written."""
+    """The value as it was given, or a refusal where it holds a lone UTF-16 surrogate: what a command-line byte that
+    does not decode arrives as (PEP 383), and what gradle.properties reads an unpaired `\\uD800`-`\\uDFFF` escape
+    into, as Java does. Neither UTF-8 nor UTF-16 encodes one, so it would end in a traceback wherever it is printed
+    or written - and a file already opened for writing would be left empty."""
     if any("\ud800" <= character <= "\udfff" for character in value):
-        raise SystemExit(f"{named_in} is {ascii(value)}, which holds a lone UTF-16 surrogate - an unpaired "
-                         "\\uD800-\\uDFFF escape - and is no text")
+        raise SystemExit(f"{named_in} is {ascii(value)}, which holds a lone UTF-16 surrogate - a command-line byte "
+                         "that does not decode, or an unpaired \\uD800-\\uDFFF escape - and is no text")
     return value
 
 
@@ -525,8 +526,9 @@ def prefix_from(source: str, given: str | None) -> str:
     so. A caller that wants a default declares it where its own readers can see it, rather than having this
     file guess on everyone's behalf.
 
-    A declared prefix that is not text (see as_text) is refused here: no tag name is spelled in it, so `prefix`
-    would end in a traceback printing it, and every other check would pass having found no release.
+    A declared prefix that is not text (see as_text) is refused here, as main() refuses one given on the command
+    line: no tag name is spelled in it, so `prefix` would end in a traceback printing it, and every other check
+    would pass having found no release.
     """
     if given is not None:
         return given
@@ -808,6 +810,11 @@ def main() -> int:
     ancestry_parser.set_defaults(run=ancestry_command)
 
     arguments = parser.parse_args()
+    # Refused once, here, rather than wherever an argument is printed or written: every subcommand, and every one
+    # added later, is then handed text.
+    for name, value in vars(arguments).items():
+        if isinstance(value, str):
+            as_text(value, f"the {name.replace('_', '-')} argument")
     problems = arguments.run(arguments)
 
     for problem in problems:

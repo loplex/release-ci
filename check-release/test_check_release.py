@@ -834,8 +834,8 @@ class WritingTheVersionBack(unittest.TestCase):
         self.assertEqual(path.read_bytes(), b"version = 0.1.1-\\u20AC\n")
 
     def test_a_lone_surrogate_in_the_version_leaves_the_file_as_it_was(self):
-        """A command-line byte that Python's filesystem encoding cannot decode reaches the version as a lone surrogate,
-        which stored() refuses to encode before the file is opened for writing: the file is left as it was, not
+        """A lone surrogate handed to set_version_command directly - main() refuses one from the command line before
+        it gets there - is refused by stored() before the file is opened for writing: the file is left as it was, not
         emptied."""
         path = self.properties_file_holding("version = 0.1.1-SNAPSHOT\n")
         with self.assertRaises(UnicodeEncodeError):
@@ -1205,6 +1205,37 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
         self.working_in(nowhere)
         with self.assertRaises(SystemExit):
             repository_root()
+
+
+class ArgumentsThatAreNotText(unittest.TestCase):
+    """A command-line byte that does not decode arrives as a lone surrogate (PEP 383), which nothing can print or
+    write. Run for real, with the bytes on the command line, because that is the only way one arrives."""
+
+    def run_with(self, *arguments):
+        here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        subprocess.run(["git", "init", "-q"], cwd=here, check=True)
+        files = {"gradle.properties": b"version = 0.1.1-SNAPSHOT\ntagPrefix = v\n",
+                 "CHANGELOG.md": b"# Log\n\n## [Unreleased]\n\n- B\n\n## [0.1.0] - 2026-09-01\n\n- A\n"}
+        for name, content in files.items():
+            (here / name).write_bytes(content)
+        done = subprocess.run([sys.executable, str(SCRIPT), *arguments], cwd=here, capture_output=True, text=True)
+        self.assertEqual({name: (here / name).read_bytes() for name in files}, files, "a file was written")
+        return done
+
+    def test_each_is_refused_by_name_before_anything_is_written(self):
+        """set-version used to end in a traceback, and close-changelog in one with CHANGELOG.md already emptied."""
+        for arguments, named_in in (
+                (["set-version", b"0.1.1-\xff"], "the version argument is '0.1.1-\\udcff'"),
+                (["close-changelog", b"0.1.1-\xff"], "the version argument"),
+                (["close-changelog", "--date", b"2026-09-\xff", "0.1.1"], "the date argument"),
+                (["close-changelog", "--repository-url", b"https://example.com/\xff", "0.1.1"],
+                 "the repository-url argument"),
+                (["--tag-prefix", b"\xff", "prefix"], "the tag-prefix argument")):
+            with self.subTest(named_in):
+                done = self.run_with("--source", "gradle.properties", *arguments)
+                self.assertEqual(done.returncode, 1)
+                self.assertNotIn("Traceback", done.stderr)
+                self.assertIn(named_in, done.stderr)
 
 
 if __name__ == "__main__":

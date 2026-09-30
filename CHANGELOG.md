@@ -11,6 +11,9 @@ released it, so once a version has a section here, that section may not be edite
 
 - A `tagPrefix` in `gradle.properties` holding an unpaired `\uD800`-`\uDFFF` escape is refused.
   `prefix` ended in a traceback printing it, and the other checks passed having found no release.
+- A command-line argument holding a byte that does not decode is refused by name before any
+  subcommand runs. `set-version` ended in a traceback, and `close-changelog` in one that left
+  `CHANGELOG.md` empty.
 
 ## [0.2.0] - 2026-09-29
 

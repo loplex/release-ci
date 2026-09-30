@@ -3,3 +3,4 @@ cffi==2.1.1
 cmarkgfm==2025.10.22
 pycparser==3.0
     # via cffi
+regex==2026.9.29

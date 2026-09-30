@@ -46,15 +46,22 @@ It builds:
 
 ### The `.github` suite
 
-It reads the repository as text: [`test_line_length.py`](.github/test_line_length.py) holds every
-tracked file git does not take for binary to the line length [`.editorconfig`](.editorconfig) sets
-for it, but for the lines the comment there lists, and refuses one that is not UTF-8 by name.
+It reads the repository as text:
+
+- [`test_line_length.py`](.github/test_line_length.py) holds every tracked file git does not take
+  for binary to the line length [`.editorconfig`](.editorconfig) sets for it, but for the lines the
+  comment there lists, and refuses one that is not UTF-8 by name;
+- [`test_markdown_links.py`](.github/test_markdown_links.py) holds every relative link in a tracked
+  Markdown file to a tracked file or directory, and to a heading in it where the link names one.
 
 The suite reads Markdown through [cmarkgfm](https://github.com/theacodes/cmarkgfm), the Python
-binding of GitHub's own cmark-gfm, so that code, tables and headings are what GitHub renders.\
+binding of GitHub's own cmark-gfm, so that code, tables, headings and links are what GitHub
+renders.\
 The length test renders a line opening with a link alone, so a link whose definition stands
 elsewhere, or one written in HTML, does not count as one there.\
-cmarkgfm and the packages it needs are pinned in
+The link test reads a heading's anchor through [regex](https://github.com/mrabarnett/mrab-regex),
+whose `\p{...}` classes Python's own `re` does not have.\
+cmarkgfm, the packages it needs and regex are pinned in
 [`.github/requirements.txt`](.github/requirements.txt), and no other suite needs a package.
 
 ## Releasing this repository

@@ -367,6 +367,13 @@ different commits:
   takes the workflow file, and the checkout, from whichever branch it is started on.\
   That is why [the release job](#the-release-job) runs on the default branch alone: a release cut
   from anywhere else is what merge-back would carry onto it, unreviewed.
-- One started by a release runs from the file as it stands in the commit the release tags.
+- One started by a release runs from the file as it stands in the commit the release tags.\
+  A re-run takes the file from that commit too, so a release cut while that file leaves out an input
+  a pinned action requires runs without it on every re-run, one made after the file is fixed on the
+  default branch included.
 
 Both have to be on the default branch before a release is cut from it.
+
+A version of this repository that makes an input required says so under Changed in
+[`CHANGELOG.md`](../CHANGELOG.md), so that a workflow moving its pin to that version can pass the
+input in the same commit.

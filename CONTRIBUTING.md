@@ -89,7 +89,11 @@ There is nothing to build, so `release-flow/draft` follows `release-flow/prepare
 
 Publishing the draft is the decision to release, and
 [`release-publish.yml`](.github/workflows/release-publish.yml) carries the release back onto the
-default branch.
+default branch.\
+Where it carries the release in a pull request instead, the repository needs the settings under
+[What the pull request needs of the repository][settings].
+
+[settings]: release-flow/README.md#what-the-pull-request-needs-of-the-repository
 
 GitHub reads each the way [Where GitHub reads each workflow from][reads] says:
 

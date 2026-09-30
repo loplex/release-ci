@@ -9,14 +9,12 @@ Run with `python3 -m unittest discover` over the directory this file sits in.
 
 import json
 import os
-import re
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 WARN = Path(__file__).resolve().parent / "warn" / "warn.py"
-MANIFEST = WARN.with_name("action.yml")
 
 RUN = "https://github.com/o/r/actions/runs/7"
 START, END = "<!-- release-flow/warn -->", "<!-- /release-flow/warn -->"
@@ -243,16 +241,6 @@ class Warn(unittest.TestCase):
         done = self.warn("failure")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("could not be written", done.stdout)
-
-
-class Manifest(unittest.TestCase):
-
-    def test_an_expression_stands_only_as_a_value(self):
-        """GitHub evaluates `${{ }}` wherever it stands in action.yml, a description's text included, and one it
-        cannot evaluate there fails every step that uses the action before anything runs."""
-        for number, line in enumerate(MANIFEST.read_text(encoding="utf-8").splitlines(), 1):
-            if "${{" in line and not line.lstrip().startswith("#"):
-                self.assertRegex(line, r"^\s*[A-Za-z_][\w-]*:\s*\$\{\{", f"line {number}: {line}")
 
 
 if __name__ == "__main__":

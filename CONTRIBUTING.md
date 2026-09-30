@@ -55,7 +55,9 @@ It reads the repository as text:
   for binary to the line length [`.editorconfig`](.editorconfig) sets for it, but for the lines the
   comment there lists, and refuses one that is not UTF-8 by name;
 - [`test_markdown_links.py`](.github/test_markdown_links.py) holds every relative link in a tracked
-  Markdown file to a tracked file or directory, and to a heading in it where the link names one.
+  Markdown file to a tracked file or directory, and to a heading in it where the link names one;
+- [`test_manifests.py`](.github/test_manifests.py) reads every `action.yml` as text, for what GitHub
+  would take wrongly from any of them.
 
 The suite reads Markdown through [cmarkgfm](https://github.com/theacodes/cmarkgfm), the Python
 binding of GitHub's own cmark-gfm, so that code, tables, headings and links are what GitHub

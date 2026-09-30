@@ -140,6 +140,10 @@ class RewritingGradleProperties(unittest.TestCase):
         self.assertIn("version = 1.0.0-a&b\\\\1\n", written)
         self.assertEqual(GRADLE_PROPERTIES.version(written), "1.0.0-a&b\\1")
 
+    def test_a_crlf_line_keeps_its_carriage_return(self):
+        self.assertEqual(GRADLE_PROPERTIES.with_version("a=1\r\nversion = 0.1.1-SNAPSHOT\r\nb=2\r\n", "0.1.1"),
+                         "a=1\r\nversion = 0.1.1\r\nb=2\r\n")
+
     def test_a_file_naming_no_version_is_refused_rather_than_left_as_it_was(self):
         with self.assertRaises(SystemExit):
             GRADLE_PROPERTIES.with_version("group = cz.loplex\n", "0.2.1")

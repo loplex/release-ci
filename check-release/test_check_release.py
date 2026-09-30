@@ -787,7 +787,7 @@ class AskingTheRepository(unittest.TestCase):
 
 
 class WritingTheVersionBack(unittest.TestCase):
-    """`set-version` against a file, which is where the read-back lives."""
+    """`set-version` against a file, which is where the line endings and the read-back live."""
 
     def properties_file_holding(self, text: str) -> Path:
         here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -801,6 +801,13 @@ class WritingTheVersionBack(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             return check_release.set_version_command(
                 argparse.Namespace(version=version, source="gradle.properties", tag_prefix=None))
+
+    def test_a_crlf_file_stays_crlf(self):
+        """Read the way open() reads by default, every line of it would come back as LF, and the release
+        commit would rewrite the whole file to change one line."""
+        path = self.properties_file_holding("group=a\r\nversion=0.1.1-SNAPSHOT\r\ntagPrefix=v\r\n")
+        self.assertEqual(self.set_version("0.1.1"), [])
+        self.assertEqual(path.read_bytes(), b"group=a\r\nversion=0.1.1\r\ntagPrefix=v\r\n")
 
     def test_a_rewrite_that_did_not_take_is_caught_on_reading_back(self):
         """The read-back is what catches a writer and a reader that have come to disagree, which is the quiet
@@ -881,6 +888,28 @@ class WritingTheChangelogBack(unittest.TestCase):
         check_release.REPO = here
         self.addCleanup(setattr, check_release, "REPO", original)
         return here / "CHANGELOG.md"
+
+    def test_a_crlf_file_stays_crlf(self):
+        """A CRLF file stays CRLF, for the reason set-version keeps its line endings: a release commit should
+        change one section of the file, not every line of it."""
+        path = self.changelog_file_holding("# Log\r\n\r\n## [Unreleased]\r\n\r\n### Added\r\n\r\n- A\r\n")
+        with contextlib.redirect_stdout(io.StringIO()):
+            problems = check_release.close_changelog_command(argparse.Namespace(
+                version="0.1.0", date="2026-09-21", repository_url=None, source="tags", tag_prefix="v"))
+        self.assertEqual(problems, [])
+        self.assertEqual(path.read_bytes(),
+                         b"# Log\r\n\r\n## [Unreleased]\r\n\r\n## [0.1.0] - 2026-09-21\r\n\r\n### Added\r\n\r\n- A\r\n")
+
+    def test_a_file_of_lone_crs_stays_so(self):
+        """A lone CR ends a line, as open() reads one by default, and the file keeps its lone CRs instead of coming
+        back as LF."""
+        path = self.changelog_file_holding("# Log\r\r## [Unreleased]\r\r### Added\r\r- A\r")
+        with contextlib.redirect_stdout(io.StringIO()):
+            problems = check_release.close_changelog_command(argparse.Namespace(
+                version="0.1.0", date="2026-09-21", repository_url=None, source="tags", tag_prefix="v"))
+        self.assertEqual(problems, [])
+        self.assertEqual(path.read_bytes(),
+                         b"# Log\r\r## [Unreleased]\r\r## [0.1.0] - 2026-09-21\r\r### Added\r\r- A\r")
 
     def test_a_refused_close_leaves_the_file_as_it_was(self):
         """A refusal is the rules saying no, and the changelog they said it about is still the one to fix."""

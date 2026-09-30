@@ -458,20 +458,23 @@ def git(*arguments: str) -> str:
     return subprocess.run(["git", *arguments], cwd=repository(), capture_output=True, text=True, check=True).stdout
 
 
-def read_file(name: str, holds: str, encoding: str = "utf-8") -> str:
+def read_file(name: str, holds: str, encoding: str = "utf-8", newline: str | None = None) -> str:
     """A file the repository declares something in, read as text - or a refusal that says which file is missing
     and what it is looked in for. A traceback is loud too, but it reads as the tool breaking rather than as the
-    repository lacking something, and it names no remedy."""
+    repository lacking something, and it names no remedy.
+
+    `newline` is open()'s: left alone, line endings are read as `\\n`, and a writer that wants to put back the
+    ones the file had asks for `""`."""
     try:
-        with open(repository() / name, encoding=encoding) as stream:
+        with open(repository() / name, encoding=encoding, newline=newline) as stream:
             return stream.read()
     except FileNotFoundError:
         raise SystemExit(f"there is no {name} here, and it is where {holds} would be read from") from None
 
 
-def read_declared(adapter) -> str:
+def read_declared(adapter, newline: str | None = None) -> str:
     """The file an adapter declares its version in, read in the encoding its format is read in."""
-    return read_file(adapter.file, adapter.holds, adapter.encoding)
+    return read_file(adapter.file, adapter.holds, adapter.encoding, newline)
 
 
 # Where the version a release is asked to be comes from is the one thing here that a project type decides, and
@@ -653,10 +656,12 @@ def set_version_command(arguments) -> list[str]:
               file=sys.stderr)
         raise SystemExit(NOTHING_TO_WRITE)
 
+    # Read and written with the line endings it has, so that a CRLF file is not rewritten whole to change one
+    # line.
     adapter = SOURCES[arguments.source]
     path = repository() / adapter.file
-    written = adapter.with_version(read_declared(adapter), arguments.version)
-    with open(path, "w", encoding=adapter.encoding) as stream:
+    written = adapter.with_version(read_declared(adapter, newline=""), arguments.version)
+    with open(path, "w", encoding=adapter.encoding, newline="") as stream:
         stream.write(written)
 
     # Read back through the same reader everything else here uses. What this catches is a writer and a reader
@@ -675,11 +680,17 @@ def close_changelog_command(arguments) -> list[str]:
     # Asked for only where links are to be written: a changelog without them has no use for the prefix, and a
     # source that declares none should not have to be told one just to close a section.
     prefix = prefix_from(arguments.source, arguments.tag_prefix) if arguments.repository_url else ""
-    text = read_file("CHANGELOG.md", "the released sections")
+    # Written back with the one line ending the file uses - CRLF where it has any, else a lone CR where it has one,
+    # LF otherwise - so that a CRLF file is not rewritten whole to add one section; a file mixing them comes back
+    # all in the first of these it holds. A lone CR ends a line too, as open() reads one by default.
+    # closed() works over LF text either way.
+    raw = read_file("CHANGELOG.md", "the released sections", newline="")
+    ending = "\r\n" if "\r\n" in raw else "\r" if "\r" in raw else "\n"
+    text = raw.replace("\r\n", "\n").replace("\r", "\n")
     # Closed before the file is opened: opening it for writing empties it, and a refusal raised in between would
     # leave no changelog at all where the one it had should stand.
     written = closed(text, arguments.version, on, arguments.repository_url, prefix)
-    with open(path, "w", encoding="utf-8") as stream:
+    with open(path, "w", encoding="utf-8", newline=ending) as stream:
         stream.write(written)
     print(f"[{arguments.version}] - {on}")
     return []

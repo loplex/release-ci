@@ -14,6 +14,8 @@ released it, so once a version has a section here, that section may not be edite
 - A command-line argument holding a byte that does not decode is refused by name before any
   subcommand runs. `set-version` ended in a traceback, and `close-changelog` in one that left
   `CHANGELOG.md` empty.
+- `set-version` and `close-changelog` write a CRLF file back with CRLF line endings. They wrote
+  every line of it back as LF, so a release commit rewrote the whole file to change one line.
 
 ## [0.2.0] - 2026-09-29
 

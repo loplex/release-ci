@@ -48,8 +48,11 @@ What a workflow pins to is its own choice, and each ref gets something different
   [security guide](https://docs.github.com/en/actions/reference/security/secure-use) recommends it
   for that reason.
 - A branch moves, so this repository's code would change under the pin.
-- A commit that nothing reaches any more may fail to check out, GitHub keeping no promises about
-  unreachable objects.
+- A commit that nothing reaches any more can be checked out by its SHA only until a garbage
+  collection removes it, and GitHub promises no date for that; its [guide to removing sensitive
+  data][sensitive-data] has GitHub Support run one.
+
+[sensitive-data]: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
 
 The pin holds this repository's code only: the actions `intellij/build` calls in turn,
 `actions/setup-java` and the rest, run at the tags its `action.yml` names for them, which their

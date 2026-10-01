@@ -28,6 +28,10 @@ released it, so once a version has a section here, that section may not be edite
   `CHANGELOG.md` empty.
 - `set-version` and `close-changelog` write a CRLF file back with CRLF line endings. They wrote
   every line of it back as LF, so a release commit rewrote the whole file to change one line.
+- A `CHANGELOG.md` heading indented by up to three spaces, or with a tab after its `#`s, is read as
+  a heading, and a `###` heading closed by a run of `#`s is read without them, as CommonMark reads
+  both. `close-changelog` found no indented `## [Unreleased]`, and a final release taking in its
+  train listed a pre-release's indented or closed `### Added` apart from its own.
 
 ## [0.2.0] - 2026-09-29
 

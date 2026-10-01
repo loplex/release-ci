@@ -364,6 +364,18 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
         self.assertEqual(asked_by("<!--\n- a template\n-->\n\n- - -\n***\n\n### Fixed\n\n- F\n").loose, [],
                          "a comment over several lines, and a thematic break, are not entries")
 
+    def test_a_group_heading_is_read_as_commonmark_reads_one(self):
+        """Indented by up to three spaces, a tab after the #s, a closing run of #s: each still heads a group of
+        its own, rather than its entries counting under the group above it."""
+        for heading in ("   ### Added", "###\tAdded", "### Added ###", "### Added\t#"):
+            with self.subTest(heading=heading):
+                asked = asked_by(f"### Fixed\n\n- F\n\n{heading}\n\n- A\n")
+                self.assertEqual((asked.step, asked.why, asked.unknown), (MINOR, "### Added", []))
+        self.assertEqual(asked_by("### Fixed\n\n- F\n\n    ### Added\n\n- A\n").step, PATCH,
+                         "four spaces make a code block, not a heading")
+        self.assertEqual(asked_by("### Added#\n\n- A\n").unknown, ["Added#"],
+                         "a # with no space before it is part of the text")
+
 
 class WhatAnOpenTrainAsksFor(unittest.TestCase):
     """train_asks: a branch whose changelog holds an open train's sections carries that train's changes, so a
@@ -563,6 +575,14 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
         self.assertIn("## [0.2.0] - 2026-09-21\n\n### Added\n\n- X\n", written)
         self.assertTrue(sections(written)["0.2.0"].startswith("- 2026-09-21"))
         self.assertEqual(sections(written)["Unreleased"], "")
+
+    def test_a_section_heading_is_read_as_commonmark_reads_one(self):
+        """Indented by up to three spaces, or a tab after the #s, a section still starts there, and [Unreleased]
+        is still found to close; indented by four, it is a code block inside the section above."""
+        log = "# Log\n\n  ## [Unreleased]\n\n### Added\n\n- X\n\n ##\t[0.1.0] - 2026-01-01\n\n- old\n"
+        self.assertEqual(sections(log), {"Unreleased": "### Added\n\n- X", "0.1.0": "- 2026-01-01\n\n- old"})
+        self.assertIn("## [0.2.0] - 2026-09-21\n\n### Added\n\n- X\n\n ##\t[0.1.0]", closed(log, "0.2.0", "2026-09-21"))
+        self.assertEqual(list(sections(log.replace(" ##\t[0.1.0]", "    ## [0.1.0]"))), ["Unreleased"])
 
     def test_what_was_already_released_is_left_alone(self):
         written = closed(self.FOLLOWED, "0.2.0", "2026-09-21")

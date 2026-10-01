@@ -81,9 +81,12 @@ SEMVER = re.compile(
     re.ASCII,
 )
 
-SECTION_HEADING = re.compile(r"^## \[([^\]]+)\]", re.MULTILINE)
-UNRELEASED_HEADING = re.compile(r"^## \[Unreleased\][^\n]*\n", re.MULTILINE)
-GROUP_HEADING = re.compile(r"^### (.+?)[ \t]*$", re.MULTILINE)
+# Headings read as CommonMark 0.31.2 section 4.2 reads an ATX heading: up to three spaces before the #s, spaces or
+# tabs after them, and a closing run of #s, after a space, no part of the text. A heading read any narrower is a
+# section's or a group's entries silently counted under the one before it.
+SECTION_HEADING = re.compile(r"^ {0,3}##[ \t]+\[([^\]]+)\]", re.MULTILINE)
+UNRELEASED_HEADING = re.compile(r"^ {0,3}##[ \t]+\[Unreleased\][^\n]*\n", re.MULTILINE)
+GROUP_HEADING = re.compile(r"^ {0,3}###[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$", re.MULTILINE)
 
 # The kinds of change Keep a Changelog names, in the order it names them - which is the order a section put
 # together from several is written in. A group of any other name keeps the place it was first met in, after

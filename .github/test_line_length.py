@@ -20,9 +20,9 @@ import cmarkgfm
 from cmarkgfm.cmark import Options
 
 ROOT = Path(__file__).resolve().parent.parent
-# The heading of a released section of CHANGELOG.md, as check-release reads a section's: `## [`, a label other than
-# Unreleased, and `]`.
-RELEASED = re.compile(r"## \[(?!Unreleased\])[^\]]+\]")
+# The heading of a released section of CHANGELOG.md, as check-release reads a section's: up to three spaces, `##`,
+# spaces or tabs, `[`, a label other than Unreleased, and `]`.
+RELEASED = re.compile(r" {0,3}##[ \t]+\[(?!Unreleased\])[^\]]+\]")
 
 
 def limits(editorconfig):
@@ -277,6 +277,8 @@ class LineLength(unittest.TestCase):
         self.assertEqual(overlong("docs/CHANGELOG.md", text, self.SECTIONS), [(2, 101), (4, 101)])
         notes = "# Changelog\n\n## Notes\n\n## [Unreleased]\n" + "x" * 101 + "\n## [1.0.0] - 2026-01-01\n" + "y" * 101
         self.assertEqual(overlong("CHANGELOG.md", notes, self.SECTIONS), [(6, 101)])
+        indented = text.replace("\n## [1.0.0]", "\n  ##\t[1.0.0]")
+        self.assertEqual(overlong("CHANGELOG.md", indented, self.SECTIONS), [(2, 101)])
 
     def test_a_line_ends_where_cmark_gfm_ends_one(self):
         """`str.splitlines` ends a line at a form feed too, which would number the prose before a block of code as

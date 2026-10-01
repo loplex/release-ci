@@ -204,6 +204,61 @@ by the rule under
 [The channel a version goes to](../check-release/README.md#the-channel-a-version-goes-to) that
 `release-flow/draft` marks a pre-release by, so the two cannot come to disagree.
 
+### A pre-release reaches only those who add its channel
+
+A version that goes to a channel other than `default` is not offered to the plugin's users:
+
+- The plugin's page on the Marketplace shows every channel, this one among them.
+- An IDE installs it, and updates to it, only once its user has added the channel as a custom plugin
+  repository, as [Custom release channels][custom-channels] says.
+
+Whether an update to a custom channel waits for a review is under
+[An update is served as soon as it is uploaded](#an-update-is-served-as-soon-as-it-is-uploaded).
+
+### How a tester adds the channel
+
+1. In the IDE, open Settings, select Plugins, click the gear icon and choose
+   *Manage Plugin Repositories…*, as [Add custom repositories][custom-repositories] shows.
+2. Add `https://plugins.jetbrains.com/plugins/<channel>/<plugin id>`, the plugin id being the number
+   in the plugin's Marketplace URL.\
+   That brings in this plugin's channel alone.\
+   `https://plugins.jetbrains.com/plugins/<channel>/list` brings in every plugin's channel of that
+   name.
+
+### A tester who keeps the channel is offered no final release
+
+- A custom repository takes precedence over the default channel: a user who has added one sees none
+  of the plugin's updates in the default channel.
+- JetBrains calls this temporary, and asks for every update to the default channel to be uploaded to
+  the custom channel as well; see [Channel Priority Notice][channel-priority].
+- `intellij/publish` uploads a version to the one channel
+  [read off it](#the-channel-is-read-off-the-version), so a final release goes to `default` alone.
+
+So a tester removes the repository once the final release is out.\
+The IDE then offers the final release over the pre-release: the comparison it checks for updates by
+(`VersionComparatorUtil`, in 2025.3) takes `0.1.1` to be newer than `0.1.1-beta.1`.
+
+### Withdrawing a pre-release
+
+On the Marketplace, as [Plugin updates][plugin-updates] says:
+
+- A version can be hidden, with the eye icon by it.\
+  Neither the Marketplace nor an IDE's search then offers it; a direct link still reaches it.
+- A version can be removed, with the trash can icon by it.\
+  Where the icon is missing, JetBrains suggests hiding the version or writing to
+  marketplace@jetbrains.com.
+- What either does to a copy already installed, the documentation does not say.
+
+On GitHub, `release-flow` takes nothing back.\
+The release, its tag, and what
+[merge-back](../release-flow/README.md#release-flowmerge-back) carried onto the default branch stay
+as they are.
+
+[custom-channels]: https://plugins.jetbrains.com/docs/marketplace/custom-release-channels.html
+[channel-priority]: https://plugins.jetbrains.com/docs/marketplace/custom-release-channels.html#channel-priority-notice
+[custom-repositories]: https://www.jetbrains.com/help/idea/managing-plugins.html#add_plugin_repos
+[plugin-updates]: https://plugins.jetbrains.com/docs/marketplace/plugin-updates.html
+
 ### The publish does not wait for merge-back to succeed
 
 Neither the download nor the upload waits for the merge-back step to succeed, only for it to have

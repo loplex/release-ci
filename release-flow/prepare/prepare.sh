@@ -51,8 +51,9 @@ branch="release/${version}"
 # repository URL is given the link definitions are written afresh to include it.
 #
 # First of the writes, and the last of the rules with it: an [Unreleased] with nothing to release - nothing
-# under it, and for a final release no pre-release of it to take in - is refused before the file is rewritten,
-# so a release with nothing to say about itself leaves no branch and no output behind either.
+# under it, and for a final release no pre-release since the final release before it to take in - is refused
+# before the file is rewritten, so a release with nothing to say about itself leaves no branch and no output
+# behind either.
 repository_url_arguments=()
 if [ -n "$REPOSITORY_URL" ]; then
   repository_url_arguments=(--repository-url "$REPOSITORY_URL")

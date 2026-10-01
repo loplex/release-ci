@@ -33,9 +33,10 @@ inputs:
     default: ''
   repository-url:
     description: >-
-      Write the link definitions of the changelog's versions afresh, pointing into this repository - the way
-      the Gradle changelog plugin writes them; any other definition the changelog carries stays. The usual
-      value is `github.server_url` and `github.repository` joined by a slash.
+      Write the link definitions of the changelog's versions afresh, pointing into this repository: each
+      version compared from the release its entries are counted from, a final release from the final release
+      before it. Any other definition the changelog carries stays. The usual value is `github.server_url` and
+      `github.repository` joined by a slash.
       Left empty, whatever link definitions the changelog carries are left alone.
     default: ''
 

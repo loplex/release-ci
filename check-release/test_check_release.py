@@ -638,9 +638,10 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
 
 
 class ClosingAPreReleaseTrain(unittest.TestCase):
-    """What the Gradle changelog plugin's `combinePreReleases` does, on by default there, so that a changelog
-    that plugin kept reads the same here: a final release takes its train's entries into its own section, and
-    the train's sections stay as released."""
+    """A final release takes into its own section the entries of every pre-release since the final release before
+    it, and their sections stay as released. For a train that reached its own final release that is what the
+    Gradle changelog plugin's `combinePreReleases` does, on by default there, so that a changelog that plugin kept
+    reads the same here; the plugin leaves an abandoned train out, and this takes it in."""
 
     TRAIN = (
         "# Log\n\n## [Unreleased]\n\n### Fixed\n\n- F\n\n"
@@ -675,14 +676,49 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
         written = closed(self.TRAIN.replace("0.3.0-beta.2", "0.3.0-beta.0"), "0.3.0-beta.2", "2026-09-21")
         self.assertEqual(self.body(written, "0.3.0-beta.2"), "### Fixed\n\n- F")
 
-    def test_another_core_s_train_is_not_this_one(self):
-        written = closed(self.TRAIN, "0.3.1", "2026-09-21")
-        self.assertEqual(self.body(written, "0.3.1"), "### Fixed\n\n- F")
+    def test_a_train_abandoned_for_another_version_is_taken_in_by_the_next_final_release(self):
+        """0.3.0 never came, and 1.0.0 is the first final release since 0.2.0: whoever skipped the betas is told
+        what they brought, as the link of 1.0.0 compares from 0.2.0."""
+        written = closed(self.TRAIN, "1.0.0", "2026-09-21")
+        self.assertEqual(self.body(written, "1.0.0"),
+                         "### Added\n\n- B2\n- B1\n\n### Removed\n\n- R\n\n### Fixed\n\n- F")
+
+    def test_a_hotfix_below_an_open_train_takes_none_of_it(self):
+        written = closed(self.TRAIN, "0.2.1", "2026-09-21")
+        self.assertEqual(self.body(written, "0.2.1"), "### Fixed\n\n- F")
+
+    def test_a_pre_release_before_the_final_release_below_is_not_taken_in_again(self):
+        """0.2.0 took in 0.2.0-beta.1 already."""
+        earlier = self.TRAIN + "\n## [0.2.0-beta.1] - 2026-08-20\n\n### Added\n\n- older\n"
+        written = closed(earlier, "0.3.0", "2026-09-21")
+        self.assertEqual(self.body(written, "0.3.0"),
+                         "### Added\n\n- B2\n- B1\n\n### Removed\n\n- R\n\n### Fixed\n\n- F")
+
+    def test_a_first_final_release_takes_in_every_pre_release_below_it(self):
+        first = "# Log\n\n## [Unreleased]\n\n## [0.1.0-beta.1] - 2026-08-20\n\n### Added\n\n- B\n"
+        self.assertEqual(self.body(closed(first, "0.1.0", "2026-09-21"), "0.1.0"), "### Added\n\n- B")
 
     def test_nothing_new_and_no_train_is_still_refused(self):
         with self.assertRaises(SystemExit) as raised:
-            closed(self.TRAIN.replace("### Fixed\n\n- F\n\n", ""), "0.3.1", "2026-09-21")
+            closed(self.TRAIN.replace("### Fixed\n\n- F\n\n", ""), "0.2.1", "2026-09-21")
         self.assertIn("nothing is under [Unreleased]", str(raised.exception))
+
+    def test_the_refusal_says_why_nothing_was_taken_in(self):
+        """A pre-release takes nothing in even where a train stands below it, so a refusal saying there was no
+        pre-release to take in would be untrue of it."""
+        quiet = self.TRAIN.replace("### Fixed\n\n- F\n\n", "")
+        silent = "# Log\n\n## [Unreleased]\n\n## [0.3.0-beta.1] - x\n\n{}## [0.2.0] - x\n\n- old\n"
+        untaken = ", and nothing in the pre-releases between 0.2.0 and 0.3.0 to take in"
+        for changelog, version, said in (
+                (quiet, "0.2.1", ", and no pre-release between 0.2.0 and 0.2.1 to take in"),
+                (silent.format(""), "0.3.0", untaken),
+                ("# Log\n\n## [Unreleased]\n", "0.1.0", ", and no pre-release below 0.1.0 to take in"),
+                (quiet, "0.3.0-beta.3", ", and 0.3.0-beta.3, a pre-release, takes no other one in"),
+                (quiet, "2026.10", "")):
+            with self.subTest(version), self.assertRaises(SystemExit) as raised:
+                closed(changelog, version, "2026-09-21")
+            self.assertEqual(str(raised.exception),
+                             f"nothing is under [Unreleased]{said}, so there is nothing to release")
 
     def test_a_group_of_another_name_is_kept_after_the_known_kinds(self):
         """Its text was released too; dropping it for not being one of the six would lose it."""
@@ -692,7 +728,15 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
 
 
 class TheLinksAtTheFoot(unittest.TestCase):
-    """Written the way the Gradle changelog plugin writes them, so that a changelog it kept stays as it was."""
+    """Written the way the Gradle changelog plugin writes them, so that a changelog it kept stays as it was - save
+    where pre-releases stand among the sections, or a backport stands above a newer line: each link then compares
+    from where its section's entries start."""
+
+    def footer(self, *sections):
+        text = "# Log\n\n## [Unreleased]\n\n" + "".join(f"## [{label}] - x\n\n- e\n\n" for label in sections)
+        written = linked(text, "https://example.invalid/r", "v")
+        return {line[1 : line.index("]")]: line.split("/r/", 1)[1] for line in written.splitlines()
+                if line.startswith("[") and "]: " in line}
 
     def test_the_gradle_plugin_s_own_footer_is_reproduced(self):
         """Taken from a changelog that plugin wrote, with a prefix declared empty: the comparison runs from the
@@ -706,6 +750,45 @@ class TheLinksAtTheFoot(unittest.TestCase):
             "[0.2.0]: https://github.com/loplex/intellij-maven-lens/compare/0.1.0...0.2.0\n"
             "[0.1.0]: https://github.com/loplex/intellij-maven-lens/commits/0.1.0\n"
         ))
+
+    def test_a_final_release_is_compared_from_the_final_release_below_it(self):
+        """Its section took in its train's entries, everything since 0.2.0, so its link shows everything since
+        0.2.0 too; from beta.2 it would leave out what beta.1 and beta.2 brought."""
+        links = self.footer("0.3.0", "0.3.0-beta.2", "0.3.0-beta.1", "0.2.0")
+        self.assertEqual(links["0.3.0"], "compare/v0.2.0...v0.3.0")
+        self.assertEqual(links["0.3.0-beta.2"], "compare/v0.3.0-beta.1...v0.3.0-beta.2")
+        self.assertEqual(links["0.3.0-beta.1"], "compare/v0.2.0...v0.3.0-beta.1")
+
+    def test_a_pre_release_is_compared_from_its_own_train_past_a_hotfix(self):
+        links = self.footer("0.3.0-beta.2", "0.2.1", "0.3.0-beta.1", "0.2.0")
+        self.assertEqual(links["0.3.0-beta.2"], "compare/v0.3.0-beta.1...v0.3.0-beta.2")
+        self.assertEqual(links["0.2.1"], "compare/v0.2.0...v0.2.1")
+
+    def test_a_train_that_never_reached_its_final_release_is_passed_over_by_a_final_release_alone(self):
+        """0.3.1's section took in 0.3.0-beta.1's entries, so its link shows everything since 0.2.0."""
+        links = self.footer("0.4.0-beta.1", "0.3.1", "0.3.0-beta.1", "0.2.0")
+        self.assertEqual(links["0.3.1"], "compare/v0.2.0...v0.3.1")
+        self.assertEqual(links["0.4.0-beta.1"], "compare/v0.3.1...v0.4.0-beta.1")
+        links = self.footer("0.4.0-beta.1", "0.3.0-beta.1", "0.2.0")
+        self.assertEqual(links["0.4.0-beta.1"], "compare/v0.3.0-beta.1...v0.4.0-beta.1")
+
+    def test_a_pre_release_after_a_train_s_final_release_is_compared_from_that_release(self):
+        links = self.footer("0.3.0-beta.1", "0.2.0", "0.2.0-beta.1", "0.1.0")
+        self.assertEqual(links["0.3.0-beta.1"], "compare/v0.2.0...v0.3.0-beta.1")
+
+    def test_a_backport_is_not_what_a_newer_line_compares_from(self):
+        links = self.footer("0.2.1", "0.1.3", "0.2.0", "0.1.2")
+        self.assertEqual(links["0.2.1"], "compare/v0.2.0...v0.2.1")
+        self.assertEqual(links["0.1.3"], "compare/v0.1.2...v0.1.3")
+
+    def test_a_final_release_with_no_final_release_below_points_at_its_own_commits(self):
+        links = self.footer("0.1.0", "0.1.0-beta.1")
+        self.assertEqual(links["0.1.0"], "commits/v0.1.0")
+        self.assertEqual(links["0.1.0-beta.1"], "commits/v0.1.0-beta.1")
+
+    def test_a_label_that_is_not_semver_is_compared_from_the_section_below_it(self):
+        links = self.footer("2026.10", "0.1.0-beta.1")
+        self.assertEqual(links["2026.10"], "compare/v0.1.0-beta.1...v2026.10")
 
     def test_the_prefix_is_on_every_tag_and_nowhere_else(self):
         text = "# Log\n\n## [Unreleased]\n\n## [0.2.0] - x\n\n- a\n\n## [0.1.0] - x\n\n- b\n"

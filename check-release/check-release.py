@@ -448,20 +448,39 @@ def combined(texts: list[str]) -> str:
     return "\n\n".join(leads + [f"### {name}\n\n" + "\n".join(merged[name]) for name in order])
 
 
+def compared_from(version: str, below: list[str]) -> str | None:
+    """The release a section's link compares from: the one its entries are counted from. That is the highest
+    of the sections `below` it in the file that SemVer puts before it, final releases only for a final
+    release; None where there is none, and the link points at the version's own commits.
+    - A final release passes over the pre-releases: its section took in the entries of every one since the final
+      release before it (see closed()), so a link from the last of them would leave out the train the section took in.
+    - A pre-release counts both. beta.2 after a hotfix 0.2.1 compares from beta.1; 0.3.0-beta.1, after a 0.2.0
+      that closed its own train, from 0.2.0 rather than 0.2.0-beta.2.
+    - A backport released after a newer line is not what that line compares from: precedence, not file order.
+    - A section whose label is not SemVer compares from the section below it.
+    The Gradle changelog plugin compares every section from the one below it; the two read alike on a changelog
+    of final releases in order. semantic-release picks the release before a final one the same way."""
+    if SEMVER.match(version) is None:
+        return below[0] if below else None
+    final = SEMVER.match(version).group(4) is None
+    earlier = [label for label in below if SEMVER.match(label) and precedence(label) < precedence(version)
+               and not (final and SEMVER.match(label).group(4) is not None)]
+    return max(earlier, key=precedence, default=None)
+
+
 def linked(changelog: str, repository_url: str, prefix: str) -> str:
-    """The changelog with its link definitions written afresh, the way the Gradle changelog plugin writes them:
-    [Unreleased] compared from the newest release to HEAD, each release compared from the one below it in the
-    file, and the oldest pointing at its own commits. Rewritten whole rather than added to, because every
-    release moves the first of them - which is also why check_changelog leaves them out. Only the definitions
-    written here are replaced: one the changelog keeps for a link of its own, to Keep a Changelog say, is
-    left where it stands."""
+    """The changelog with its link definitions written afresh: [Unreleased] compared from the newest release to
+    HEAD, and each release from the one compared_from gives it. Rewritten whole rather than added to, because
+    every release moves the first of them - which is also why check_changelog leaves them out. Only the
+    definitions written here are replaced: one the changelog keeps for a link of its own, to Keep a Changelog
+    say, is left where it stands."""
     versions = [version for version in sections(changelog) if version != "Unreleased"]
     definitions = []
     if versions:
         definitions.append(f"[Unreleased]: {repository_url}/compare/{prefix}{versions[0]}...HEAD")
     for index, version in enumerate(versions):
-        below = versions[index + 1] if index + 1 < len(versions) else None
-        target = f"compare/{prefix}{below}...{prefix}{version}" if below else f"commits/{prefix}{version}"
+        start = compared_from(version, versions[index + 1 :])
+        target = f"compare/{prefix}{start}...{prefix}{version}" if start else f"commits/{prefix}{version}"
         definitions.append(f"[{version}]: {repository_url}/{target}")
     labels = {"Unreleased", *versions}
     kept = [line for line in changelog.split("\n")
@@ -483,15 +502,21 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
 
     Link definitions at the foot of the file belong to the file rather than to the section being closed, so
     they stay where they are. Both shapes are in use - a changelog carrying them, and one that does not. Given
-    the repository's URL, they are written afresh instead, the way the Gradle changelog plugin writes them.
+    the repository's URL, they are written afresh instead, as linked() writes them.
 
-    A final release closing a pre-release train takes the train's entries into its own section, which is what
-    the Gradle changelog plugin's `combinePreReleases` does and has on by default: whoever skipped the betas is
-    told in one place everything 0.3.0 brings. The pre-release sections stay as they were, released and held to
-    their tags. Emptiness is then judged on the section that results, so a train with nothing new to say at
-    its end still closes. Only a final release does this. The plugin's own code does not check for it and
-    would let 0.3.0-beta.2 take in 0.3.0-beta.1 as well, repeating to a channel what it was already offered;
-    its documentation speaks of the final release, and so does this.
+    A final release takes into its own section the entries of every pre-release since the final release before
+    it, by SemVer's order, whatever version they were for: the release its link compares from, by
+    compared_from. Whoever skipped the betas is told in one place everything 0.3.0 brings, and 1.0.0 after an
+    abandoned 0.3.0-beta.1 tells them what that beta brought too, as semantic-release's notes for a final
+    release cover everything since the last final one. A hotfix below an open train takes none of it, and a
+    pre-release takes nothing in. The pre-release sections stay as they were, released and held to their tags.
+    Emptiness is then judged on the section that results, so a train with nothing new to say at its end still
+    closes.
+
+    The Gradle changelog plugin's `combinePreReleases`, on by default there, does the same for the pre-releases
+    of the release's own version, and leaves an abandoned train out. Its code does not check that the release
+    is a final one, and would let 0.3.0-beta.2 take in 0.3.0-beta.1 as well, repeating to a channel what it was
+    already offered; its documentation speaks of the final release, and so does this.
     """
     mark = UNRELEASED_HEADING.search(changelog)
     if mark is None:
@@ -511,16 +536,25 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
     entries = "\n".join(lines).strip("\n")
     is_final = SEMVER.match(version) is not None and SEMVER.match(version).group(4) is None
     if is_final:
+        found = bodies(changelog)
+        start = compared_from(version, [label for label in found if label != "Unreleased"])
         train_entries = [
-            text for label, text in bodies(changelog).items()
+            text for label, text in found.items()
             if SEMVER.match(label) and SEMVER.match(label).group(4) is not None
-            and core(label) == core(version)
+            and precedence(label) < precedence(version) and (start is None or precedence(start) < precedence(label))
         ]
         if train_entries:
             entries = combined([entries, *train_entries])
     if not entries:
-        raise SystemExit("nothing is under [Unreleased], and no pre-release of it to take in, so there is "
-                         "nothing to release")
+        if is_final:
+            span = f"between {start} and {version}" if start else f"below {version}"
+            reason = (f", and nothing in the pre-releases {span} to take in" if train_entries
+                      else f", and no pre-release {span} to take in")
+        elif SEMVER.match(version):
+            reason = f", and {version}, a pre-release, takes no other one in"
+        else:
+            reason = ""
+        raise SystemExit(f"nothing is under [Unreleased]{reason}, so there is nothing to release")
 
     # The blank line before whatever follows is put back rather than inherited: the run of blank lines that
     # separated [Unreleased] from the section below it was just taken off the end of the entries.

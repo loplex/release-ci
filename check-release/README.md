@@ -79,7 +79,8 @@ it:
 
 A release closes `[Unreleased]` into a section of its own, so there has to be something under it.\
 `close-changelog`, which `release-flow/prepare` runs, refuses an empty one, unless there are
-pre-releases of the version to take in: a final release takes their entries into its own section.\
+pre-releases to take in: a final release takes into its own section the entries of every pre-release
+since the final release before it, an abandoned train of another version included.\
 The `changelog` check reads only the released sections, not `[Unreleased]`.
 
 ### What `[Unreleased]` asks of the version

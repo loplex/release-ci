@@ -18,6 +18,15 @@ released it, so once a version has a section here, that section may not be edite
   A note on stderr says where `CHANGELOG.md` or its `[Unreleased]` is missing, or where a `###`
   group is not a kind Keep a Changelog names. merge-back's pull request that starts the next version
   tells whoever merges it to raise that version where the check refuses it.
+- `close-changelog` takes into a final release the entries of every pre-release that SemVer orders
+  below it and above the final release before it, whatever version they were for. It took in only
+  the pre-releases of that version, so `1.0.0` after an abandoned `0.3.0-beta.1` left that beta's
+  entries out.
+- `close-changelog --repository-url` compares a final release from the final release before it,
+  passing over its pre-releases, whose entries its section took in: the link of `0.3.0` after
+  `0.3.0-beta.2` showed only the commits since `0.3.0-beta.2`, not the train its section took in. A
+  pre-release compares from the release before it, which past a hotfix is the one before in its
+  train. "Before" is SemVer's order, not the file's.
 
 ### Fixed
 

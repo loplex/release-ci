@@ -38,6 +38,8 @@ attachments=()
 shopt -s nullglob
 IFS=
 for pattern in "${patterns[@]}"; do
+  # The glob expansion is the point here: the input is a file pattern.
+  # shellcheck disable=SC2206
   matched=($pattern)
   if (( ${#matched[@]} == 0 )); then
     echo "::error::${pattern} matches nothing, so the release would go out without it"

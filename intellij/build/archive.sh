@@ -11,6 +11,8 @@ set -uo pipefail
 # pattern: expanded with IFS empty, so that nothing splits it.
 shopt -s nullglob
 IFS=
+# The glob expansion is the point here: the input is a file pattern.
+# shellcheck disable=SC2206
 matched=($ARCHIVE_PATTERN)
 shopt -u nullglob
 # A pattern with no glob character in it comes back as itself whether the file is there or not, so what came

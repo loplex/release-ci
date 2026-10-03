@@ -19,6 +19,7 @@ if [[ $TAG_PREFIX == '^none' ]]; then
 elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
+source_arguments=(--version-source "$SOURCE" "${prefix_arguments[@]}")
 
 # Split at spaces and newlines, without glob expansion.
 # `*` is then a name that is no check, not the files in the workspace.
@@ -43,10 +44,10 @@ done
 failed=0
 for check in "${check_names[@]}"; do
   if [[ $check == version && -n $VERSION ]]; then
-    out=$(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}" version --version "$VERSION" 2>&1)
+    out=$(python3 "$script" version "${source_arguments[@]}" --version "$VERSION" 2>&1)
     rc=$?
   else
-    out=$(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}" "$check" 2>&1)
+    out=$(python3 "$script" "$check" "${source_arguments[@]}" 2>&1)
     rc=$?
   fi
   printf '%s\n' "$out"
@@ -57,7 +58,7 @@ for check in "${check_names[@]}"; do
   elif [[ $check == version ]]; then
     candidate=$(printf '%s' "$out" | tail -1)
     printf 'version=%s\n' "$candidate" >> "$GITHUB_OUTPUT"
-    channel=$(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}" channel "$candidate")
+    channel=$(python3 "$script" channel "$candidate")
     rc=$?
     if (( rc != 0 )); then
       echo "::error::check-release channel said no"

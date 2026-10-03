@@ -48,8 +48,6 @@ jobs:
           repository-url: ${{ github.server_url }}/${{ github.repository }}
       - uses: ./release-flow/draft
         with:
-          source: tags
-          tag-prefix: v
           version: ${{ steps.cut.outputs.version }}
           tag: ${{ steps.cut.outputs.tag }}
           branch: ${{ steps.cut.outputs.branch }}

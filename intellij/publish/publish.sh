@@ -28,10 +28,8 @@ temp="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 
 # The channel is read off the version by the rule the draft was marked with, rather than handed in: two places
 # spelling it could come to disagree, and once a release is published there is no `version` check left to
-# answer it. The version comes bare, so it is read with no prefix, and under `tags`, which declares nothing: no
-# file of the repository is read to answer it.
-channel=$(python3 "${here}/../../check-release/check-release.py" --source tags --tag-prefix '' channel "$VERSION") \
-  || exit 1
+# answer it.
+channel=$(python3 "${here}/../../check-release/check-release.py" channel "$VERSION") || exit 1
 
 # No channel field for a final release: the Marketplace takes an empty channel as its default one
 # (https://plugins.jetbrains.com/docs/marketplace/plugin-upload.html), which is also what the Gradle

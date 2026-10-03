@@ -9,6 +9,10 @@ released it, so once a version has a section here, that section may not be edite
 
 ### Changed
 
+- **BREAKING** `check-release.py`: `--source` is now `--version-source`.
+  It and `--tag-prefix` go after the command, and a command refuses the ones it never reads.
+  `channel` takes the version without the tag prefix.
+  [UPGRADING.md](UPGRADING.md#from-02) shows the new calls.
 - **BREAKING** `check-release version` holds the version to what waits under `[Unreleased]`, and
   under an open pre-release train whose sections the changelog holds: `### Added`, `### Changed` or
   `### Deprecated` asks for at least a minor, and `### Removed` or an entry starting with
@@ -27,6 +31,10 @@ released it, so once a version has a section here, that section may not be edite
   `0.3.0-beta.2` showed only the commits since `0.3.0-beta.2`, not the train its section took in. A
   pre-release compares from the release before it, which past a hotfix is the one before in its
   train. "Before" is SemVer's order, not the file's.
+
+### Removed
+
+- `release-flow/draft`: the `source` and `tag-prefix` inputs, which it no longer reads.
 
 ### Fixed
 

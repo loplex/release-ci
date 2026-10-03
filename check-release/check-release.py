@@ -767,16 +767,16 @@ def released_versions(prefix: str) -> list[str]:
 
 
 def version_command(arguments) -> list[str]:
-    prefix = prefix_from(arguments.source, arguments.tag_prefix)
+    prefix = prefix_from(arguments.version_source, arguments.tag_prefix)
 
-    if declares_a_version(arguments.source):
-        named = arguments.version or declared_version(arguments.source)
+    if declares_a_version(arguments.version_source):
+        named = arguments.version or declared_version(arguments.version_source)
 
         # Work carries the marker and a release is what drops it: the version released is the one worked on
         # with the marker taken off, so the two cannot come to name different things. Only a marker ending the
         # version comes off, and a version handed in may be spelled with it or without. One still carrying it
         # after that - `1.0.0-SNAPSHOT+b` - is refused by check_version as a version being worked on, which it is.
-        candidate = named.removesuffix(marker_of(arguments.source))
+        candidate = named.removesuffix(marker_of(arguments.version_source))
 
         # The commit a release tags still names the version it released, and publishing a release creates that
         # tag, which a workflow running on push runs for as well. Asked there, `version` is not being asked to
@@ -803,7 +803,7 @@ def version_command(arguments) -> list[str]:
 
 def changelog_command(arguments) -> list[str]:
     in_tree = read_file("CHANGELOG.md", "the released sections")
-    prefix = prefix_from(arguments.source, arguments.tag_prefix)
+    prefix = prefix_from(arguments.version_source, arguments.tag_prefix)
 
     at_tag = {}
     for version in released_versions(prefix):
@@ -825,10 +825,10 @@ def changelog_command(arguments) -> list[str]:
 
 
 def next_command(arguments) -> list[str]:
-    released = arguments.released.removeprefix(prefix_from(arguments.source, arguments.tag_prefix))
+    released = arguments.released.removeprefix(prefix_from(arguments.version_source, arguments.tag_prefix))
     if not SEMVER.match(released):
         return [f"'{arguments.released}' is not a version this project releases"]
-    print(version_after(released) + marker_of(arguments.source))
+    print(version_after(released) + marker_of(arguments.version_source))
     return []
 
 
@@ -841,14 +841,14 @@ NOTHING_TO_WRITE = 3
 def set_version_command(arguments) -> list[str]:
     """Write a version into the file the source declares one in, which a release does twice: the version it
     releases, before it builds, and the next one being worked on, once it is out."""
-    if not declares_a_version(arguments.source):
-        print(f"{arguments.source} declares no version, so there is nothing here to write one to",
+    if not declares_a_version(arguments.version_source):
+        print(f"{arguments.version_source} declares no version, so there is nothing here to write one to",
               file=sys.stderr)
         raise SystemExit(NOTHING_TO_WRITE)
 
     # Read and written with the line endings it has, so that a CRLF file is not rewritten whole to change one
     # line.
-    adapter = SOURCES[arguments.source]
+    adapter = SOURCES[arguments.version_source]
     path = repository() / adapter.file
     written = adapter.with_version(read_declared(adapter, newline=""), arguments.version)
     with open(path, "w", encoding=adapter.encoding, newline="") as stream:
@@ -856,8 +856,8 @@ def set_version_command(arguments) -> list[str]:
 
     # Read back through the same reader everything else here uses. What this catches is a writer and a reader
     # that have come to disagree - the quiet failure, and the whole reason this is not a pattern in a shell script.
-    if declared_version(arguments.source) != arguments.version:
-        return [f"{arguments.source} still does not name {arguments.version} after being rewritten"]
+    if declared_version(arguments.version_source) != arguments.version:
+        return [f"{arguments.version_source} still does not name {arguments.version} after being rewritten"]
     print(arguments.version)
     return []
 
@@ -869,7 +869,7 @@ def close_changelog_command(arguments) -> list[str]:
     on = arguments.date or datetime.date.today().isoformat()
     # Asked for only where links are to be written: a changelog without them has no use for the prefix, and a
     # source that declares none should not have to be told one just to close a section.
-    prefix = prefix_from(arguments.source, arguments.tag_prefix) if arguments.repository_url else ""
+    prefix = prefix_from(arguments.version_source, arguments.tag_prefix) if arguments.repository_url else ""
     # Written back with the one line ending the file uses - CRLF where it has any, else a lone CR where it has one,
     # LF otherwise - so that a CRLF file is not rewritten whole to add one section; a file mixing them comes back
     # all in the first of these it holds. A lone CR ends a line too, as open() reads one by default.
@@ -900,10 +900,9 @@ def notes_command(arguments) -> list[str]:
 
 
 def channel_command(arguments) -> list[str]:
-    version = arguments.version.removeprefix(prefix_from(arguments.source, arguments.tag_prefix))
-    if not SEMVER.match(version):
-        return [f"'{arguments.version}' is not a version this project releases"]
-    print(channel_of(version))
+    if not SEMVER.match(arguments.version):
+        return [f"'{arguments.version}' is not a version; channel takes one without the tag prefix"]
+    print(channel_of(arguments.version))
     return []
 
 
@@ -911,7 +910,7 @@ def prefix_command(arguments) -> list[str]:
     """What release tags are called here. Printed rather than written into the workflows, so that a spelling
     the source declares is declared once and a repository cannot come to disagree with its own tags; a source
     declaring none is handed it, and this says it back."""
-    print(prefix_from(arguments.source, arguments.tag_prefix))
+    print(prefix_from(arguments.version_source, arguments.tag_prefix))
     return []
 
 
@@ -947,7 +946,7 @@ def holder(tag: str, version: str) -> str:
 
 
 def ancestry_command(arguments) -> list[str]:
-    prefix = prefix_from(arguments.source, arguments.tag_prefix)
+    prefix = prefix_from(arguments.version_source, arguments.tag_prefix)
     releases = released_versions(prefix)
     off_history = unreachable(prefix, releases)
     reachability = {version: version not in off_history for version in releases}
@@ -963,13 +962,21 @@ def ancestry_command(arguments) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--source", required=True, choices=SOURCES,
-                        help="where the version a release is asked to be comes from")
-    parser.add_argument("--tag-prefix", help="what release tags carry in front of the version, for a source "
-                                             "that declares no prefix of its own")
     commands = parser.add_subparsers(required=True)
 
-    version_parser = commands.add_parser("version", help="whether the candidate version may be released next")
+    # A command refuses the options it never reads.
+    # `notes` and `channel` read neither, and `set-version` writes a version but names no tag.
+    # `close-changelog` reads both only with --repository-url, and takes them either way.
+    version_source = argparse.ArgumentParser(add_help=False)
+    version_source.add_argument("--version-source", required=True, choices=SOURCES,
+                                help="where the version of the next release comes from")
+    tag_prefix = argparse.ArgumentParser(add_help=False)
+    tag_prefix.add_argument("--tag-prefix", help="what release tags carry in front of the version, for a source "
+                                                 "that declares no prefix of its own")
+    both = [version_source, tag_prefix]
+
+    version_parser = commands.add_parser("version", parents=both,
+                                         help="whether the candidate version may be released next")
     version_parser.add_argument("--version", help="the version to release, not this program's: the one to "
                                                   "check instead of what the source declares, or of the version "
                                                   "after the highest release, or a later one [Unreleased] asks "
@@ -977,18 +984,22 @@ def main() -> int:
                                                   "source puts on a declaration")
     version_parser.set_defaults(run=version_command)
 
-    next_parser = commands.add_parser("next", help="the version that follows a released one, with the source's marker")
+    next_parser = commands.add_parser("next", parents=both,
+                                      help="the version that follows a released one, with the source's marker")
     next_parser.add_argument("released", help="the version just released, with or without the tag prefix")
     next_parser.set_defaults(run=next_command)
 
-    changelog_parser = commands.add_parser("changelog", help="whether released sections still read as released")
+    changelog_parser = commands.add_parser("changelog", parents=both,
+                                           help="whether released sections still read as released")
     changelog_parser.set_defaults(run=changelog_command)
 
-    set_version_parser = commands.add_parser("set-version", help="write a version where the source declares one")
+    set_version_parser = commands.add_parser("set-version", parents=[version_source],
+                                             help="write a version where the source declares one")
     set_version_parser.add_argument("version", help="the version to write")
     set_version_parser.set_defaults(run=set_version_command)
 
-    close_changelog_parser = commands.add_parser("close-changelog", help="close [Unreleased] into a released section")
+    close_changelog_parser = commands.add_parser("close-changelog", parents=both,
+                                                 help="close [Unreleased] into a released section")
     close_changelog_parser.add_argument("version", help="the version being released")
     close_changelog_parser.add_argument("--date", help="the date to give the section, today by default")
     close_changelog_parser.add_argument("--repository-url", help="write the versions' link definitions afresh, "
@@ -1001,14 +1012,15 @@ def main() -> int:
     notes_parser.add_argument("version", help="the version whose notes to print")
     notes_parser.set_defaults(run=notes_command)
 
-    prefix_parser = commands.add_parser("prefix", help="what release tags carry in front of the version")
+    prefix_parser = commands.add_parser("prefix", parents=both, help="what release tags carry in front of the version")
     prefix_parser.set_defaults(run=prefix_command)
 
     channel_parser = commands.add_parser("channel", help="the distribution channel a version is published to")
-    channel_parser.add_argument("version", help="the version, with or without the tag prefix")
+    channel_parser.add_argument("version", help="the version, without the tag prefix")
     channel_parser.set_defaults(run=channel_command)
 
-    ancestry_parser = commands.add_parser("ancestry", help="whether every released tag is still reachable")
+    ancestry_parser = commands.add_parser("ancestry", parents=both,
+                                          help="whether every released tag is still reachable")
     ancestry_parser.set_defaults(run=ancestry_command)
 
     arguments = parser.parse_args()

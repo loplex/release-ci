@@ -15,7 +15,7 @@ description: >-
 inputs:
   source:
     description: >-
-      Where the version a release is asked to be comes from, passed to check-release as `--source`:
+      Where the version a release is asked to be comes from, passed to check-release as `--version-source`:
       `gradle.properties`, or `tags` for a repository that declares no version.
     required: true
   tag-prefix:

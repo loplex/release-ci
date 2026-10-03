@@ -12,7 +12,7 @@ version when a release is asked for, or takes the one after the highest release 
 in - a later one where `[Unreleased]` asks for more - and records nothing afterwards, because there is no file to
 record it in.
 
-What an adapter answers: `name`, the one `--source` gives it; `declares_a_version`; `marker`, the ending a
+What an adapter answers: `name`, the one `--version-source` gives it; `declares_a_version`; `marker`, the ending a
 version carries while it is being worked on, hyphen and all - `-SNAPSHOT` for gradle.properties - or empty
 where there is no such state; and `file`, the file it declares a version in, or None where it declares none.
 One that declares a version also says in `holds` what that file is looked in for - the refusal where the file
@@ -22,7 +22,7 @@ the file: check-release.py asks tag_prefix() of every source naming one unless `
 source naming none has its prefix handed in.
 
 Another source - package.json, pyproject.toml, Cargo.toml - is another adapter here, its file carrying the tag
-prefix beside the version, filed in SOURCES under the name `--source` gives it. Nothing in check-release.py
+prefix beside the version, filed in SOURCES under the name `--version-source` gives it. Nothing in check-release.py
 changes for it unless it marks a version being worked on other than with a `-SNAPSHOT` suffix, the one
 being_worked_on knows; test_sources.py holds it to what every adapter has to answer, and says so if it does. A
 plain VERSION file has no room for a prefix, which check-release.py asks of every source naming a file unless

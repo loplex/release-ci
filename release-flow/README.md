@@ -12,14 +12,14 @@ Three actions, in the order a release runs them, with what sits between them:
 A fourth action, `release-flow/warn`, follows whatever publishes the release somewhere other than
 GitHub, and says on the release when that did not complete.
 
-`release-flow/prepare`, `release-flow/draft` and `release-flow/merge-back`:
+`release-flow/prepare`, `release-flow/draft` and `release-flow/merge-back` run after a checkout with
+`fetch-depth: 0`.
 
-- take `source` and `tag-prefix` as
-  [check-release's action](../check-release/README.md#using-check-release-from-another-repository)
-  does, `^none` included;
-- run after a checkout with `fetch-depth: 0`.
-
-`release-flow/warn` takes neither and needs no checkout, as [its section](#release-flowwarn) says.
+`release-flow/prepare` and `release-flow/merge-back` take `source` and `tag-prefix` as
+[check-release's action](../check-release/README.md#using-check-release-from-another-repository)
+does, `^none` included.\
+`release-flow/draft` and `release-flow/warn` take neither.\
+`release-flow/warn` needs no checkout either, as [its section](#release-flowwarn) says.
 
 What pinning one of them to a release tag or to another ref gets is under
 [Pinning](../README.md#pinning).\
@@ -87,7 +87,6 @@ jobs:
       # Build from the commit now checked out, then:
       - uses: loplex/release-ci/release-flow/draft@<tag>
         with:
-          source: gradle.properties
           version: ${{ steps.cut.outputs.version }}
           tag: ${{ steps.cut.outputs.tag }}
           branch: ${{ steps.cut.outputs.branch }}

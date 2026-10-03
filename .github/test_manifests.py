@@ -19,7 +19,7 @@ REQUIRED = {
     "check-release/action.yml": {"source"},
     "intellij/build/action.yml": {"certificate-chain", "private-key", "private-key-password"},
     "intellij/publish/action.yml": {"plugin-id", "version", "archive", "token"},
-    "release-flow/draft/action.yml": {"source", "version", "tag", "branch"},
+    "release-flow/draft/action.yml": {"version", "tag", "branch"},
     "release-flow/merge-back/action.yml": {"source", "tag", "default-branch", "check-workflow"},
     "release-flow/prepare/action.yml": {"source"},
     "release-flow/warn/action.yml": {"tag", "outcome", "to"},

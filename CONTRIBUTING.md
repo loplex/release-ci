@@ -76,6 +76,8 @@ A change a user of the actions would notice gets an entry under `## [Unreleased]
 `### Changed`, `### Deprecated`, `### Removed`, `### Fixed` or `### Security`.\
 An entry for a change that breaks something a caller relied on starts with `**BREAKING**`, as
 [What `[Unreleased]` asks of the version](check-release/README.md#what-unreleased-asks-of-the-version) says.\
+Such a change also gets a section in [`UPGRADING.md`](UPGRADING.md), under the version it breaks,
+showing what a caller has to change.\
 A release with nothing under `[Unreleased]` is refused, unless it is a final release taking in the
 entries of the pre-releases since the final release before it, as
 [The changelog](check-release/README.md#the-changelog) says.

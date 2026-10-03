@@ -208,11 +208,11 @@ How one is spelled under each source is under
 
 ## Where the version comes from
 
-Every invocation names its source, with `--source` or an action's `source` input, because the wrong
-guess is silent.\
+Every invocation that reads the source names it, with `--version-source` or an action's `source`
+input, because the wrong guess is silent.\
 Two are implemented, and they differ in more than a filename:
 
-| `--source`          | The version a release is asked to be                                                                         | After a release           |
+| `--version-source`  | The version a release is asked to be                                                                         | After a release           |
 |---------------------|--------------------------------------------------------------------------------------------------------------|---------------------------|
 | `gradle.properties` | read from the file or handed in with `--version`, a `-SNAPSHOT` ending it dropped                            | the next one written back |
 | `tags`              | handed in with `--version`, or the version after the highest release, or a later one `[Unreleased]` asks for | nothing to write          |
@@ -274,7 +274,7 @@ them by name.
 
 Adding `package.json`, `pyproject.toml` or `Cargo.toml` means one more adapter there:
 
-- filed under the name `--source` gives it;
+- filed under the name `--version-source` gives it;
 - its file carrying the tag prefix beside the version, as `gradle.properties` carries `tagPrefix`.
 
 Nothing in the rules changes unless the new source marks a version being worked on other than with a

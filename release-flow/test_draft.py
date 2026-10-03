@@ -72,7 +72,7 @@ class Draft(unittest.TestCase):
         return subprocess.run(
             ["bash", str(DRAFT)], cwd=self.work, capture_output=True, text=True,
             env={**os.environ, "PATH": f"{self.stubs}:{os.environ['PATH']}",
-                 "SOURCE": "gradle.properties", "TAG_PREFIX": "", "VERSION": self.version,
+                 "VERSION": self.version,
                  "TAG": f"v{self.version}", "BRANCH": f"release/{self.version}", "FILES": files, "GH_TOKEN": "stub"},
         )
 

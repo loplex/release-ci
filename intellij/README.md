@@ -64,7 +64,6 @@ unasked.
     private-key-password: ${{ secrets.PRIVATE_KEY_PASSWORD }}
 - uses: loplex/release-ci/release-flow/draft@<tag>
   with:
-    source: gradle.properties
     version: ${{ steps.cut.outputs.version }}
     tag: ${{ steps.cut.outputs.tag }}
     branch: ${{ steps.cut.outputs.branch }}

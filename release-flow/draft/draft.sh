@@ -9,17 +9,11 @@
 # Driven by environment rather than by arguments, because that is how a composite action hands its inputs
 # over - and kept out of action.yml so that it can be run against a repository in a test.
 #
-# Reads:  SOURCE TAG_PREFIX VERSION TAG BRANCH FILES GH_TOKEN
+# Reads:  VERSION TAG BRANCH FILES GH_TOKEN
 set -uo pipefail
 
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
-prefix_arguments=()
-if [[ $TAG_PREFIX == '^none' ]]; then
-  prefix_arguments=(--tag-prefix '')
-elif [[ -n $TAG_PREFIX ]]; then
-  prefix_arguments=(--tag-prefix "$TAG_PREFIX")
-fi
-check_release=(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}")
+check_release=(python3 "$script")
 
 # What can be answered here - the notes, the files, the channel - is asked before anything is pushed, so that
 # a draft refused over one of them leaves no branch behind either. What GitHub answers comes after the push,

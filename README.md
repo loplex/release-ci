@@ -54,6 +54,9 @@ What a workflow pins to is its own choice, and each ref gets something different
 
 [sensitive-data]: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
 
+Moving the pin to a newer version may ask for changes in the workflow.\
+[`UPGRADING.md`](UPGRADING.md) lists them, per version.
+
 The pin holds this repository's code only: the actions `intellij/build` calls in turn,
 `actions/setup-java` and the rest, run at the tags its `action.yml` names for them, which their
 owners can move.

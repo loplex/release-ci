@@ -21,24 +21,25 @@ if [[ $TAG_PREFIX == '^none' ]]; then
 elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
-check_release=(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}")
+check_release=(python3 "$script")
+source_arguments=(--version-source "$SOURCE" "${prefix_arguments[@]}")
 
 # The rules first, and all of them, before anything is written: a release that fails them is one that was
 # never cut, not one that has to be undone.
 failed=0
 for check in changelog ancestry; do
-  "${check_release[@]}" "$check" || failed=1
+  "${check_release[@]}" "$check" "${source_arguments[@]}" || failed=1
 done
 version_arguments=()
 if [[ -n $VERSION ]]; then
   version_arguments=(--version "$VERSION")
 fi
-version=$("${check_release[@]}" version "${version_arguments[@]}"); rc=$?
+version=$("${check_release[@]}" version "${source_arguments[@]}" "${version_arguments[@]}"); rc=$?
 if (( rc != 0 || failed != 0 )); then
   echo "::error::the release rules said no, so nothing was cut"
   exit 1
 fi
-prefix=$("${check_release[@]}" prefix); rc=$?
+prefix=$("${check_release[@]}" prefix "${source_arguments[@]}"); rc=$?
 if (( rc != 0 )); then
   exit 1
 fi
@@ -58,7 +59,7 @@ repository_url_arguments=()
 if [[ -n $REPOSITORY_URL ]]; then
   repository_url_arguments=(--repository-url "$REPOSITORY_URL")
 fi
-"${check_release[@]}" close-changelog "$version" "${repository_url_arguments[@]}" || exit 1
+"${check_release[@]}" close-changelog "$version" "${source_arguments[@]}" "${repository_url_arguments[@]}" || exit 1
 
 git config user.name 'github-actions[bot]'
 git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -70,7 +71,7 @@ git switch -C "$branch" || exit 1
 # Written by the tool that also reads that line, rather than by a pattern here. A source that declares no
 # version has nothing to write and says so with a status of its own, 3; the release is still the version it
 # was asked to be. Any other failure stops here, before a commit names a release the build would not make.
-"${check_release[@]}" set-version "$version" >/dev/null; rc=$?
+"${check_release[@]}" set-version "$version" --version-source "$SOURCE" >/dev/null; rc=$?
 if (( rc == 3 )); then
   echo "${SOURCE} declares no version, so none was written; ${prefix}${version} is what the tag will say"
 elif (( rc != 0 )); then

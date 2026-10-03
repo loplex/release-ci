@@ -9,16 +9,6 @@ description: >-
   Needs `gh` and python3 3.10 or later, which GitHub-hosted runners carry.
 
 inputs:
-  source:
-    description: >-
-      Where the version a release is asked to be comes from, passed to check-release as `--source`:
-      `gradle.properties`, or `tags` for a repository that declares no version.
-    required: true
-  tag-prefix:
-    description: >-
-      What release tags carry in front of the version. Left out where the source declares it; `^none` where
-      the tags carry no prefix at all.
-    default: ''
   version:
     description: The version being released, as release-flow/prepare gives it.
     required: true
@@ -46,8 +36,6 @@ runs:
   steps:
     - shell: bash
       env:
-        SOURCE: ${{ inputs.source }}
-        TAG_PREFIX: ${{ inputs.tag-prefix }}
         VERSION: ${{ inputs.version }}
         TAG: ${{ inputs.tag }}
         BRANCH: ${{ inputs.branch }}

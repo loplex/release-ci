@@ -23,9 +23,10 @@ if [[ $TAG_PREFIX == '^none' ]]; then
 elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
-check_release=(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}")
+check_release=(python3 "$script")
+source_arguments=(--version-source "$SOURCE" "${prefix_arguments[@]}")
 
-prefix=$("${check_release[@]}" prefix); rc=$?
+prefix=$("${check_release[@]}" prefix "${source_arguments[@]}"); rc=$?
 if (( rc != 0 )); then
   echo "::error::check-release could not say what release tags are called here"
   exit 1
@@ -35,7 +36,7 @@ version="${TAG#"$prefix"}"
 # What follows a release is a question about versions, so it is answered where the other ones are. Counting
 # the patch up here would be wrong after a pre-release: 0.2.0-rc.1 was a step towards 0.2.0, and work goes on
 # heading for it rather than skipping to 0.2.1.
-next=$("${check_release[@]}" next "$TAG"); rc=$?
+next=$("${check_release[@]}" next "$TAG" "${source_arguments[@]}"); rc=$?
 if (( rc != 0 )); then
   echo "::error::check-release could not say what follows $TAG"
   exit 1
@@ -70,7 +71,7 @@ fi
 # and is believed. Any other failure stops the run before anything reaches the default branch: the release is
 # out either way, and landing it with the released version still declared would have the next release
 # refused, the file naming a version that is no longer being worked on.
-"${check_release[@]}" set-version "${next}" >/dev/null; rc=$?
+"${check_release[@]}" set-version "${next}" --version-source "$SOURCE" >/dev/null; rc=$?
 if (( rc == 0 )); then
   git diff --quiet || git commit -qam "chore: start ${next}" || exit 1
 elif (( rc == 3 )); then
@@ -126,7 +127,7 @@ if ! git merge --no-edit "origin/${DEFAULT_BRANCH}"; then
   echo "::warning::origin/${DEFAULT_BRANCH} did not merge into ${branch}; it is left to a pull request"
 else
   for check in changelog ancestry; do
-    if ! "${check_release[@]}" "$check"; then
+    if ! "${check_release[@]}" "$check" "${source_arguments[@]}"; then
       git reset -q --hard "$before"
       landable=false
       echo "::warning::origin/${DEFAULT_BRANCH} merged into ${branch}, but ${check} refused the result;" \

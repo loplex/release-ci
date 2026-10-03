@@ -147,6 +147,15 @@ class Publish(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertFalse((self.stubs / "curl.log").exists())
 
+    def test_attempts_or_wait_outside_its_range_is_refused_before_anything_is_uploaded(self):
+        for attempts, wait in (("0", "0"), ("ten", "0"), ("a[$(touch injected)]", "0"),
+                              ("10000", "0"), ("3", "half"), ("3", "-1")):
+            with self.subTest(attempts=attempts, wait=wait):
+                done = self.publish(attempts=attempts, wait=wait)
+                self.assertEqual(done.returncode, 1)
+                self.assertIn("has to be a whole number", done.stdout)
+                self.assertFalse((self.stubs / "curl.log").exists())
+
     def test_the_plugin_is_uploaded_under_its_id(self):
         self.publish(version="0.3.0-rc.1", plugin_id="org.example.plugin")
         self.assertRegex(self.uploaded(), r"-F xmlId=org\.example\.plugin( |$)")

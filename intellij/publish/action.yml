@@ -31,10 +31,11 @@ inputs:
     description: The Marketplace permanent token the upload is made with.
     required: true
   attempts:
-    description: How many times to ask the Marketplace for the version before giving up.
+    description: How many times to ask the Marketplace for the version before giving up, a whole number
+      from 1 to 9999.
     default: '10'
   wait:
-    description: Seconds between those attempts.
+    description: Whole seconds between those attempts.
     default: '30'
 
 runs:

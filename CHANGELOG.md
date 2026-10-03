@@ -30,6 +30,10 @@ released it, so once a version has a section here, that section may not be edite
 
 ### Fixed
 
+- `intellij/publish`: `attempts` and `wait` have to be whole numbers, `attempts` from 1 to 9999,
+  checked before the upload.
+  An `attempts` that was no number made no attempt, and the run failed as though the version was not
+  served; a `wait` that was no number left the attempts with no pause between them.
 - `check-release`: a glob in `checks`, such as `*`, is refused under its own name.
   It used to be expanded to the files in the workspace, and the error named those instead.
 - A `tagPrefix` in `gradle.properties` holding an unpaired `\uD800`-`\uDFFF` escape is refused.

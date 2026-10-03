@@ -8,6 +8,20 @@
 #         serves back
 set -uo pipefail
 
+# Checked before anything is uploaded, and before either is used as a number.
+# An `attempts` that is no number would make no attempt at all, and the run would fail as "not served".
+# Four digits at most: 9999 attempts at the default 30 seconds apart already take more than 83 hours,
+# so a longer number is a mistake.
+# A `wait` that is no number would leave the attempts with no pause between them.
+if [[ ! $ATTEMPTS =~ ^[1-9][0-9]{0,3}$ ]]; then
+  echo "::error::attempts is '${ATTEMPTS}', and has to be a whole number from 1 to 9999"
+  exit 1
+fi
+if [[ ! $WAIT =~ ^[0-9]+$ ]]; then
+  echo "::error::wait is '${WAIT}', and has to be a whole number of seconds"
+  exit 1
+fi
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 temp="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 

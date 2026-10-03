@@ -14,9 +14,9 @@ set -uo pipefail
 
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
 prefix_arguments=()
-if [ "$TAG_PREFIX" = '^none' ]; then
+if [[ $TAG_PREFIX == '^none' ]]; then
   prefix_arguments=(--tag-prefix '')
-elif [ -n "$TAG_PREFIX" ]; then
+elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
 check_release=(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}")
@@ -38,19 +38,19 @@ trap 'rm -f "$notes_file"' EXIT
 # nothing splits it, and the one that fails is named.
 patterns=()
 while IFS= read -r line; do
-  [ -n "${line//[[:space:]]/}" ] && patterns+=("$line")
+  [[ $line == *[^[:space:]]* ]] && patterns+=("$line")
 done <<< "$FILES"
 attachments=()
 shopt -s nullglob
 IFS=
 for pattern in "${patterns[@]}"; do
   matched=($pattern)
-  if [ "${#matched[@]}" -eq 0 ]; then
+  if (( ${#matched[@]} == 0 )); then
     echo "::error::${pattern} matches nothing, so the release would go out without it"
     exit 1
   fi
   for file in "${matched[@]}"; do
-    if [ ! -f "$file" ]; then
+    if [[ ! -f $file ]]; then
       echo "::error::${file} is no file here, so the release would go out without it"
       exit 1
     fi
@@ -65,7 +65,7 @@ shopt -u nullglob
 # what a suffix means.
 channel=$("${check_release[@]}" channel "$VERSION") || exit 1
 prerelease_arguments=()
-if [ "$channel" != default ]; then
+if [[ $channel != default ]]; then
   prerelease_arguments=(--prerelease)
 fi
 
@@ -80,12 +80,12 @@ git push --force origin "HEAD:refs/heads/${BRANCH}" || exit 1
 # they are asked for until none is left, a bounded number of times rather than for as long as GitHub keeps
 # answering. Only a draft: a published release of this version is not this run's to remove, and the version
 # check would have refused to prepare it again.
-for _ in $(seq 1 20); do
-  [ "$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)" = true ] || break
+for _ in {1..20}; do
+  [[ $(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null) == true ]] || break
   echo "Replacing a draft named ${TAG}"
   gh release delete "$TAG" --yes || exit 1
 done
-if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)" = true ]; then
+if [[ $(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null) == true ]]; then
   echo "::error::drafts named ${TAG} are still there after 20 were removed"
   exit 1
 fi

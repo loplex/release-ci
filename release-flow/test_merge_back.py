@@ -126,7 +126,7 @@ class MergeBack(Staged):
         asked_of = self.gh_log.with_name("asked-of.txt")
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
         (self.stubs / "gh").write_text(
-            gh + f'[ "$1 $2" = "workflow run" ] && git -C {self.origin} rev-parse main >> {asked_of}\nexit 0\n',
+            gh + f'[[ "$1 $2" == "workflow run" ]] && git -C {self.origin} rev-parse main >> {asked_of}\nexit 0\n',
             encoding="utf-8")
         self.carry_back()
         self.assertIn("workflow run ci.yml --ref main", self.gh_said())
@@ -139,7 +139,7 @@ class MergeBack(Staged):
         """The release is out and on the default branch by then, so a refused dispatch - a token without
         `actions: write` - is said, and the branch is still taken down."""
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
-        (self.stubs / "gh").write_text(gh + '[ "$1 $2" = "workflow run" ] && exit 1\nexit 0\n', encoding="utf-8")
+        (self.stubs / "gh").write_text(gh + '[[ "$1 $2" == "workflow run" ]] && exit 1\nexit 0\n', encoding="utf-8")
         outputs, done = self.carry_back()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(outputs.get("landed"), "true")
@@ -150,7 +150,7 @@ class MergeBack(Staged):
         """Deleting the branch is tidying after a release that has landed: refused, it is said, not failed."""
         hook = self.origin / "hooks" / "pre-receive"
         hook.write_text('#!/bin/bash\nwhile read -r old new ref; do\n'
-                        '  [ "$ref" = refs/heads/release/0.1.0 ] && [[ "$new" =~ ^0+$ ]] && exit 1\n'
+                        '  [[ $ref == refs/heads/release/0.1.0 && $new =~ ^0+$ ]] && exit 1\n'
                         'done\nexit 0\n', encoding="utf-8")
         hook.chmod(0o755)
         outputs, done = self.carry_back()
@@ -287,7 +287,7 @@ class MergeBack(Staged):
         nothing to write, which is no reason to fail, and its pull request still says the version was opened."""
         self.land_elsewhere("won the race")
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
-        (self.stubs / "gh").write_text(gh + '[ "$1 $2" = "pr create" ] && exit 1\nexit 0\n', encoding="utf-8")
+        (self.stubs / "gh").write_text(gh + '[[ "$1 $2" == "pr create" ]] && exit 1\nexit 0\n', encoding="utf-8")
         _, first = self.carry_back(fetch=False)
         self.assertNotEqual(first.returncode, 0, first.stdout + first.stderr)
         (self.stubs / "gh").write_text(gh, encoding="utf-8")
@@ -313,7 +313,7 @@ class MergeBack(Staged):
         said_before = self.gh_said().splitlines()
         url = "https://github.com/o/r/pull/1"
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
-        (self.stubs / "gh").write_text(gh + f'[ "$1 $2" = "pr list" ] && echo {url}\nexit 0\n', encoding="utf-8")
+        (self.stubs / "gh").write_text(gh + f'[[ "$1 $2" == "pr list" ]] && echo {url}\nexit 0\n', encoding="utf-8")
         # Checked out afresh, as a repeated run is: the tag, and the branch only as the remote holds it.
         git("switch", "-q", "--detach", self.tag, cwd=self.work)
         git("branch", "-q", "-D", "release/0.1.0", cwd=self.work)
@@ -334,8 +334,8 @@ class MergeBack(Staged):
         _, first = self.carry_back(fetch=False)
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
-        (self.stubs / "gh").write_text(gh + '[ "$1 $2" = "pr list" ] && echo https://github.com/o/r/pull/1\nexit 0\n',
-                                       encoding="utf-8")
+        (self.stubs / "gh").write_text(
+            gh + '[[ "$1 $2" == "pr list" ]] && echo https://github.com/o/r/pull/1\nexit 0\n', encoding="utf-8")
         # Checked out afresh, as a repeated run is: the tag, and the branch only as the remote holds it.
         git("switch", "-q", "--detach", self.tag, cwd=self.work)
         git("branch", "-q", "-D", "release/0.1.0", cwd=self.work)

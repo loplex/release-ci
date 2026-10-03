@@ -24,10 +24,10 @@ STUB = r'''#!/bin/bash
 here="$(dirname "$0")"
 printf '%s\n' "$*" >> "$here/said.txt"
 case "$1 $2" in
-  "release view") [ -f "$here/view.json" ] || { echo "release not found" >&2; exit 1; }; cat "$here/view.json" ;;
+  "release view") [[ -f $here/view.json ]] || { echo "release not found" >&2; exit 1; }; cat "$here/view.json" ;;
   "release edit")
-    [ -f "$here/refuse" ] && exit 1
-    while [ $# -gt 0 ]; do [ "$1" = --notes-file ] && cp "$2" "$here/written.md"; shift; done ;;
+    [[ -f $here/refuse ]] && exit 1
+    while (( $# > 0 )); do [[ $1 == --notes-file ]] && cp "$2" "$here/written.md"; shift; done ;;
 esac
 exit 0
 '''

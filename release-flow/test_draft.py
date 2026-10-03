@@ -23,13 +23,13 @@ STUB = r'''#!/bin/bash
 here="$(dirname "$0")"
 printf '%s\n' "$*" >> "$here/said.txt"
 case "$1 $2" in
-  "release view") [ -f "$here/isDraft" ] && cat "$here/isDraft" && exit 0; exit 1 ;;
+  "release view") [[ -f $here/isDraft ]] && cat "$here/isDraft" && exit 0; exit 1 ;;
   "release delete")
     left=$(( $(cat "$here/drafts" 2>/dev/null || echo 1) - 1 ))
     echo "$left" > "$here/drafts"
-    [ "$left" -gt 0 ] || rm -f "$here/isDraft" ;;
+    (( left > 0 )) || rm -f "$here/isDraft" ;;
   "release create")
-    while [ $# -gt 0 ]; do [ "$1" = --notes-file ] && cp "$2" "$here/notes.txt"; shift; done ;;
+    while (( $# > 0 )); do [[ $1 == --notes-file ]] && cp "$2" "$here/notes.txt"; shift; done ;;
 esac
 exit 0
 '''

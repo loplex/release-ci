@@ -16,9 +16,9 @@ set -uo pipefail
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
 
 prefix_arguments=()
-if [ "$TAG_PREFIX" = '^none' ]; then
+if [[ $TAG_PREFIX == '^none' ]]; then
   prefix_arguments=(--tag-prefix '')
-elif [ -n "$TAG_PREFIX" ]; then
+elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
 check_release=(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}")
@@ -30,16 +30,16 @@ for check in changelog ancestry; do
   "${check_release[@]}" "$check" || failed=1
 done
 version_arguments=()
-if [ -n "$VERSION" ]; then
+if [[ -n $VERSION ]]; then
   version_arguments=(--version "$VERSION")
 fi
 version=$("${check_release[@]}" version "${version_arguments[@]}"); rc=$?
-if [ "$rc" -ne 0 ] || [ "$failed" -ne 0 ]; then
+if (( rc != 0 || failed != 0 )); then
   echo "::error::the release rules said no, so nothing was cut"
   exit 1
 fi
 prefix=$("${check_release[@]}" prefix); rc=$?
-if [ "$rc" -ne 0 ]; then
+if (( rc != 0 )); then
   exit 1
 fi
 # Not a setting: once the release is tagged, check-release names release/<version> first among the remote
@@ -55,7 +55,7 @@ branch="release/${version}"
 # before the file is rewritten, so a release with nothing to say about itself leaves no branch and no output
 # behind either.
 repository_url_arguments=()
-if [ -n "$REPOSITORY_URL" ]; then
+if [[ -n $REPOSITORY_URL ]]; then
   repository_url_arguments=(--repository-url "$REPOSITORY_URL")
 fi
 "${check_release[@]}" close-changelog "$version" "${repository_url_arguments[@]}" || exit 1
@@ -71,9 +71,9 @@ git switch -C "$branch" || exit 1
 # version has nothing to write and says so with a status of its own, 3; the release is still the version it
 # was asked to be. Any other failure stops here, before a commit names a release the build would not make.
 "${check_release[@]}" set-version "$version" >/dev/null; rc=$?
-if [ "$rc" -eq 3 ]; then
+if (( rc == 3 )); then
   echo "${SOURCE} declares no version, so none was written; ${prefix}${version} is what the tag will say"
-elif [ "$rc" -ne 0 ]; then
+elif (( rc != 0 )); then
   echo "::error::${SOURCE} could not be given ${version}, so no release commit was made"
   exit 1
 fi

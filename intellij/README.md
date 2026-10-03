@@ -176,7 +176,7 @@ jobs:
         run: |
           gh release download "$TAG" --pattern '*.zip' --dir "$RUNNER_TEMP/accepted"
           archives=("$RUNNER_TEMP"/accepted/*.zip)
-          if [ "${#archives[@]}" -ne 1 ]; then
+          if (( ${#archives[@]} != 1 )); then
             echo "::error::the release carries ${#archives[@]} archive(s), and publishing takes exactly one"
             exit 1
           fi

@@ -14,9 +14,9 @@ script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release.py"
 # apart, and of the two readings this is the one whose mistake is loud. `^none` is how the other
 # one is said, git refusing `^` in a ref name and so never leaving it a real prefix's spelling.
 prefix_arguments=()
-if [ "$TAG_PREFIX" = '^none' ]; then
+if [[ $TAG_PREFIX == '^none' ]]; then
   prefix_arguments=(--tag-prefix '')
-elif [ -n "$TAG_PREFIX" ]; then
+elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
 
@@ -26,7 +26,7 @@ read -rd '' -a check_names <<< "$CHECKS"
 
 # Nothing asked for is refused for the same reason a name that is no check is: a run that compared nothing
 # and passed reads exactly like one that compared everything.
-if [ "${#check_names[@]}" -eq 0 ]; then
+if (( ${#check_names[@]} == 0 )); then
   echo "::error::no check was asked for: name some of version, changelog and ancestry"
   exit 1
 fi
@@ -42,7 +42,7 @@ done
 
 failed=0
 for check in "${check_names[@]}"; do
-  if [ "$check" = version ] && [ -n "$VERSION" ]; then
+  if [[ $check == version && -n $VERSION ]]; then
     out=$(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}" version --version "$VERSION" 2>&1)
     rc=$?
   else
@@ -51,15 +51,15 @@ for check in "${check_names[@]}"; do
   fi
   printf '%s\n' "$out"
 
-  if [ "$rc" -ne 0 ]; then
+  if (( rc != 0 )); then
     echo "::error::check-release $check said no"
     failed=1
-  elif [ "$check" = version ]; then
+  elif [[ $check == version ]]; then
     candidate=$(printf '%s' "$out" | tail -1)
     printf 'version=%s\n' "$candidate" >> "$GITHUB_OUTPUT"
     channel=$(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}" channel "$candidate")
     rc=$?
-    if [ "$rc" -ne 0 ]; then
+    if (( rc != 0 )); then
       echo "::error::check-release channel said no"
       failed=1
     else

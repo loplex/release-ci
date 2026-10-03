@@ -21,15 +21,15 @@ PUBLISH = Path(__file__).resolve().parent / "publish" / "publish.sh"
 CURL = r'''#!/bin/bash
 printf '%s\n' "$*" >> "$STUBS/curl.log"
 out=""; prev=""
-for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
+for a in "$@"; do [[ $prev == -o ]] && out="$a"; prev="$a"; done
 if [[ "$*" == *"/api/updates/upload"* ]]; then
-  [ -n "$out" ] && printf 'the upload answer' > "$out"
+  [[ -n $out ]] && printf 'the upload answer' > "$out"
   printf '%s' "$(cat "$STUBS/upload-code")"
   exit 0
 fi
 case " $* " in *" -L "*) ;; *) printf '301'; exit 0 ;; esac
 code="$(head -1 "$STUBS/serve-codes")"; sed -i 1d "$STUBS/serve-codes"
-[ "$code" = 200 ] && [ -n "$out" ] && cp "$STUBS/served.zip" "$out"
+[[ $code == 200 && -n $out ]] && cp "$STUBS/served.zip" "$out"
 printf '%s' "$code"
 '''
 

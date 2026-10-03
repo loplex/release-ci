@@ -6,7 +6,7 @@
 # check that did not run. Kept out of action.yml so that it can be run in a test.
 set -uo pipefail
 
-if [ -z "$(ls -A build/reports/pluginVerifier 2>/dev/null)" ]; then
+if [[ -z $(ls -A build/reports/pluginVerifier 2>/dev/null) ]]; then
   echo "::error::verifyPlugin left no report in build/reports/pluginVerifier: the build script is not on" \
        "the IntelliJ Platform Gradle Plugin 2.x, whose verifyPlugin runs the Plugin Verifier, or it" \
        "writes the report elsewhere"

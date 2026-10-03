@@ -16,10 +16,10 @@ shopt -u nullglob
 # A pattern with no glob character in it comes back as itself whether the file is there or not, so what came
 # back is asked for as well as counted, and said apart: "matched 1" of a file that is not there would read as
 # the count being at fault.
-if [ "${#matched[@]}" -ne 1 ]; then
+if (( ${#matched[@]} != 1 )); then
   echo "::error::${ARCHIVE_PATTERN} matched ${#matched[@]} file(s) here, and a release carries exactly one archive"
   exit 1
-elif [ ! -f "${matched[0]}" ]; then
+elif [[ ! -f ${matched[0]} ]]; then
   echo "::error::${ARCHIVE_PATTERN} names no file here, and a release carries exactly one archive"
   exit 1
 fi

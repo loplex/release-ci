@@ -10,7 +10,7 @@ set -uo pipefail
 
 # Refused here rather than skipped at the end: the input is required, and GitHub does not hold an action to
 # that, so one left out arrives as nothing. Skipped, it would land the release with nothing asked to check it.
-if [ -z "$CHECK_WORKFLOW" ]; then
+if [[ -z $CHECK_WORKFLOW ]]; then
   echo "::error::check-workflow names no workflow, so nothing would check the release once it landed"
   exit 1
 fi
@@ -18,15 +18,15 @@ fi
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
 
 prefix_arguments=()
-if [ "$TAG_PREFIX" = '^none' ]; then
+if [[ $TAG_PREFIX == '^none' ]]; then
   prefix_arguments=(--tag-prefix '')
-elif [ -n "$TAG_PREFIX" ]; then
+elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
 check_release=(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}")
 
 prefix=$("${check_release[@]}" prefix); rc=$?
-if [ "$rc" -ne 0 ]; then
+if (( rc != 0 )); then
   echo "::error::check-release could not say what release tags are called here"
   exit 1
 fi
@@ -36,7 +36,7 @@ version="${TAG#"$prefix"}"
 # the patch up here would be wrong after a pre-release: 0.2.0-rc.1 was a step towards 0.2.0, and work goes on
 # heading for it rather than skipping to 0.2.1.
 next=$("${check_release[@]}" next "$TAG"); rc=$?
-if [ "$rc" -ne 0 ]; then
+if (( rc != 0 )); then
   echo "::error::check-release could not say what follows $TAG"
   exit 1
 fi
@@ -71,9 +71,9 @@ fi
 # out either way, and landing it with the released version still declared would have the next release
 # refused, the file naming a version that is no longer being worked on.
 "${check_release[@]}" set-version "${next}" >/dev/null; rc=$?
-if [ "$rc" -eq 0 ]; then
+if (( rc == 0 )); then
   git diff --quiet || git commit -qam "chore: start ${next}" || exit 1
-elif [ "$rc" -eq 3 ]; then
+elif (( rc == 3 )); then
   echo "${SOURCE} records no version after a release, so none was written"
 else
   echo "::error::${SOURCE} could not be given ${next}, so nothing was carried back"
@@ -148,15 +148,15 @@ fi
 # the credential the checkout left - a protected one requiring pull requests - refuses it every time, and
 # the warning cannot tell the two apart, so it names both.
 landed=false
-if [ "$landable" = true ] && git push origin "HEAD:${DEFAULT_BRANCH}"; then
+if [[ $landable == true ]] && git push origin "HEAD:${DEFAULT_BRANCH}"; then
   landed=true
-elif [ "$landable" = true ]; then
+elif [[ $landable == true ]]; then
   echo "::warning::the push to ${DEFAULT_BRANCH} was refused: it moved while this ran, or it takes no push" \
        "from the credential the checkout left"
 fi
 echo "landed=${landed}" >> "$GITHUB_OUTPUT"
 
-if [ "$landed" = true ]; then
+if [[ $landed == true ]]; then
   # Neither of these is worth failing a release that is already out and already on the default branch, so
   # both only say so. A push made with GITHUB_TOKEN starts no workflow run, which is why the check is asked
   # for by hand; asking is a write to Actions and is answered 403 without `actions: write`. Where a pull
@@ -181,7 +181,7 @@ fi
 # the question itself fails, the pull request is asked for all the same, and the answer to that says why.
 carrying_pull_request=$(gh pr list --base "${DEFAULT_BRANCH}" --head "$branch" --state open --json url \
   --jq '.[0].url // empty' 2>/dev/null) || carrying_pull_request=""
-if [ -n "$carrying_pull_request" ]; then
+if [[ -n $carrying_pull_request ]]; then
   echo "${carrying_pull_request} carries ${TAG} back already, so no other pull request is opened"
   exit 0
 fi

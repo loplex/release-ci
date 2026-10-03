@@ -9,7 +9,8 @@
 set -uo pipefail
 
 # Checked before anything is uploaded, and before either is used as a number.
-# An `attempts` that is no number would make no attempt at all, and the run would fail as "not served".
+# `attempts` goes into the arithmetic of the waiting loop, where bash evaluates it as an expression:
+# a name would be read as a variable, and a subscript would run the command it holds.
 # Four digits at most: 9999 attempts at the default 30 seconds apart already take more than 83 hours,
 # so a longer number is a mistake.
 # A `wait` that is no number would leave the attempts with no pause between them.
@@ -36,7 +37,7 @@ channel=$(python3 "${here}/../../check-release/check-release.py" --source tags -
 # (https://plugins.jetbrains.com/docs/marketplace/plugin-upload.html), which is also what the Gradle
 # publishPlugin task does with `default` - it sends nothing.
 channel_field=()
-if [ "$channel" != default ]; then
+if [[ $channel != default ]]; then
   channel_field=(-F "channel=${channel}")
 fi
 
@@ -72,7 +73,7 @@ esac
 # character of a version that means something else in a query - the Marketplace reads it as a space and
 # answers 404 - so it is sent encoded.
 url="https://plugins.jetbrains.com/plugin/download?pluginId=${PLUGIN_ID}&version=${VERSION//+/%2B}"
-if [ "$channel" != default ]; then
+if [[ $channel != default ]]; then
   url="${url}&channel=${channel}"
 fi
 
@@ -85,14 +86,14 @@ fi
 # https://plugins.jetbrains.com/docs/marketplace/jetbrains-marketplace-approval-guidelines.html
 served="${temp}/served.zip"
 download_code=000
-for attempt in $(seq 1 "$ATTEMPTS"); do
+for (( attempt = 1; attempt <= ATTEMPTS; attempt++ )); do
   download_code=$(curl -sS -L -o "$served" -w '%{http_code}' "$url") || download_code=000
-  [ "$download_code" = 200 ] && break
+  [[ $download_code == 200 ]] && break
   echo "attempt ${attempt}: HTTP ${download_code}"
-  [ "$attempt" -lt "$ATTEMPTS" ] && sleep "$WAIT"
+  (( attempt < ATTEMPTS )) && sleep "$WAIT"
 done
 
-if [ "$download_code" != 200 ]; then
+if [[ $download_code != 200 ]]; then
   echo "::error::${VERSION} is not served by the Marketplace (last HTTP ${download_code}). The upload did not" \
        "happen, or this plugin has no listing yet and the first version has to be uploaded by hand: the archive" \
        "the release carries, and once that is approved, run this job again, which GitHub allows for 30 days" \

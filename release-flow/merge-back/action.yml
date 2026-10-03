@@ -1,78 +1,101 @@
 name: merge-back
-description: >-
-  Carry a published release back onto the default branch: open the next version being worked on where the
-  source declares one, take in whatever landed since the release was cut, and fast-forward the default branch
-  onto the release branch, so that the release commit and its tag stay on the history. Where that cannot be
-  done, because of a conflict, a merged tree the release rules refuse, a race, or a default branch that takes
-  no push from the credential actions/checkout left in the workspace, it opens a pull request instead. The
-  release commit is expected on the remote's release/<version>, a name that is not a setting. The run that
-  lands the release deletes that branch, and a deletion that fails - a rule over the branch forbidding it,
-  say - only warns; where a pull request carries the release instead, the branch is its head, and is left to
-  whoever merges it. A run repeated once the release has landed finds it there and passes; one repeated while
-  the pull request an earlier run opened is still open tries to land the release again, and leaves that pull
-  request carrying it where it still cannot. Runs in the calling workspace, after a checkout with fetch-depth
-  0, and the calling job needs `contents: write`, `pull-requests: write` and `actions: write` - the last
-  because asking for a workflow run is a write to Actions and is answered 403 without it; the last two are
-  asked of the default `token`, and one given in its place has to carry them itself. Opening the pull request
-  with GITHUB_TOKEN takes a setting of the repository as well, "Allow GitHub Actions to create and approve
-  pull requests", which a new personal repository has off, and merging it takes one more: merge commits have
-  to be allowed. Needs `gh` and python3 3.10 or later, which GitHub-hosted runners carry.
+description: |
+  Carries a published release back onto the default branch.
+
+  1. Where `version-source` declares a version, writes the next one and commits it: the version being worked on.
+  2. Merges in whatever landed on the default branch since the release was cut.
+  3. Fast-forwards the default branch onto the release branch.
+     The release commit and its tag stay on the default branch's history.
+
+  Where that cannot be done, it opens a pull request instead. That happens when:
+  - the merge conflicts;
+  - the release checks refuse the merged tree;
+  - the default branch moved while this ran;
+  - the default branch takes no push from the credentials actions/checkout left.
+
+  The release commit is expected on the remote branch `release/<version>`. The name is not a setting.
+  - A run that lands the release deletes that branch. A deletion that fails only warns.
+  - Where a pull request carries the release, the branch is its head, and is left to whoever merges it.
+
+  Running it again:
+  - after the release has landed, it finds the release there and passes;
+  - while a pull request from an earlier run is still open, it tries to land the release again,
+    and leaves that pull request carrying it where it still cannot.
+
+  Runs in the calling workspace, after a checkout with `fetch-depth: 0`.
+  The calling job needs these permissions:
+  - `contents: write`;
+  - `pull-requests: write`, to open the pull request;
+  - `actions: write`, to start `check-workflow`; GitHub answers 403 without it.
+
+  The last two are needed by the default `token`. A token given in its place has to have them itself.
+  Opening the pull request with GITHUB_TOKEN also needs the repository setting
+  "Allow GitHub Actions to create and approve pull requests", which a new personal repository has off.
+  Merging it needs merge commits to be allowed.
+  Needs `gh` and python3 3.10 or later. GitHub-hosted runners have both.
 
 inputs:
   version-source:
-    description: >-
-      Where the version a release is asked to be comes from, passed to check-release as `--version-source`:
-      `gradle.properties`, or `tags` for a repository that declares no version.
+    description: |
+      Where the version of the next release comes from:
+      - `gradle.properties`: the file declares it in `version`.
+      - `tags`: no file declares it.
+
+      check-release's action describes both in full.
     required: true
   tag-prefix:
-    description: >-
-      What release tags carry in front of the version. Left out where the source declares it; `^none` where
-      the tags carry no prefix at all.
+    description: |
+      What a release tag has in front of the version: `v` for `v0.1.0`.
+      - Leave it out under `gradle.properties`: the file declares it.
+      - `^none`: the tags have no prefix at all.
     default: ''
   tag:
-    description: The tag of the release that was published, as `github.event.release.tag_name` gives it.
+    description: |
+      The tag of the release that was published, as `github.event.release.tag_name` gives it.
     required: true
   default-branch:
-    description: >-
-      The branch a release is carried back onto, as `github.event.repository.default_branch` gives it. Asked
-      of the repository rather than written down, so that this says the same thing where it is called `main`
-      and where it is called something else.
+    description: |
+      The branch the release is carried back onto, as `github.event.repository.default_branch` gives it.
+      Read from the repository rather than written down, so it is right whatever the branch is called.
     required: true
   check-workflow:
-    description: >-
-      The workflow that checks the default branch, by file name, asked for once the release has landed: a push
-      made with GITHUB_TOKEN starts no workflow run, so the branch would otherwise arrive unchecked. It has to
-      list `workflow_dispatch` among its triggers: GitHub refuses to start one that does not, and the release
-      has landed by then, so the run only warns.
-      Left out, the run is refused before anything is carried back: GitHub does not hold an action to
-      `required`, and a release landing with nothing asked to check it is what this input is there to stop.
+    description: |
+      The file name of the workflow that checks the default branch, started once the release has landed.
+      A push made with GITHUB_TOKEN starts no workflow run, so the branch would otherwise arrive unchecked.
+
+      The workflow has to list `workflow_dispatch` among its triggers.
+      GitHub refuses to start one that does not; the release has landed by then, so the run only warns.
+
+      Left out, the run fails before anything is carried back.
+      GitHub does not enforce `required`, and a release must not land with nothing checking it.
     required: true
   token:
-    description: >-
-      The token `gh` acts with, to open the pull request and to ask for the check. The pushes are made with
-      whatever actions/checkout persisted, not with this.
+    description: |
+      The token `gh` uses to open the pull request and to start `check-workflow`.
+      The pushes are made with the credentials actions/checkout left, not with this token.
     default: ${{ github.token }}
 
 outputs:
   version:
-    description: >-
-      The released version, with the tag prefix off. Written before anything is carried back, so a later step
-      can read it even where carrying back failed.
+    description: |
+      The released version, without the tag prefix.
+      Written before anything is carried back, so a later step can read it even where carrying back failed.
     value: ${{ steps.merge-back.outputs.version }}
   next:
-    description: >-
-      The version that follows the released one, spelled the way the source spells one being worked on:
-      `0.1.1-SNAPSHOT` under `gradle.properties`, a bare `0.1.1` under `tags`. Written to the source and
-      opened with a commit of its own where the source declares a version; where it declares none, as with
-      `tags`, only said.
+    description: |
+      The version that follows the released one, written the way the source writes a version being worked on:
+      - `gradle.properties`: `0.1.1-SNAPSHOT`, written to the file and committed.
+      - `tags`: `0.1.1`, only reported, because there is no file to write it to.
     value: ${{ steps.merge-back.outputs.next }}
   landed:
-    description: >-
-      `true` where the release commit is on the default branch: carried there by this run, or found there by
-      a run repeated after the release landed, whichever way it landed. `false` where it is not: a pull
-      request carries the release instead, opened by this run or by an earlier one and still open, which is a
-      thing to look at rather than a step of the process. Read it only after a step that succeeded: one that
-      failed may have left it unset, or `false` with no pull request opened.
+    description: |
+      Whether the release commit is on the default branch:
+      - `true`: this run carried it there, or a repeated run found it there.
+      - `false`: a pull request carries the release instead, opened by this run or by an earlier one.
+        Someone has to look at it and merge it.
+
+      Read it only after a step that succeeded.
+      A step that failed may have left it unset, or `false` with no pull request opened.
     value: ${{ steps.merge-back.outputs.landed }}
 
 runs:

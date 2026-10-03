@@ -1,62 +1,78 @@
 name: build
-description: >-
-  Build, check, verify and sign an IntelliJ platform plugin from the commit the workspace is on, and say where
-  the signed archive landed. Everything between release-flow/prepare and release-flow/draft for a JetBrains
-  plugin, and nothing that is not: the version and the changelog were settled before this ran, and the draft
-  that carries the archive comes after. The release runs with `version-source: gradle.properties`, whose `version`
-  line release-flow/prepare rewrites, and the plugin has to take its version from that line. Needs the signing
-  certificate chain and private key, without which there is no signed archive to hand on. The Plugin
-  Verifier's report is uploaded as the artifact `pluginVerifier-result`, whether or not it passed. The build
-  script has to be on the IntelliJ Platform Gradle Plugin 2.x, whose `verifyPlugin` runs the Plugin Verifier;
-  under the Gradle IntelliJ Plugin 1.x it does not, and the build stops on finding no report. The report is
-  looked for in `build/reports/pluginVerifier` under the workspace, so the plugin has to be the build's root
-  project. Gradle is cached by setup-gradle's open-source `basic` provider, not by its default one, a
-  proprietary component under Gradle's own terms.
+description: |
+  Builds, checks, verifies and signs an IntelliJ Platform plugin from the commit the workspace is on,
+  and says where the signed archive landed.
+
+  It is the step between release-flow/prepare and release-flow/draft for a JetBrains plugin, and nothing more.
+  The version and the changelog are settled before it runs, and the draft that carries the archive comes after.
+
+  What the build script has to do:
+  - Take the plugin's version from the `version` line of gradle.properties.
+    The release runs with `version-source: gradle.properties`, and release-flow/prepare rewrites that line.
+  - Read the signing certificate chain and private key in its `signing` block, from the environment.
+    Without them there is no signed archive.
+  - Use the IntelliJ Platform Gradle Plugin 2.x, whose `verifyPlugin` runs the Plugin Verifier.
+    Under the Gradle IntelliJ Plugin 1.x it does not, and the build stops when it finds no report.
+  - Build the plugin as the root project: the report is looked for in `build/reports/pluginVerifier`
+    under the workspace.
+
+  The Plugin Verifier's report is uploaded as the artifact `pluginVerifier-result`, whether or not it passed.
+  Gradle is cached by setup-gradle's open-source `basic` provider.
+  The default provider is a proprietary component under Gradle's own terms.
 
 inputs:
   java-version:
-    description: >-
-      The JDK Gradle runs on, which is a property of this pipeline rather than of the plugin: what a plugin
-      compiles against is its own `jvmToolchain`, declared in its build script, and one targeting something
-      older still builds here.
+    description: |
+      The JDK Gradle runs on.
+      This is a property of the pipeline, not of the plugin.
+      What a plugin compiles against is its own `jvmToolchain` in its build script,
+      so a plugin targeting an older Java still builds here.
     default: '21'
   java-distribution:
-    description: The JDK distribution setup-java is asked for.
+    description: |
+      The JDK distribution setup-java is asked for.
     default: zulu
   certificate-chain:
-    description: >-
-      The certificate chain the plugin is signed with. `signPlugin` is handed it as the environment variable
-      `CERTIFICATE_CHAIN`, which the build script's `signing` block has to read.
+    description: |
+      The certificate chain the plugin is signed with.
+      `signPlugin` gets it in the environment variable `CERTIFICATE_CHAIN`,
+      which the build script's `signing` block has to read.
     required: true
   private-key:
-    description: >-
-      The private key the plugin is signed with, handed to `signPlugin` as `PRIVATE_KEY`, which the build script's
-      `signing` block has to read as it does `CERTIFICATE_CHAIN`.
+    description: |
+      The private key the plugin is signed with.
+      `signPlugin` gets it in the environment variable `PRIVATE_KEY`,
+      which the build script's `signing` block has to read.
     required: true
   private-key-password:
-    description: >-
-      The password of that private key, handed to `signPlugin` as `PRIVATE_KEY_PASSWORD`, which the build script's
-      `signing` block has to read as it does `CERTIFICATE_CHAIN`.
+    description: |
+      The password of that private key.
+      `signPlugin` gets it in the environment variable `PRIVATE_KEY_PASSWORD`,
+      which the build script's `signing` block has to read.
     required: true
   free-disk-space:
-    description: >-
-      Make room before the Plugin Verifier runs, which downloads an IDE for every release it checks against:
-      jlumbroso/free-disk-space then removes the runner's Android, .NET and Haskell toolchains and its docker
-      images, which this action's later steps, and release-flow's, do without; a calling job that needs any
-      of them later leaves this off. The swap is left in place: without it, a build that runs short of memory
-      is killed with nothing in its log pointing back here. Off by default; the free space is printed before
-      and after `verifyPlugin`, so a run's log shows how much room the verifier took.
+    description: |
+      `true` makes room before the Plugin Verifier runs, which downloads an IDE for every release it checks against.
+      jlumbroso/free-disk-space then removes the runner's Android, .NET and Haskell toolchains and its docker images.
+      - This action's later steps, and release-flow's, do without them.
+      - A calling job that needs any of them later leaves this off.
+      - The swap is kept: without it, a build that runs out of memory is killed with nothing in its log
+        pointing here.
+
+      Off by default.
+      The free space is printed before and after `verifyPlugin`, so a run's log shows how much room it took.
     default: 'false'
   archive-pattern:
-    description: >-
-      Where the signed archive lands, as a pattern under the workspace, a bash glob, in which `**` goes no
-      deeper than `*`; exactly one file has to match it. The Plugin Verifier's report is looked for in
-      `build/reports/pluginVerifier` whatever this says.
+    description: |
+      Where the signed archive lands, as a bash glob under the workspace, in which `**` goes no deeper than `*`.
+      Exactly one file has to match it.
+      The Plugin Verifier's report is looked for in `build/reports/pluginVerifier` whatever this says.
     default: build/distributions/*-signed.zip
 
 outputs:
   archive:
-    description: The signed archive, by path, for release-flow/draft to attach to the draft.
+    description: |
+      The path of the signed archive, for release-flow/draft to attach to the draft.
     value: ${{ steps.archive.outputs.archive }}
 
 runs:

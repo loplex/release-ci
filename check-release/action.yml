@@ -1,57 +1,77 @@
 name: check-release
-description: >-
-  Ask a repository the questions a release has to pass: which version may be released next, whether a
-  released changelog section still reads as it was released, and whether every released tag is still
-  reachable. Runs in the calling workspace and needs python3 3.10 or later, which GitHub-hosted runners
-  carry. Check out with fetch-depth 0: a shallow checkout has neither the history ancestry reads nor the
-  tags every check counts from, and its checks find nothing and pass rather than fail - all but `version`
-  under `tags` with no version given, which finds no release to count from.
+description: |
+  Checks a repository before a release:
+  - `version`: which version may be released next.
+  - `changelog`: whether the released sections of CHANGELOG.md are unchanged.
+  - `ancestry`: whether every release tag is still reachable from the history.
+
+  Runs in the calling workspace.
+  Needs python3 3.10 or later. GitHub-hosted runners have it.
+  Needs a checkout with `fetch-depth: 0`.
+  A shallow checkout has no tags and no history, so the checks find nothing to compare and pass.
+  The exception is `version` under `version-source: tags` without a `version` input: it fails, because it finds no
+  release to count from.
 
 inputs:
   version-source:
-    description: >-
-      Where the version a release is asked to be comes from - `gradle.properties`, or `tags` for a
-      repository that declares no version: it is handed one, or takes the one after its highest
-      release, or a later one where `[Unreleased]` asks for more. No default, because a wrong guess here is
-      silent.
+    description: |
+      Where the version of the next release comes from:
+      - `gradle.properties`: the file declares it in `version`, for example `0.2.0-SNAPSHOT`.
+        The file also declares the tag prefix in `tagPrefix`.
+      - `tags`: no file declares it.
+        It comes from the `version` input.
+        Without one, it is the version after the highest release tag,
+        moved further where `[Unreleased]` in CHANGELOG.md asks for it (a new feature asks for a minor).
+
+      Required, because a wrong guess would pass silently.
     required: true
   tag-prefix:
-    description: >-
-      What a release tag carries in front of the version, `v` for `v0.1.0`. Left out where the source
-      declares it - `gradle.properties` does, in the `tagPrefix` line the file has to carry - because a
-      default here would answer over the top of that declaration, and a repository tagging bare
-      versions would then be read as tagging `v*`: no released tags found, and every check passing
-      having compared nothing.
+    description: |
+      What a release tag has in front of the version: `v` for `v0.1.0`.
+      - Leave it out under `gradle.properties`: the file declares the prefix in `tagPrefix`.
+      - Give it under `tags`.
+      - `^none`: the tags have no prefix at all.
 
-      Where the source declares nothing and the tags carry no prefix at all, say `^none`. An empty value
-      cannot say it: GitHub hands over an input left out and an input set to nothing as the same empty
-      string. `^` is the point of that spelling rather than decoration - git refuses it in a ref name,
-      so no repository can ever have it as a real prefix and mean something else by it.
+      There is no default: under `gradle.properties` it would override the file's `tagPrefix`.
+      A wrong prefix finds no release tags, and every check then passes having compared nothing.
+      The exception is `version` under `tags` with no `version` input: it fails, finding no release to count from.
+
+      An empty value cannot mean "no prefix", because GitHub passes a missing input as an empty string too.
+      `^` cannot appear in a git tag name, so `^none` can never be a real prefix.
     default: ''
   checks:
-    description: >-
-      Which checks to run, separated by spaces, out of `version`, `changelog` and `ancestry`. A name
-      that is none of those fails the run rather than being skipped, and so does naming none at all: a
-      check nobody notices was not run is a check that passes having compared nothing.
+    description: |
+      Which checks to run, separated by spaces or newlines:
+      - `version`
+      - `changelog`
+      - `ancestry`
+
+      An unknown name fails the run, and so does an empty list.
+      A check that silently did not run would look the same as one that passed.
     default: changelog ancestry
   version:
-    description: >-
-      Check this version instead of the one the source declares: `0.2.0` or `0.2.0-SNAPSHOT` under
-      `gradle.properties`, where a marker ending the version is dropped, and a bare `0.2.0` under `tags`,
-      which declares none: left empty there, the version after the highest release is checked, or a later
-      one where `[Unreleased]` asks for more. Only read by `version`. The `version` output is bare under
-      either source.
+    description: |
+      The version to check, instead of the one `version-source` gives.
+      Only `version` reads it.
+      - Under `gradle.properties`: `0.2.0` or `0.2.0-SNAPSHOT`; the `-SNAPSHOT` at the end is dropped.
+      - Under `tags`: `0.2.0`.
+        Left empty, the version after the highest release is checked, as described under `version-source`.
     default: ''
 
 outputs:
   version:
-    description: >-
-      The version that may be released, as `version` answered it. Empty unless `version` ran and said yes.
+    description: |
+      The version that may be released, as `version` answered it.
+      It has no tag prefix and no `-SNAPSHOT`.
+      Empty unless `version` ran and passed.
     value: ${{ steps.check.outputs.version }}
   channel:
-    description: >-
-      The distribution channel that version goes to - `default` for a final release, otherwise the first
-      identifier of its pre-release suffix. Empty unless `version` ran and said yes.
+    description: |
+      The distribution channel of that version:
+      - `default` for a final release, such as `0.2.0`.
+      - Otherwise the first identifier of the pre-release suffix: `beta` for `0.2.0-beta.1`.
+
+      Empty unless `version` ran and passed.
     value: ${{ steps.check.outputs.channel }}
 
 runs:

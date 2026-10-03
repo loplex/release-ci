@@ -1,55 +1,63 @@
 # release-flow
 
-Three actions, in the order a release runs them, with what sits between them:
+Four actions that cut, draft, carry back and flag a GitHub release.
 
-1. `release-flow/prepare`;
-2. whatever the ecosystem does - building and signing, which
-   [intellij](../intellij/README.md#intellij) does for a JetBrains plugin;
-3. `release-flow/draft`;
-4. someone deciding to publish the draft;
-5. `release-flow/merge-back`.
+A release runs them in this order:
 
-A fourth action, `release-flow/warn`, follows whatever publishes the release somewhere other than
-GitHub, and says on the release when that did not complete.
+1. `release-flow/prepare` cuts the release commit.
+2. The ecosystem builds and signs what the release carries.\
+   For a JetBrains plugin, [intellij](../intellij/README.md#intellij) does that.
+3. `release-flow/draft` pushes the release branch and drafts the release.
+4. Someone publishes the draft.
+5. `release-flow/merge-back` carries the release back onto the default branch.
 
-`release-flow/prepare`, `release-flow/draft` and `release-flow/merge-back` run after a checkout with
-`fetch-depth: 0`.
+`release-flow/warn` follows a step that publishes the release somewhere other than GitHub.\
+It says on the release when that publish did not complete.
 
-`release-flow/prepare` and `release-flow/merge-back` take `version-source` and `tag-prefix` as
-[check-release's action](../check-release/README.md#using-check-release-from-another-repository)
-does, `^none` included.\
-`release-flow/draft` and `release-flow/warn` take neither.\
-`release-flow/warn` needs no checkout either, as [its section](#release-flowwarn) says.
+| Action                    | Runs in                                   | Takes `version-source` and `tag-prefix` |
+|---------------------------|-------------------------------------------|-----------------------------------------|
+| `release-flow/prepare`    | a checkout with `fetch-depth: 0`          | yes                                     |
+| `release-flow/draft`      | the workspace `release-flow/prepare` left | no                                      |
+| `release-flow/merge-back` | a checkout with `fetch-depth: 0`          | yes                                     |
+| `release-flow/warn`       | no checkout                               | no                                      |
 
-What pinning one of them to a release tag or to another ref gets is under
+`version-source` and `tag-prefix` work as in
+[check-release's action](../check-release/README.md#using-check-release-from-another-repository),
+`^none` included.\
+Why `release-flow/warn` needs no checkout is in [its section](#release-flowwarn).
+
+What pinning an action to a release tag or to another ref gets you is under
 [Pinning](../README.md#pinning).\
-What each needs of the runner is listed under
+What each action needs of the runner is under
 [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
 
 ## release-flow/prepare
 
 [`release-flow/prepare`](prepare/action.yml) cuts the release commit onto a branch of its own:
 
-1. The rules are asked first - `changelog`, `ancestry` and `version`, all three.\
-   Nothing is written where one says no, nor where `[Unreleased]` has nothing to release, as
+1. It asks the rules `changelog`, `ancestry` and `version`, all three.\
+   Where one says no, it writes nothing.\
+   It also writes nothing where `[Unreleased]` has nothing to release, as
    [The changelog](../check-release/README.md#the-changelog) says.
-2. `[Unreleased]` is closed into a section for the version being released.
-3. That version is written back where the source declares one.
-4. The one resulting commit is left on `release/<version>`, with the workspace on it.
+2. It closes `[Unreleased]` into a section for the version being released.
+3. It writes that version back where the source declares one.
+4. It makes one commit on `release/<version>`, and leaves the workspace on that branch.
 
-The version comes from the source, or from the `version` input, as
-[Where the version comes from](../check-release/README.md#where-the-version-comes-from) says for
-each.
+The version comes from the source, or from the `version` input.\
+[Where the version comes from](../check-release/README.md#where-the-version-comes-from) says how,
+for each source.
 
-Given a `repository-url`, `release-flow/prepare` also writes the link definitions of the changelog's
-versions afresh, pointing into the repository; any other definition stays.
+Given a `repository-url`, `prepare` also rewrites the link definitions of the changelog's versions,
+pointing into the repository.\
+Any other link definition stays as it is.
 
 ### Nothing leaves the workspace
 
-Nothing is pushed: the build runs from the release commit next, and a build that fails should leave
-neither a branch nor a draft on the remote.\
-Pushing comes after the build, with the draft.\
-`release-flow/prepare` writes nothing outside the workspace and asks for no permissions of its own.
+`prepare` pushes nothing.\
+The build runs from the release commit next, and a failed build should leave neither a branch nor
+a draft on the remote.\
+`release-flow/draft` pushes, after the build.\
+`prepare` writes nothing outside the workspace, and needs no permissions of its own.
 
 ### The release job
 
@@ -95,61 +103,64 @@ jobs:
 
 ## release-flow/draft
 
-[`release-flow/draft`](draft/action.yml) pushes the branch and drafts the release from it:
+[`release-flow/draft`](draft/action.yml) pushes the release branch and drafts the release from it:
 
-- The notes are the released section of `CHANGELOG.md`.
-- The files are those `files` names - the build's, by pattern or path, one a line, a pattern being a
-  bash glob, in which `**` goes no deeper than `*` - and none where it is left empty.
-- A version with a pre-release suffix is marked as one, by the channel `check-release channel` reads
-  off it under the rule in
+- The notes are the version's released section of `CHANGELOG.md`.
+- The files are what `files` names, one pattern or path per line.\
+  A pattern is a bash glob, in which `**` goes no deeper than `*`.\
+  With `files` left empty, nothing is attached.
+- A version with a pre-release suffix is marked as a pre-release.\
+  `check-release channel` decides that, by the rule in
   [The channel a version goes to](../check-release/README.md#the-channel-a-version-goes-to).
 
 The job needs `contents: write` for the push and the draft.\
-[The release job](#the-release-job) runs it after the build that follows `prepare`, handing on the
-`version`, `tag` and `branch` that `prepare` answers with.
+[The release job](#the-release-job) runs `draft` after the build, and hands it the `version`, `tag`
+and `branch` that `prepare` outputs.
 
-### What is asked before the push, and what after it
+### What draft checks before the push, and what GitHub answers after it
 
-What can be answered on the runner - the notes, the files, the channel - is asked before the push:
+`draft` checks the notes, the files and the channel before it pushes:
 
-- A draft refused over one of them leaves no branch behind.
-- A pattern that matches no file, or a path that names none, stops the run rather than letting the
-  release go out without it.
+- Where one of them fails, no branch is left behind.
+- A pattern that matches no file, or a path that names none, stops the run.\
+  The release does not go out without the file.
 
-What GitHub answers comes after the push, a draft having to point at a commit GitHub has:
+GitHub can answer only after the push, because a draft has to point at a commit GitHub has:
 
-- A draft it refuses leaves the branch standing.
+- Where GitHub refuses the draft, the branch stays.
 - Running again replaces the branch and drafts the release from it.
 
 ### A draft standing under the tag is replaced
 
-A draft already standing under the tag, left by an earlier run or made by hand, is deleted before
-the new one is made.\
+Before it makes the draft, `draft` deletes any draft already standing under the tag.\
+Such a draft may come from an earlier run, or be made by hand.\
 A published release is left alone.
 
 ### The one forced push in the flow
 
-The push is forced - the one forced push in the flow, the branch being the release's own, and one
-left standing by a run whose draft was thrown away being what a second run replaces.\
-A protection rule or ruleset over `release/*` has to let the checkout's credential force-push there,
-which GitHub's branch protection does not by default.
+`draft` pushes the release branch with force, the only forced push in the flow.\
+The branch belongs to the release: a second run replaces the branch an earlier run left behind with
+its draft thrown away.\
+A protection rule or ruleset over `release/*` has to let the checkout's credential force-push
+there.\
+GitHub's branch protection does not allow that by default.
 
 ### The tag is created when the draft is published
 
-The tag is named but not created: GitHub creates it when the draft is published, so a draft thrown
-away leaves no tag behind.
+`draft` names the tag but does not create it.\
+GitHub creates it when the draft is published, so a draft thrown away leaves no tag behind.
 
 ## release-flow/merge-back
 
 [`release-flow/merge-back`](merge-back/action.yml) carries a published release back onto the default
 branch:
 
-1. It opens the next version being worked on, where the source declares one.
-2. It takes in whatever landed since the release was cut.
+1. Where the source declares a version, it opens the next one, in a commit of its own.
+2. It merges in whatever landed on the default branch since the release was cut.
 3. It moves the default branch onto the release branch with a **fast-forward** push.
 
-The release branch is `release/<version>`, named after the tag's version: the release commit and
-whatever it takes on above it.
+The release branch is `release/<version>`, named after the tag's version.\
+It holds the release commit and whatever merge-back adds above it.
 
 ```yaml
 on:
@@ -180,122 +191,129 @@ jobs:
 
 ### A fast-forward push, not a pull request
 
-The fast-forward is the point, and so is that push not being forced.\
-A release tag names the commit the release was made from:
+The push is a fast-forward, and it is not forced.\
+A release tag names the commit the release was made from, and each way of landing treats that commit
+differently:
 
-- *Squash and merge* and *Rebase and merge* replace that commit with a copy, which takes the tag off
-  the default branch's history and turns `ancestry` red for every commit after it.
-- A merge commit keeps the tag reachable, but only through its second parent, off the default
-  branch's first-parent line, which is why merge-back pushes rather than opening a pull request.
-- A push moves the default branch onto the release branch as it stands, so the release commit stays
-  on the first-parent line, below the commit opening the next version, where the source declares
-  one, and whatever else the release branch gained, such as a merge of what landed meanwhile.
+- *Squash and merge* and *Rebase and merge* replace the commit with a copy.\
+  The tag drops off the default branch's history, and `ancestry` goes red for every commit after it.
+- A merge commit keeps the tag reachable, but only through its second parent.\
+  That is off the default branch's first-parent line, so merge-back pushes instead of opening a pull
+  request.
+- A push moves the default branch onto the release branch as it stands.\
+  The release commit stays on the first-parent line.\
+  Above it are the commit that opens the next version, where the source declares one, and whatever
+  else the release branch gained, such as a merge of what landed meanwhile.
 
 ### When a pull request carries the release instead
 
-A pull request carries the release instead of the push where:
+merge-back opens a pull request instead of pushing where:
 
-- what landed meanwhile would not merge in cleanly (the merge is then undone);
-- the default branch moved under that push and git refused it - that refusal is a race with another
-  push being caught, not an error to push past;
-- the rules refuse the merged tree: `changelog` and `ancestry` are asked of it before it is pushed,
-  because a three-way merge can put an entry added to `[Unreleased]` into the released section;
-- the default branch takes no push from the credential `actions/checkout` left in the workspace - a
-  protected one requiring pull requests, say; such a branch sends every release to a pull request.
+- what landed meanwhile does not merge in cleanly; the merge is then undone;
+- the rules refuse the merged tree.\
+  merge-back asks `changelog` and `ancestry` of it before the push, because a three-way merge can
+  put an entry added to `[Unreleased]` into the released section;
+- the default branch moved under the push, and git refused it.\
+  That refusal is a race with another push being caught, not an error to push past;
+- the default branch takes no push from the credential `actions/checkout` left in the workspace.\
+  A protected branch that requires pull requests is one, and sends every release to a pull request.
 
-That credential is `GITHUB_TOKEN` unless the checkout is given a `token` of its own; merge-back's
-own `token` does not push.
+That credential is `GITHUB_TOKEN`, unless the checkout is given a `token` of its own.\
+merge-back's own `token` does not push.
 
 ### What the pull request needs of the repository
 
-Merge-back opens its pull request with the action's `token`, `GITHUB_TOKEN` unless it is set.\
-Opened with `GITHUB_TOKEN`, it takes more than the job's `pull-requests: write`: the repository has
-to allow it, with *Allow GitHub Actions to create and approve pull requests* under Settings >
-Actions > General.\
-A new personal repository has it off, and one in an organization takes whatever the organization
-says.
+merge-back opens its pull request with its `token` input, which is `GITHUB_TOKEN` unless it is set.\
+With `GITHUB_TOKEN`, the job's `pull-requests: write` is not enough.\
+The repository has to allow it as well: *Allow GitHub Actions to create and approve pull requests*,
+under Settings > Actions > General.\
+A new personal repository has it off.\
+A repository in an organization takes whatever the organization says.
 
-Merging it with a merge commit has to be allowed as well, under Settings > General > Pull Requests.\
+Merge commits have to be allowed too, under Settings > General > Pull Requests.\
 A default branch whose protection requires a linear history takes neither that merge nor
 merge-back's own push, once that push carries a merge of what landed meanwhile.
 
 ### `landed` says whether the release landed
 
-The merge-back step succeeds whether it landed the release or opened a pull request for it, and
-`landed` says which:
+The merge-back step succeeds both when it lands the release and when it opens a pull request.\
+The `landed` output says which:
 
-- `true` where the release commit is on the default branch - carried there by this run, or found
-  there by a run repeated after the release landed, whichever way it landed;
-- `false` where a pull request carries it instead, opened by this run or by an earlier one and still
-  open.
+- `true`: the release commit is on the default branch.\
+  This run carried it there, or a repeated run found it there, whichever way it landed.
+- `false`: a pull request carries the release instead.\
+  This run opened it, or an earlier run did and it is still open.
 
-Read `landed` only after the step succeeded: one that failed may have left it unset, or `false` with
-no pull request opened.
+Read `landed` only after the step succeeded.\
+A step that failed may have left it unset, or `false` with no pull request opened.
 
 ### Running it again
 
-A run repeated while the pull request merge-back opened is still open tries to land the release
-again:
+A run repeated while merge-back's pull request is still open tries to land the release again:
 
-- Where it now can, it does, with `landed` as `true`, and GitHub marks the pull request
-  [merged](https://docs.github.com/en/pull-requests/reference/pull-request-merges), its head being
-  on the default branch.
-- Where it still cannot, the pull request goes on carrying it.
+- Where it now can, it does, and `landed` is `true`.\
+  GitHub then marks the pull request
+  [merged](https://docs.github.com/en/pull-requests/reference/pull-request-merges), because its
+  head is on the default branch.
+- Where it still cannot, the pull request goes on carrying the release.
 
 ### The release branch
 
-- The run that lands the release deletes the release branch, and a deletion that fails - a rule over
-  the branch forbidding it, say - only warns.
-- Where a pull request carries the release from that branch instead, the branch is left to whoever
-  merges it.
-- A run that cannot push that branch, or cannot open the pull request, fails.
+- The run that lands the release deletes the release branch.\
+  Where the deletion fails, because a rule over the branch forbids it, say, the run only warns.
+- Where a pull request carries the release instead, the branch is left to whoever merges it.
+- A run that cannot push the branch, or cannot open the pull request, fails.
 
 ### Merge merge-back's pull request with a merge commit
 
-Merge a pull request merge-back opens with a merge commit, as the pull request's body says.\
-The tag then stays reachable, which is all `ancestry` asks, where *Squash and merge* and *Rebase and
-merge* take it off the history.
+Merge the pull request merge-back opens with a merge commit, as the pull request's body says.\
+The tag then stays reachable, which is all `ancestry` asks.\
+*Squash and merge* and *Rebase and merge* take it off the history.
 
-Until it is merged the default branch does not reach the release's tag, so:
+Until the pull request is merged, the default branch does not reach the release's tag, so:
 
-- `ancestry` and `changelog` fail on it and on every other pull request into it;
-- `version` does too, where the source declares a version, which on the default branch is still the
-  one just released;
+- `ancestry` and `changelog` fail on the default branch and on every pull request into it;
+- `version` fails there too, where the source declares a version: the default branch still
+  declares the one just released;
 - no next release can be prepared.
 
-The workflows on merge-back's own pull request may wait to be approved rather than run, as the pull
-request's body says too.\
+The workflows on merge-back's pull request may wait for approval instead of running, as its body
+says too.\
 GitHub holds the runs of a pull request opened with `GITHUB_TOKEN` until someone with write access
 approves them.
 
 ### `check-workflow` needs `workflow_dispatch`, and `GITHUB_TOKEN` needs `actions: write`
 
 `check-workflow` names the workflow that checks the default branch, by file name.\
-A push made with `GITHUB_TOKEN` starts no workflow run at all, so merge-back asks for that one by
-hand once the release has landed.
+A push made with `GITHUB_TOKEN` starts no workflow run, so merge-back starts that workflow itself
+once the release has landed.
 
 That workflow:
 
-- has to list `workflow_dispatch` among its triggers: GitHub refuses to start one that does not, and
-  the release has landed by then, so the run only warns;
-- has to be named: left out, the run stops before anything is carried back rather than land a
-  release nothing checks.
+- has to list `workflow_dispatch` among its triggers.\
+  GitHub refuses to start one that does not, and the release has landed by then, so the run only
+  warns;
+- has to be named.\
+  Without it, the run stops before it carries anything back, so that no release lands unchecked.
 
-`actions: write` is not optional where `token` is left as `GITHUB_TOKEN`, and the `contents: write`
-the pushes take does not stand in for it.\
-Asking for a run by hand is a write to Actions, and without it the dispatch is answered 403 and the
-release lands with nothing having checked it.
+With `token` left as `GITHUB_TOKEN`, the job needs `actions: write`.\
+Starting a workflow is a write to Actions.\
+Without the permission GitHub answers 403, and the release lands with nothing having checked it.\
+The `contents: write` that the pushes need does not cover it.
 
 ## release-flow/warn
 
 [`release-flow/warn`](warn/action.yml) says on a published release that publishing it somewhere
-other than GitHub did not complete, and takes that back once it has.\
-Whoever has the release's files in hand looks at the release, not through the runs of a workflow.\
-So a publish that went red is said where they will look: a `> [!WARNING]` at the start of the notes,
-naming where the release was to go and linking the run.
+other than GitHub did not complete.\
+Once a later publish completes, it takes that back.
 
-It follows the step that publishes, in the same job, with `if: ${{ !cancelled() }}` so that a
-failure before it does not stop it, and is handed that step's `outcome`:
+Whoever has the release's files in hand looks at the release, not at the runs of a workflow.\
+So the warning goes where they look: a `> [!WARNING]` at the start of the notes, naming where the
+release was to go and linking the run.
+
+It follows the step that publishes, in the same job, with `if: ${{ !cancelled() }}`, so that a
+failure before it does not skip it.\
+It is handed that step's `outcome`:
 
 | `outcome` | The notes                                     |
 |-----------|-----------------------------------------------|
@@ -303,18 +321,20 @@ failure before it does not stop it, and is handed that step's `outcome`:
 | `failure` | gain the warning at the start                 |
 | `skipped` | gain it too: a step before the publish failed |
 
-- Anything else fails the run. That includes the empty `outcome` an id naming no step gives, which
-  read as a failure would put the warning on every release.
-- `outcome` rather than `conclusion`, so that a publish step allowed to fail with
-  `continue-on-error` still counts as failed.
-- The publish step's outcome decides, not the job's. A merge-back that failed while the publish
-  completed puts no warning on the release: the release is served all the same, and the job going
-  red says the rest.
-- A run whose notes already say what it would say leaves them alone. Running the job again - once a
-  first version uploaded by hand is approved, say - takes the warning off where the publish now
-  completes, and says it once where it fails again.
+- Any other `outcome` fails the run.\
+  That includes the empty one that a step id naming no step gives.\
+  Read as a failure, it would put the warning on every release.
+- It reads `outcome`, not `conclusion`, so a publish step allowed to fail with `continue-on-error`
+  still counts as failed.
+- The publish step's outcome decides, not the job's.\
+  A merge-back that failed while the publish completed puts no warning on the release.\
+  The release is served all the same, and the red job says the rest.
+- A run whose notes already say what it would say leaves them alone.\
+  Running the job again takes the warning off where the publish now completes, once a first version
+  uploaded by hand is approved, say.\
+  Where the publish fails again, the warning is said only once.
 
-The release is asked for by the repository's name, so no checkout is needed.\
+`warn` asks for the release by the repository's name, so it needs no checkout.\
 The job needs `contents: write` to write the notes.\
 The job under [intellij/publish](../intellij/README.md#the-job-that-publishes) shows the step after
 an upload to the JetBrains Marketplace.
@@ -322,57 +342,63 @@ an upload to the JetBrains Marketplace.
 ### How the warning is found
 
 The warning sits between two HTML comments, `<!-- release-flow/warn -->` and
-`<!-- /release-flow/warn -->`, which GitHub keeps in the notes and does not show.\
-It is looked for only where `release-flow/warn` puts it: at the very start of the notes, the markers
+`<!-- /release-flow/warn -->`.\
+GitHub keeps them in the notes, and does not show them.\
+`warn` looks for the warning only where it puts it: at the very start of the notes, with the markers
 on lines of their own around nothing but quoted lines.
 
-- A line that starts the notes from its first column cannot stand in a code block, a list or a
-  quote, so the notes need no parsing to know the warning there is this action's.
-- The words between the markers do not matter: a warning written by another version of the action is
-  the one taken off or replaced.
-- Taking it off takes the blank line after it too, and gives the rest of the notes back with their
-  line ends as they were.
+- A line that starts the notes at the first column cannot stand in a code block, a list or a quote.\
+  So no parsing is needed to know that the warning there is this action's.
+- The words between the markers do not matter.\
+  A warning written by another version of the action is still the one taken off or replaced.
+- Taking the warning off takes the blank line after it too.\
+  The rest of the notes keeps its line ends as they were.
 
 ### What fails the run instead
 
-A line holding nothing but either marker anywhere else fails the run and leaves the notes as they
-are, for a warning there to be taken off by hand.\
-So does a warning at the start that is not closed, or that holds a line that is not quoted.
+These fail the run, and leave the notes as they are for the warning to be taken off by hand:
 
-Such a line may be the warning after someone wrote above it, or an example the notes show as code,
-and the action does not guess which.\
+- a line holding nothing but either marker, anywhere but the start of the notes;
+- an opening marker at the start that is indented, or has spaces after it;
+- a warning at the start that is not closed;
+- a warning at the start that holds a line that is not quoted.
+
+Such a line may be the warning after someone wrote above it, or an example the notes show as code.\
+The action does not guess which.\
 The step runs last, after the release and everything before it are done, so failing it undoes
 nothing.
 
 ### The warning is the one thing the notes say that the changelog does not
 
-A release's notes are its released section of `CHANGELOG.md` - `release-flow/draft` writes them with
-`check-release notes` - so that the two cannot come to say different things.
+A release's notes are its released section of `CHANGELOG.md`.\
+`release-flow/draft` writes them with `check-release notes`, so that the two cannot come to say
+different things.
 
-The warning is the exception: it is the one thing release-flow writes into the notes of a release
-already published, and no changelog carries it.\
+The warning is the exception.\
+It is the only thing release-flow writes into the notes of a release already published, and no
+changelog carries it.\
 A released section may not be edited, and whether a publish completed is not a change to the
 project.
 
-The warning stands until a run whose publish completes takes it off, or, where that run cannot tell
-it for this action's, until it is taken off by hand.
+The warning stays until a run whose publish completes takes it off.\
+Where that run cannot tell it for this action's, it stays until someone takes it off by hand.
 
 ## Where GitHub reads each workflow from
 
-The release job and the merge-back job sit in workflows of their own, which GitHub reads from
+The release job and the merge-back job are in workflows of their own, and GitHub reads them from
 different commits:
 
-- One started by a dispatch runs only once its workflow file is on the default branch, and then
-  takes the workflow file, and the checkout, from whichever branch it is started on.\
+- A workflow started by a dispatch runs only once its file is on the default branch.\
+  It then takes the workflow file, and the checkout, from the branch it is started on.\
   That is why [the release job](#the-release-job) runs on the default branch alone: a release cut
-  from anywhere else is what merge-back would carry onto it, unreviewed.
-- One started by a release runs from the file as it stands in the commit the release tags.\
-  A re-run takes the file from that commit too, so a release cut while that file leaves out an input
-  a pinned action requires runs without it on every re-run, one made after the file is fixed on the
-  default branch included.
+  from another branch is what merge-back would carry onto the default branch, unreviewed.
+- A workflow started by a release runs from the file as it stands in the commit the release tags.\
+  A re-run takes the file from that commit too.\
+  So a release cut while that file leaves out an input a pinned action requires runs without it on
+  every re-run, even one made after the file is fixed on the default branch.
 
-Both have to be on the default branch before a release is cut from it.
+Both files have to be on the default branch before a release is cut from it.
 
 A version of this repository that makes an input required marks it `**BREAKING**` in
-[`CHANGELOG.md`](../CHANGELOG.md), so that a workflow moving its pin to that version can pass the
-input in the same commit.
+[`CHANGELOG.md`](../CHANGELOG.md).\
+A workflow moving its pin to that version can then pass the input in the same commit.

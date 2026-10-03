@@ -1,66 +1,94 @@
 # check-release
 
-`check-release` works from three things:
+`check-release` checks a repository before and after a release.\
+It reads three things:
 
-- the tags, read out of the repository it is asked about;
-- `CHANGELOG.md`, read out of the same repository;
-- the version a release is asked to be, taken from whichever source the invocation names.
+- the tags of the repository;
+- `CHANGELOG.md` of the same repository;
+- the version the release is asked to be, from the source the call names.
 
-The first two are the same everywhere; the third is what a project type decides.\
-[Where the version comes from](#where-the-version-comes-from) says where the rules stop and the
-source begins.
+The first two work the same in every project.\
+The third depends on the kind of project, as
+[Where the version comes from](#where-the-version-comes-from) describes.
 
 ## Subcommands
 
-`check-release.py` holds, as separate subcommands, what a release asks of a repository and does with
-it:
+`check-release.py` has one subcommand per question a release asks:
 
-| Subcommand        | What for                                                                                                              |
-|-------------------|-----------------------------------------------------------------------------------------------------------------------|
-| `version`         | whether the [candidate version](#where-the-version-comes-from) may be released, given the releases and `[Unreleased]` |
-| `next`            | the version that follows a released one, with the source's [marker](#where-the-version-comes-from)                    |
-| `changelog`       | whether every released section of `CHANGELOG.md` still reads the way its tag has it                                   |
-| `ancestry`        | whether every released tag is still reachable from this history                                                       |
-| `prefix`          | what release tags are called here                                                                                     |
-| `channel`         | the distribution channel a version goes to                                                                            |
-| `set-version`     | write a version where it is declared: the one released, then the next                                                 |
-| `close-changelog` | move `[Unreleased]` into a section of its own, dated                                                                  |
-| `notes`           | the text below one released section's heading, which is what its release notes say                                    |
+| Subcommand        | What it does                                                                                                |
+|-------------------|-------------------------------------------------------------------------------------------------------------|
+| `version`         | checks whether the [candidate version](#where-the-version-comes-from) may be released next                  |
+| `next`            | prints the version after a released one, with the source's [marker](#-snapshot-belongs-to-gradleproperties) |
+| `changelog`       | checks that every released section of `CHANGELOG.md` still reads as its tag has it                          |
+| `ancestry`        | checks that every release tag is still reachable from the current history                                   |
+| `prefix`          | prints what release tags carry in front of the version                                                      |
+| `channel`         | prints the [distribution channel](#the-channel-a-version-goes-to) of a version                              |
+| `set-version`     | writes a version into the file the source declares it in                                                    |
+| `close-changelog` | moves what is under `[Unreleased]` into a dated section for the version being released                      |
+| `notes`           | prints the text of one released section, which is what its release notes say                               |
 
-Of these, the composite action [below](#using-check-release-from-another-repository) runs:
+The options go after the subcommand name, and a subcommand refuses an option it never reads:
+
+- `--version-source` and `--tag-prefix`: `version`, `next`, `changelog`, `ancestry`, `prefix` and
+  `close-changelog`.\
+  `close-changelog` reads them only with `--repository-url`, and takes them either way.
+- `--version-source` alone: `set-version`.
+- Neither: `notes` and `channel`.
+
+The composite action [below](#using-check-release-from-another-repository) runs:
 
 - `version`, `changelog` and `ancestry`, whichever its `checks` input names;
-- `channel`, after a `version` that says yes.
+- `channel`, after a `version` check that passed.
 
 ## Versions
 
-A version here is a semantic version: `1.0.0`, `1.0.0-rc.1`, `1.0.0-eap-2`, `1.0.0+dfsg1`.\
-The grammar is SemVer 2.0.0's own, so a leading zero and an empty identifier are refused rather than
-ordered by rules nobody wrote down.
+A version is a semantic version: `1.0.0`, `1.0.0-rc.1`, `1.0.0-eap-2`, `1.0.0+dfsg1`.\
+The grammar is the one SemVer 2.0.0 defines.\
+A leading zero or an empty identifier is refused, because SemVer gives it no order.
+
+### What `version` refuses
+
+`version` refuses a candidate that:
+
+- is not a semantic version;
+- still carries the [`-SNAPSHOT` marker](#-snapshot-belongs-to-gradleproperties);
+- does not come after the last release it is offered next to:
+  - a final release has to come after the last final release;
+  - a pre-release has to come after the highest release of any kind;
+- has a core that is not one step past the last final release: after `0.2.0`, the next one is
+  `0.2.1`, `0.3.0` or `1.0.0`, or a pre-release of one of them;
+- moves less than [`[Unreleased]` asks for](#what-unreleased-asks-of-the-version).
+
+A stable hotfix such as `0.2.1` may therefore go out while `0.3.0-beta.1` is open, from a branch
+whose changelog does not hold the beta's section.\
+Where it does, the beta's entries ask for a step as
+[`[Unreleased]`'s do](#what-unreleased-asks-of-the-version).\
+Where only pre-releases exist, the next version stays in their core: after `0.2.0-rc.1`, a later
+pre-release of `0.2.0`, or `0.2.0` itself.\
+With nothing released yet, any valid version may be the first.
 
 ### Build metadata does not order releases
 
-Build metadata - the `+` part, the shape Debian packaging reaches for - is taken, and the spec's
-rule about it is taken with it:
+Build metadata is the part after `+`, as in `1.0.0+dfsg1`.\
+SemVer says it plays no part in ordering:
 
 > Build metadata MUST be ignored when determining version precedence. Thus two versions that differ
 > only in the build metadata, have the same precedence.
 
-That has one consequence worth meeting here rather than in a red run: `1.0.0+b` does not outrank
-`1.0.0+a`, so releasing one after the other is refused - not because the `+` is unwelcome, but
-because whoever compares versions would be offered no release at all.\
-`version` says so in those words rather than as "does not come after", which about a version that
-plainly came after would read as a bug.
+So `1.0.0+b` does not come after `1.0.0+a`, and releasing it after `1.0.0+a` is refused.\
+The refusal says the two differ only in build metadata.
+It does not say "does not come after", which would look like a bug for a version made later.
 
-A project needing `+dfsg1` to count as an upgrade needs an ordering SemVer does not define.\
-`precedence()` in [`check-release/check-release.py`](check-release.py) is where that rule would go.
+A project that needs `+dfsg1` to count as an upgrade needs an ordering SemVer does not define.\
+That rule would go into `precedence()` in [`check-release.py`](check-release.py).
 
 ### The channel a version goes to
 
-The channel a version goes to is the first identifier of its pre-release suffix, and `default` for a
-final release.\
-Identifiers are separated by dots, and a hyphen is an ordinary character inside one.\
-Build metadata plays no part.
+The channel is the first identifier of the pre-release suffix, or `default` for a final release.
+
+- Identifiers are separated by dots.
+- A hyphen is an ordinary character inside an identifier.
+- Build metadata plays no part.
 
 | Version       | Channel                 |
 |---------------|-------------------------|
@@ -69,26 +97,45 @@ Build metadata plays no part.
 | `1.0.0-eap-2` | `eap-2`, one of its own |
 | `1.0.0-eap.2` | `eap`                   |
 
+`channel` takes the version without the tag prefix: `0.3.0-beta.1`, not `v0.3.0-beta.1`.
+
 ## The changelog
 
-`CHANGELOG.md` is read in the shape [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) gives
-it:
+`CHANGELOG.md` is read in the format of
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 
 - a `## [Unreleased]` section on top;
 - a `## [<version>]` section for each release below it.
 
-A release closes `[Unreleased]` into a section of its own, so there has to be something under it.\
-`close-changelog`, which `release-flow/prepare` runs, refuses an empty one, unless there are
-pre-releases to take in: a final release takes into its own section the entries of every pre-release
-since the final release before it, an abandoned train of another version included.\
-The `changelog` check reads only the released sections, not `[Unreleased]`.
+`close-changelog`, which `release-flow/prepare` runs, turns `[Unreleased]` into the section of the
+release.
+It refuses:
+
+- a file with no `[Unreleased]` section;
+- a version that already has a section;
+- an empty `[Unreleased]`, unless the release is a final one with pre-releases to take in.
+
+A final release takes into its section the entries of every pre-release since the final release
+before it, by SemVer's order.\
+That includes an abandoned pre-release of another version: `1.0.0` after `0.3.0-beta.1` takes that
+beta's entries in.\
+A pre-release takes in nothing but its own entries.
+
+The `changelog` check compares every released section with the copy in its release tag.
+
+- `[Unreleased]` is not compared.
+- A release tagged before its section existed has nothing to compare, and is listed as not
+  compared.
+- A section that is missing because its tag is not on the current history is reported as such:
+  the release has not reached this branch yet.
 
 ### What `[Unreleased]` asks of the version
 
-What waits under `[Unreleased]`, and under any pre-release above the last final release whose
-section the changelog already holds, also says how far the release has to move past the last final
-release, by [SemVer's rules 6 to 8](https://semver.org/#semantic-versioning-specification-semver)
-over Keep a Changelog's kinds of change:
+The entries under `[Unreleased]` say how far the release has to move past the last final release.\
+So do the entries of every pre-release above the last final release whose section the changelog
+holds.\
+The rule is [SemVer's rules 6 to 8](https://semver.org/#semantic-versioning-specification-semver),
+applied to Keep a Changelog's kinds of change:
 
 | Under `[Unreleased]`                                   | The release is at least              |
 |--------------------------------------------------------|--------------------------------------|
@@ -96,26 +143,27 @@ over Keep a Changelog's kinds of change:
 | `### Removed`, or an entry marked `**BREAKING**`       | a major, and a minor while below 1.0 |
 | `### Fixed`, `### Security`, a group of any other name | a patch                              |
 
-- `version` refuses a candidate that moves less, naming the group that asks for more.
-- Under `tags` left without a version, it takes the version after the highest release, or the least
-  one `[Unreleased]` allows where that is further.
-- A change that breaks something a caller relied on is marked by starting its entry with
-  `**BREAKING**`, under whichever kind it is.\
-  That is a convention of this repository: Keep a Changelog has no marker of its own, and a group
-  such as release-please's `### ⚠ BREAKING CHANGES` is read here as a group of another name.
-- Below 1.0 such a change moves the minor, as Cargo and npm read `^0.y`: SemVer's rule 4 promises
-  nothing about `0.y.z`, and 1.0 is a step taken on purpose.
-- A group of a name Keep a Changelog does not give - `### Documentation`, say - is taken and named
-  in a note on stderr, so that a feature filed under `### Add` can still be seen.
-- An entry standing under no group at all is refused, since nothing then says what kind of change it
-  is.
-- A repository with no `CHANGELOG.md`, or with no `[Unreleased]` section in it, is asked for no more
+- `version` refuses a candidate that moves less, and names the group that asks for more.
+- Under `tags` with no version given, the default is the version after the highest release.\
+  Where `[Unreleased]` asks for more, it is the smallest version that satisfies it.
+- An entry starting with `**BREAKING**` marks a change that breaks something a caller relied on,
+  under whichever group it stands.\
+  This is a convention of this repository: Keep a Changelog has no such marker.\
+  A group such as release-please's `### ⚠ BREAKING CHANGES` counts as a group of any other name.
+- Below 1.0, a breaking change moves the minor, as Cargo and npm read `^0.y`.\
+  SemVer's rule 4 promises nothing about `0.y.z`, and 1.0 is a step taken on purpose.
+- A group with a name Keep a Changelog does not use, such as `### Documentation`, is named in a
+  note on stderr.\
+  A feature filed under a misspelled `### Add` can then still be seen.
+- An empty group asks for nothing, and HTML comments are ignored.
+- An entry under no group at all is refused, because nothing says what kind of change it is.
+- A repository with no `CHANGELOG.md`, or no `[Unreleased]` section in it, is asked for no more
   than a patch, and told so on stderr.
 
 ## Using check-release from another repository
 
-[`check-release/action.yml`](action.yml) is a composite action, so a project asks for the rules
-rather than keeping a copy of them:
+[`check-release/action.yml`](action.yml) is a composite action.\
+A project uses it instead of keeping its own copy of the rules:
 
 ```yaml
 on:
@@ -139,151 +187,163 @@ jobs:
           checks: version changelog ancestry
 ```
 
+The [`action.yml`](action.yml) describes every input and output.\
+The sections below explain the choices in this example.
+
 ### `branches` keeps the workflow off tags
 
-Publishing a release creates its tag, and a workflow on `push` with no filter runs for that tag too,
-where there is nothing to ask.\
-The commit a release tags names the version it released.\
-Where the source declares a version and no `version` input is handed in, `version` read off the
-source there passes as that release, with a note saying so, rather than refusing it as released
-already; a version handed in is still asked about.
+Publishing a release creates its tag.\
+A workflow on `push` with no filter runs for that tag too, with nothing to check.
+
+If it does run on the release commit, `version` can still pass there:
+
+- The commit a release tags still declares the version it released.
+- Where the source declares a version and no `version` input is given, `version` sees that the tag
+  points at this commit, notes it, and passes.
+- A version given in the `version` input is still checked.
 
 ### `checks` names `version`, which its default leaves out
 
-`checks` names `version` here because its default, `changelog ancestry`, leaves it out.
+The default of `checks` is `changelog ancestry`.\
+The example adds `version`.
 
-- Every check named runs.
-- The step fails at the end if any of them said no, naming each one that did.
-- The [outputs](#outputs) are written all the same where `version` said yes.
+- Every check named runs, even after one of them fails.
+- The step fails at the end if any check failed, and names each one that did.
+- The [outputs](#outputs) are written whenever `version` passed, even if another check failed.
 
 ### `<tag>` is a release tag
 
-`<tag>` is one of this repository's release tags, as in every example here;
-[Pinning](../README.md#pinning) says what other refs get.\
-What the action needs of the runner is listed under
+`<tag>` is one of this repository's release tags, as in every example here.\
+[Pinning](../README.md#pinning) says what other refs give you.\
+What the action needs on the runner is under
 [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
 
 ### `tag-prefix` is left out where the source declares it
 
-`tag-prefix` is left out above because `gradle.properties` declares the prefix, and a value given
-here would answer over the top of it.\
+The example has no `tag-prefix`, because `gradle.properties` declares the prefix.\
+A value given here would override the file.\
 Give it where the source declares none, as with `tags`.
 
-Where such a source's tags carry no prefix at all, say `tag-prefix: ^none`:
+Where the tags have no prefix at all, give `tag-prefix: ^none`.
 
-- An empty value will not do: GitHub hands over an input left out and an input set to nothing as the
-  same empty string.
-- `^none` cannot be mistaken for a real prefix, because git refuses `^` in a ref name.
+- An empty value cannot mean that: GitHub passes a missing input as an empty string too.
+- `^none` can never be a real prefix, because git refuses `^` in a tag name.
 
-Why there is no default is under
-[No default tag prefix, on purpose](#no-default-tag-prefix-on-purpose).
+[No default tag prefix, on purpose](#no-default-tag-prefix-on-purpose) explains why there is no
+default.
 
-### `fetch-depth: 0` is not optional
+### `fetch-depth: 0` is required
 
 A shallow checkout has neither the history `ancestry` reads nor the tags every check counts from.\
-So the checks find nothing and pass having compared nothing, which is the one outcome worth fearing
-here.\
-Only `version` under `tags`, handed no version, fails instead: it finds no release to count from.
+The checks then find nothing to compare, and pass.\
+The one exception is `version` under `tags` with no version given: it fails, because it finds no
+release to count from.
 
 ### Outputs
 
-Where `version` is among the checks and says yes, the action answers with:
+When `version` is among the checks and passes, the action sets two outputs:
 
-- `steps.<id>.outputs.version`, the version that may be released, bare under either source - `0.2.0`
-  for a `0.2.0-SNAPSHOT` in `gradle.properties`;
-- `steps.<id>.outputs.channel`, the channel that version goes to by the rule under
-  [The channel a version goes to](#the-channel-a-version-goes-to): `default` for a final release,
-  the first identifier of its pre-release suffix otherwise.
+- `steps.<id>.outputs.version`: the version that may be released, without the tag prefix and
+  without `-SNAPSHOT`.\
+  For `0.2.0-SNAPSHOT` in `gradle.properties` it is `0.2.0`.
+- `steps.<id>.outputs.channel`: the [channel](#the-channel-a-version-goes-to) of that version.\
+  `default` for a final release, otherwise the first identifier of its pre-release suffix.
 
 ### The `version` input
 
-The `version` input hands the `version` check a version of its own - a dispatch input, say:
+The `version` input gives the `version` check a version to check, such as one from a dispatch form.\
+It replaces:
 
-- in place of the one the source declares;
-- or, under `tags`, in place of the one after the highest release, or a later one where
+- under `gradle.properties`, the version the file declares;
+- under `tags`, the default: the version after the highest release, or a later one where
   `[Unreleased]` asks for more.
 
-How one is spelled under each source is under
+How to spell it under each source is under
 [Where the version comes from](#where-the-version-comes-from).
 
 ## Where the version comes from
 
-Every invocation that reads the source names it, with `--version-source` or an action's
-`version-source` input, because the wrong guess is silent.\
-Two are implemented, and they differ in more than a filename:
+Every call that reads the source names it, with `--version-source` or the action's
+`version-source` input.\
+There is no default, because a wrong guess would pass silently.
 
-| `--version-source`  | The version a release is asked to be                                                                         | After a release           |
-|---------------------|--------------------------------------------------------------------------------------------------------------|---------------------------|
-| `gradle.properties` | read from the file or handed in with `--version`, a `-SNAPSHOT` ending it dropped                            | the next one written back |
-| `tags`              | handed in with `--version`, or the version after the highest release, or a later one `[Unreleased]` asks for | nothing to write          |
+Two sources exist:
 
-The version a release is asked to be, whichever way it is found, is the candidate version: what
-`check-release version` holds to the rules.
+| `--version-source`  | Where the candidate version comes from                                                         | After a release           |
+|---------------------|------------------------------------------------------------------------------------------------|---------------------------|
+| `gradle.properties` | the `version` line of the file, or `--version`; a `-SNAPSHOT` at its end is dropped            | the next one written back |
+| `tags`              | `--version`, or the version after the highest release, moved further where `[Unreleased]` asks | nothing written           |
+
+The candidate version is the version `check-release version` checks against the rules.
 
 ### `-SNAPSHOT` belongs to `gradle.properties`
 
-Carrying `-SNAPSHOT` belongs to `gradle.properties`: it is Gradle's and Maven's way of saying "not
-released yet".
+`-SNAPSHOT` is how Gradle and Maven mark a version that is not released yet.
 
-- A release takes it off the end of the version, whether the file declares it or `--version`, or the
-  `version` input of `check-release` or `release-flow/prepare`, hands it in.
-- A version handed in may also leave it out.
-- A version that still carries it once a marker ending it, where the source has one, is off -
-  `1.0.0-SNAPSHOT-SNAPSHOT`, `1.0.0-SNAPSHOT+b`, or `1.0.0-SNAPSHOT` handed to `tags` - is refused
-  whatever the source.
-- A repository whose version lives only in its tags has no such state, so the version after a
-  release is worked out bare and the source adds the marker where there is one.
+- A release drops it from the end of the version.\
+  This holds whether the version comes from the file, from `--version`, or from the `version` input
+  of `check-release` or `release-flow/prepare`.
+- A version given by hand may also leave it out.
+- A version that still carries `SNAPSHOT` after that is refused, whatever the source:
+  `1.0.0-SNAPSHOT-SNAPSHOT`, `1.0.0-SNAPSHOT+b`, or `1.0.0-SNAPSHOT` given under `tags`.
+- `tags` has no marker: the version after a release is worked out bare, and a source that has a
+  marker adds it.
 
-### The first release under `tags`
+### The first release under `tags` needs a version
 
-Under `tags`, with nothing released yet, there is no highest release to follow.\
-The first version is named with `--version`, or the `version` input of `check-release` or
+Under `tags`, with nothing released yet, there is no release to count from.\
+Give the first version with `--version`, or with the `version` input of `check-release` or
 `release-flow/prepare`.
 
 ### `set-version` under `tags` exits with 3
 
-`set-version` under `tags` refuses rather than reporting a success in which nothing was written.\
-It does so with exit status 3 rather than 1, so that a caller can tell "nothing to write to" from a
-write that failed.
+Under `tags` there is no file to write a version to.\
+`set-version` then exits with status 3 instead of reporting a success.\
+Its other refusals exit with 1, or 2 for a command line it cannot parse.\
+So a caller can tell "nothing to write to" from a failed write.
 
 ### The tag prefix
 
-`--tag-prefix` says what release tags are called.
+`--tag-prefix` says what release tags carry in front of the version: `v` for `v0.1.0`.
 
-- Under `gradle.properties` the file says it where `--tag-prefix` is not given, in a `tagPrefix`
-  line it then has to carry beside the `version` one.\
-  `version = 0.2.0-SNAPSHOT` and `tagPrefix = v`, or `tagPrefix =` where the tags carry nothing in
-  front, are the two lines it needs.
-- A source naming no file, as `tags` does, has to be told, and `--tag-prefix ''` tells it the tags
-  carry nothing in front.
-- Every action taking `version-source` takes the prefix as its `tag-prefix` input, `^none` saying
-  the tags carry none, as [above](#tag-prefix-is-left-out-where-the-source-declares-it).
+- Under `gradle.properties`, unless `--tag-prefix` is given, the file declares it in a `tagPrefix`
+  line, which it then has to have.\
+  The two lines it needs are `version = 0.2.0-SNAPSHOT` and `tagPrefix = v`,
+  or `tagPrefix =` where the tags have no prefix.\
+  `--tag-prefix`, where given, overrides the file.
+- Under `tags`, nothing declares it, so it has to be given.\
+  `--tag-prefix ''` says the tags have no prefix.
+- Every action that takes `version-source` takes the prefix as its `tag-prefix` input, with
+  `^none` for no prefix, as [above](#tag-prefix-is-left-out-where-the-source-declares-it).
 
 #### No default tag prefix, on purpose
 
-`--tag-prefix` has no default, on purpose.\
-A repository tagging bare versions, read as though it tagged `v*`, turns up no releases at all.\
-Every check over them - all but `version` under `tags` given no version, which finds no release to
-count from - passes having compared nothing.\
-A caller wanting a default declares it where its own readers can see it.
+A wrong default would pass silently.\
+A repository that tags bare versions, read as if it tagged `v*`, has no releases at all.\
+Every check then passes, having compared nothing.\
+The one exception is `version` under `tags` with no version given, which fails with no release to
+count from.\
+A caller that wants a default writes it in its own workflow, where its readers can see it.
 
 ### Adding a source
 
-Each source is an adapter in [`check-release/sources.py`](sources.py), and the rules know none of
-them by name.
+Each source is an adapter in [`check-release/sources.py`](sources.py).\
+The rules in `check-release.py` know none of them by name.
 
 Adding `package.json`, `pyproject.toml` or `Cargo.toml` means one more adapter there:
 
 - filed under the name `--version-source` gives it;
-- its file carrying the tag prefix beside the version, as `gradle.properties` carries `tagPrefix`.
+- its file declaring the tag prefix next to the version, as `gradle.properties` declares
+  `tagPrefix`.
 
-Nothing in the rules changes unless the new source marks a version being worked on other than with a
-`-SNAPSHOT` suffix, the one marker they know.
+The rules need no change, unless the new source marks a version in progress with something other
+than a `-SNAPSHOT` suffix.
 
-A plain `VERSION` file has no room for a prefix, which the rules ask of every source naming a file
-unless `--tag-prefix` is given, so it takes more than an adapter.
+A plain `VERSION` file has no room for a tag prefix.\
+The rules ask every source with a file for one, unless `--tag-prefix` is given, so such a file takes
+more than an adapter.
 
-What an adapter has to answer, its file and the tag prefix included, is listed at the top of
-[`sources.py`](sources.py).\
-[`check-release/test_sources.py`](test_sources.py) holds every adapter to it, and asks one that
-declares a version for a file to try it on.
+The top of [`sources.py`](sources.py) lists what an adapter has to answer, its file and tag prefix
+included.\
+[`check-release/test_sources.py`](test_sources.py) holds every adapter to that list.\
+It also needs a sample file for each adapter that declares a version.

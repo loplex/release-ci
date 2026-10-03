@@ -1,56 +1,58 @@
 # intellij
 
-The one ecosystem so far, in two actions:
+Two actions for a JetBrains plugin:
 
-- `intellij/build`, which goes between `release-flow/prepare` and `release-flow/draft`;
-- `intellij/publish`, which goes after the draft has been published, beside
-  `release-flow/merge-back`.
+| Action             | Where it goes in the release                                   |
+|--------------------|----------------------------------------------------------------|
+| `intellij/build`   | between `release-flow/prepare` and `release-flow/draft`        |
+| `intellij/publish` | after the draft is published, beside `release-flow/merge-back` |
 
-What pinning either of them to a release tag or to another ref gets is under
-[Pinning](../README.md#pinning).\
-What `intellij/publish` needs of the runner is listed under
-[What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
+- What a pin to a release tag or another ref gets: [Pinning](../README.md#pinning).
+- What `intellij/publish` needs on the runner:
+  [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
 
 ## intellij/build
 
-[`intellij/build`](build/action.yml) runs the project's own Gradle tasks through `./gradlew`, and
-says where the signed archive landed:
+[`intellij/build`](build/action.yml) runs the project's own Gradle tasks through `./gradlew`:
 
-1. `check`;
-2. the Plugin Verifier - the check the Marketplace
-   [runs itself](https://plugins.jetbrains.com/docs/marketplace/understanding-plugin-security.html),
-   run here first and on the very commit that will be published;
+1. `check`.
+2. `verifyPlugin`, which runs the Plugin Verifier.\
+   The Marketplace runs the same check
+   [itself](https://plugins.jetbrains.com/docs/marketplace/understanding-plugin-security.html).\
+   Here it runs first, on the commit that will be published.
 3. `signPlugin`.
+
+Then it says where the signed archive is, in its `archive` output.
 
 The Plugin Verifier's report is kept as the run's `pluginVerifier-result` artifact, whether it
 passed or not.
 
 ### What the plugin's build has to do
 
-- Be on the IntelliJ Platform Gradle Plugin 2.x.\
+- **Use the IntelliJ Platform Gradle Plugin 2.x.**\
   Under the Gradle IntelliJ Plugin 1.x, `verifyPlugin` checks only `plugin.xml` and the archive's
-  structure and the Plugin Verifier never runs, so a build that finds no report stops there.
-- Have the plugin as the build's root project.\
-  The report is looked for in `build/reports/pluginVerifier` under the workspace; a plugin in a
-  subproject writes its report under that subproject, and the build stops there as well.
-- Read `CERTIFICATE_CHAIN`, `PRIVATE_KEY` and `PRIVATE_KEY_PASSWORD` in the build script's `signing`
-  block.\
-  The signing inputs reach `signPlugin` as those environment variables.
-- Take the plugin's version from the `version` line of `gradle.properties`, `project.version`,
-  rather than from a property of its own, or the archive goes out under the version it had before.\
-  No version is handed to the build: the archive carries whatever version the build script gives
-  it.\
-  A plugin's release runs with `version-source: gradle.properties`, the file carrying the `version`
-  and `tagPrefix` lines
-  [Where the version comes from](../check-release/README.md#where-the-version-comes-from) names, and
-  `release-flow/prepare` rewrites that `version` line.
+  structure, and never runs the Plugin Verifier.\
+  The build then finds no report, and stops.
+- **Have the plugin as the root project.**\
+  The report is looked for in `build/reports/pluginVerifier` under the workspace.\
+  A plugin in a subproject writes it under that subproject, and the build stops as well.
+- **Read the signing variables in the `signing` block.**\
+  The signing inputs reach `signPlugin` as `CERTIFICATE_CHAIN`, `PRIVATE_KEY` and
+  `PRIVATE_KEY_PASSWORD`.
+- **Take the version from the `version` line of `gradle.properties`**, as `project.version`.\
+  No version is handed to the build: the archive gets whatever version the build script gives it.\
+  A plugin is released with `version-source: gradle.properties`, and `release-flow/prepare` rewrites
+  that `version` line.\
+  A version from a property of the plugin's own would leave the archive at the old version.\
+  [Where the version comes from](../check-release/README.md#where-the-version-comes-from) describes
+  the file.
 
 ### Gradle is cached by the open-source provider
 
-Gradle is cached by setup-gradle's open-source `basic` provider rather than its default one.\
-The default is a proprietary component under Gradle's own
-[terms of use](https://gradle.com/legal/terms-of-use/), which a caller would otherwise accept
-unasked.
+The build caches Gradle with setup-gradle's open-source `basic` provider, not its default one.\
+The default one is a proprietary component under Gradle's own
+[terms of use](https://gradle.com/legal/terms-of-use/).\
+Using it would make a caller accept those terms without being asked.
 
 ### In the release job
 
@@ -72,74 +74,80 @@ unasked.
 
 ### The draft attaches the archive the build signed
 
-The draft attaches what the build says it signed, rather than a pattern of its own.\
-The build finds the archive by its own `archive-pattern`, and two patterns written out separately
-can come to disagree, where the one that matters is the file that was signed.\
+The draft's `files` is the build's `archive` output, not a pattern of its own.\
+The build finds the archive by its `archive-pattern`.\
+A second pattern, written in the workflow, could come to match another file than the one signed.
+
 The `files` pattern in the `release` job under
 [release-flow/prepare](../release-flow/README.md#the-release-job) is for a build that does not say
 which file it made.
 
 ## intellij/publish
 
-[`intellij/publish`](publish/action.yml) does not trust its own upload.\
-The archive a published draft carried is the accepted one, and what a release needs to be true is
-that the Marketplace ends up serving it, so that is asked of the Marketplace itself.
+[`intellij/publish`](publish/action.yml) uploads the archive the published draft carried.\
+The upload's own answer does not decide the run.\
+What decides it is whether the Marketplace then serves the accepted archive, which is asked of the
+Marketplace itself.
 
 ### Compared by payload rather than by bytes
 
-The answer is compared **by payload rather than by bytes**:
+The Marketplace [counter-signs](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html)
+what it is given, so the file it serves differs from the one uploaded:
 
-- The Marketplace [counter-signs](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html)
-  what it is given.
-- A signature sits in a block of its own between the entry data and the central directory, moving
-  the directory along and changing the one offset that points at it, in the end record.
-- It leaves each entry's name, size and CRC, and where its data starts, exactly as they were.
+- The signature is a block of its own between the entries' data and the central directory.
+- It moves the central directory along, and changes the one offset that points at it, in the end
+  record.
+- Each entry's name, size, CRC and data offset stay exactly as they were.
 
-A byte comparison would fail on that, and fail again whenever the certificate behind it changed.
+So the two archives are compared by what their entries hold.\
+A comparison of the bytes would fail on the signature, and fail again whenever the certificate
+behind it changed.
 
 ### A first version is uploaded by hand
 
 A plugin with no listing yet cannot be uploaded over the API at all.\
-Its first version is [uploaded](https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html),
-and
-[reviewed](https://plugins.jetbrains.com/docs/marketplace/publishing-and-listing-your-plugin.html),
-by a person.\
-The file to upload is the archive the release carries, so that what the Marketplace serves is what
-was accepted.
+A person [uploads](https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html) its first
+version, and a person
+[reviews it](https://plugins.jetbrains.com/docs/marketplace/publishing-and-listing-your-plugin.html).\
+Upload the archive the release carries, so that the Marketplace serves what was accepted.
 
 ### An update is served as soon as it is uploaded
 
-Every update is reviewed as well before it becomes publicly available, the
-[approval guidelines][approval] say, which can take days.\
-A [JetBrains blog post][channels] says an update to a custom channel is approved without a review
-where the plugin has an update approved in the default channel within the last 120 days.\
-An update is served as soon as it is uploaded all the same, counter-signed, which is what
-`intellij/publish` is built on.
+- JetBrains's [approval guidelines][approval] say every update is reviewed before it becomes
+  publicly available, which can take days.
+- A [JetBrains blog post][channels] says an update to a custom channel is approved without a review
+  where the plugin has an update approved in the default channel within the last 120 days.
+- An update is served as soon as it is uploaded all the same, counter-signed.\
+  `intellij/publish` is built on that.
 
 [approval]: https://plugins.jetbrains.com/docs/marketplace/jetbrains-marketplace-approval-guidelines.html
 [channels]: https://blog.jetbrains.com/platform/2023/09/busy-plugin-developers-newsletter-summer-2023/
 
 ### Asking until the version is served
 
-`intellij/publish` asks for the version `attempts` times, `wait` seconds apart (10 and 30 unless
-set), so that one served a little after its upload is not taken for one that is missing.\
-It cannot tell an upload that did not happen and a plugin with no listing apart, and fails after the
-last attempt naming both.
+`intellij/publish` asks for the version `attempts` times, `wait` seconds apart.\
+The defaults are 10 attempts, 30 seconds apart.\
+A version served a little after its upload is then not taken for a missing one.
+
+After the last attempt the run fails.\
+It cannot tell an upload that did not happen from a plugin with no listing, so the error names both.
 
 ### Finishing a release whose first version was uploaded by hand
 
-The release is finished by running the job that `intellij/publish` sits in again - `merge-back` in
-the example below - once the first version is approved and within the 30 days GitHub lets a run be
-[re-run](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).\
+Once the first version is approved, run the job that `intellij/publish` is in again: `merge-back` in
+the example below.\
+GitHub lets a run be
+[re-run](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)
+within 30 days.\
 The upload is tried again, which does not decide the run, and the version is asked for again.
 
 ### The job that publishes
 
-The job that carries a published release back publishes it too, with the very file the draft
-carried - downloaded from the release, not built again.\
+The job that carries a published release back also publishes it.\
+It publishes the file the draft carried, downloaded from the release, not built again.\
 It takes the place of the `merge-back` job under
-[release-flow/merge-back](../release-flow/README.md#release-flowmerge-back), and checks out as that
-job does:
+[release-flow/merge-back](../release-flow/README.md#release-flowmerge-back), and checks out the same
+way:
 
 ```yaml
 on:
@@ -198,60 +206,62 @@ jobs:
 
 ### The channel is read off the version
 
-The channel is not passed: `intellij/publish` reads it off the version with `check-release channel`,
-by the rule under
-[The channel a version goes to](../check-release/README.md#the-channel-a-version-goes-to) that
-`release-flow/draft` marks a pre-release by, so the two cannot come to disagree.
+The channel is not an input.\
+`intellij/publish` reads it off the version with `check-release channel`, by the rule under
+[The channel a version goes to](../check-release/README.md#the-channel-a-version-goes-to).\
+`release-flow/draft` marks a pre-release by the same rule, so the two cannot come to disagree.
 
 ### A pre-release reaches only those who add its channel
 
-A version that goes to a channel other than `default` is not offered to the plugin's users:
+A version in a channel other than `default` is not offered to the plugin's users:
 
-- The plugin's page on the Marketplace shows every channel, this one among them.
-- An IDE installs it, and updates to it, only once its user has added the channel as a custom plugin
+- The plugin's page on the Marketplace shows every channel, this one included.
+- An IDE installs it, and updates to it, only after its user adds the channel as a custom plugin
   repository, as [Custom release channels][custom-channels] says.
 
-Whether an update to a custom channel waits for a review is under
+Whether an update to a custom channel waits for a review:
 [An update is served as soon as it is uploaded](#an-update-is-served-as-soon-as-it-is-uploaded).
 
 ### How a tester adds the channel
 
 1. In the IDE, open Settings, select Plugins, click the gear icon and choose
    *Manage Plugin Repositories…*, as [Add custom repositories][custom-repositories] shows.
-2. Add `https://plugins.jetbrains.com/plugins/<channel>/<plugin id>`, the plugin id being the number
-   in the plugin's Marketplace URL.\
-   That brings in this plugin's channel alone.\
+2. Add `https://plugins.jetbrains.com/plugins/<channel>/<plugin id>`.\
+   The plugin id is the number in the plugin's Marketplace URL.\
+   This brings in this plugin's channel alone.\
    `https://plugins.jetbrains.com/plugins/<channel>/list` brings in every plugin's channel of that
    name.
 
 ### A tester who keeps the channel is offered no final release
 
-- A custom repository takes precedence over the default channel: a user who has added one sees none
-  of the plugin's updates in the default channel.
+- A custom repository takes precedence over the default channel.\
+  A user who has added one sees none of the plugin's updates in the default channel.
 - JetBrains calls this temporary, and asks for every update to the default channel to be uploaded to
-  the custom channel as well; see [Channel Priority Notice][channel-priority].
+  the custom channel as well: see [Channel Priority Notice][channel-priority].
 - `intellij/publish` uploads a version to the one channel
-  [read off it](#the-channel-is-read-off-the-version), so a final release goes to `default` alone.
+  [read off it](#the-channel-is-read-off-the-version).\
+  So a final release goes to `default` alone.
 
 So a tester removes the repository once the final release is out.\
-The IDE then offers the final release over the pre-release: the comparison it checks for updates by
-(`VersionComparatorUtil`, in 2025.3) takes `0.1.1` to be newer than `0.1.1-beta.1`.
+The IDE then offers the final release over the pre-release.\
+The comparison it checks for updates with (`VersionComparatorUtil`, in 2025.3) takes `0.1.1` to be
+newer than `0.1.1-beta.1`.
 
 ### Withdrawing a pre-release
 
 On the Marketplace, as [Plugin updates][plugin-updates] says:
 
-- A version can be hidden, with the eye icon by it.\
-  Neither the Marketplace nor an IDE's search then offers it; a direct link still reaches it.
-- A version can be removed, with the trash can icon by it.\
+- A version can be hidden, with the eye icon next to it.\
+  Neither the Marketplace nor an IDE's search then offers it.\
+  A direct link still reaches it.
+- A version can be removed, with the trash can icon next to it.\
   Where the icon is missing, JetBrains suggests hiding the version or writing to
   marketplace@jetbrains.com.
-- What either does to a copy already installed, the documentation does not say.
+- The documentation does not say what either does to a copy already installed.
 
 On GitHub, `release-flow` takes nothing back.\
-The release, its tag, and what
-[merge-back](../release-flow/README.md#release-flowmerge-back) carried onto the default branch stay
-as they are.
+The release, its tag, and what [merge-back](../release-flow/README.md#release-flowmerge-back)
+carried onto the default branch stay as they are.
 
 [custom-channels]: https://plugins.jetbrains.com/docs/marketplace/custom-release-channels.html
 [channel-priority]: https://plugins.jetbrains.com/docs/marketplace/custom-release-channels.html#channel-priority-notice
@@ -260,26 +270,28 @@ as they are.
 
 ### The publish does not wait for merge-back to succeed
 
-Neither the download nor the upload waits for the merge-back step to succeed, only for it to have
-named the version.\
-A release that did not make it back onto the default branch is out all the same, and the Marketplace
+The download and the upload wait only for the merge-back step to name the version, not for it to
+succeed.\
+A release that did not get back onto the default branch is out all the same, and the Marketplace
 should serve it too.
 
-- Where that step failed, the job still fails, so that is not missed.
-- Where it opened a pull request instead, the merge-back step succeeds, so the job does not fail
-  over it, and that pull request, with `landed` as `false`, is what says the release did not land.
+- Where the merge-back step failed, the job still fails, so the failure is not missed.
+- Where it opened a pull request instead, the step succeeds and the job does not fail over it.\
+  The pull request, and `landed` as `false`, say that the release did not land.
 
-Running the job again - once a first version is approved, say, and within the 30 days GitHub lets a
-run be re-run - is safe:
+Running the job again is safe, for example once a first version is approved:
 
-- A merge-back step that finds its release on the default branch already says so, with `landed` as
+- A merge-back step that finds the release on the default branch already says so, with `landed` as
   `true`, and carries nothing back a second time.
 - One that finds the pull request an earlier run opened still open tries to land the release again,
   as [release-flow/merge-back](../release-flow/README.md#running-it-again) says.
 
 ### The warning
 
-The last step puts a warning on the release where the Marketplace did not end up serving the
-accepted archive, or where nothing was uploaded because a step before the upload failed.\
-A run repeated once the Marketplace serves it takes the warning off, as
+The last step puts a warning on the release in two cases:
+
+- the Marketplace did not end up serving the accepted archive;
+- nothing was uploaded, because a step before the upload failed.
+
+Running the job again once the Marketplace serves the version takes the warning off, as
 [release-flow/warn](../release-flow/README.md#release-flowwarn) says.

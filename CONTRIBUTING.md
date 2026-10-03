@@ -10,23 +10,24 @@ python3 -m unittest discover -s intellij
 python3 -m unittest discover -s .github
 ```
 
-The first line installs what the `.github` suite needs.\
+The first line installs what the `.github` suite needs.
+
 All four suites run on every push and pull request, in
-[`.github/workflows/test.yml`](.github/workflows/test.yml), on the Python
-[`.python-version`](.python-version) names.\
-The first three need 3.11 or later, where the actions ask only for 3.10.\
-Those three run again on 3.10, through [`.github/unittest-3.10.py`](.github/unittest-3.10.py), which
-puts back the one 3.11 method the tests set themselves up with and nothing the actions run, so that
-anything newer than 3.10 in the actions' code the tests reach fails there.
+[`.github/workflows/test.yml`](.github/workflows/test.yml).\
+They run on the Python that [`.python-version`](.python-version) names.
+
+The first three need Python 3.11 or later, while the actions ask only for 3.10.\
+So those three run again on 3.10, through [`.github/unittest-3.10.py`](.github/unittest-3.10.py).\
+It adds back the one 3.11 method the tests use to set themselves up, and nothing the actions run.\
+Anything newer than 3.10 in the actions' code that the tests reach then fails there.
 
 ### The `check-release` suite
 
-- The rules in `check-release` are plain functions over text, tags and booleans, and
-  [`test_check_release.py`](check-release/test_check_release.py) exercises them without a repository
-  to release.
-- [`test_sources.py`](check-release/test_sources.py) does the same for the adapters for where the
-  version comes from.
-- The helpers that face git, beside the rules, get a repository built for the purpose.
+- [`test_check_release.py`](check-release/test_check_release.py) tests the rules.\
+  They are plain functions over text, tags and booleans, so they need no repository to release.
+- [`test_sources.py`](check-release/test_sources.py) does the same for the adapters that say where
+  the version comes from.
+- The helpers that work with git get a repository built for the purpose.
 - [`test_check.py`](check-release/test_check.py) runs the action's script,
   [`check.sh`](check-release/check.sh), against such a repository.
 
@@ -36,7 +37,7 @@ It builds what each of its actions needs:
 
 - a repository;
 - a bare remote to push to, so that a refused fast-forward is a real refusal;
-- a stub for whatever is called out, so that nothing is sent anywhere.
+- a stub `gh`, so that nothing is sent to GitHub.
 
 ### The `intellij` suite
 
@@ -44,77 +45,90 @@ It builds:
 
 - archives;
 - a Plugin Verifier report;
-- a stub `curl`, which answers for the Marketplace from a file the test writes, so that nothing is
+- a stub `curl` that answers for the Marketplace from a file the test writes, so that nothing is
   uploaded.
 
 ### The `.github` suite
 
 It reads the repository as text:
 
-- [`test_line_length.py`](.github/test_line_length.py) holds every tracked file git does not take
-  for binary to the line length [`.editorconfig`](.editorconfig) sets for it, but for the lines the
-  comment there lists, and refuses one that is not UTF-8 by name;
+- [`test_line_length.py`](.github/test_line_length.py) holds every tracked text file to the line
+  length [`.editorconfig`](.editorconfig) sets for it.\
+  The comment in `.editorconfig` lists the lines it lets through.\
+  A file that is not UTF-8 is refused by name.
 - [`test_markdown_links.py`](.github/test_markdown_links.py) holds every relative link in a tracked
-  Markdown file to a tracked file or directory, and to a heading in it where the link names one;
+  Markdown file to a tracked file or directory.\
+  Where the link names a heading, the heading has to exist.
 - [`test_manifests.py`](.github/test_manifests.py) reads every `action.yml` as text, for what GitHub
   would take wrongly from any of them.
 
 The suite reads Markdown through [cmarkgfm](https://github.com/theacodes/cmarkgfm), the Python
-binding of GitHub's own cmark-gfm, so that code, tables, headings and links are what GitHub
-renders.\
-The length test renders a line opening with a link alone, so a link whose definition stands
-elsewhere, or one written in HTML, does not count as one there.\
-The link test reads a heading's anchor through [regex](https://github.com/mrabarnett/mrab-regex),
-whose `\p{...}` classes Python's own `re` does not have.\
-cmarkgfm, the packages it needs and regex are pinned in
-[`.github/requirements.txt`](.github/requirements.txt), and no other suite needs a package.
+binding of GitHub's own cmark-gfm.\
+Code, tables, headings and links are then what GitHub renders.
+
+- The length test renders a line that opens with a link on its own.\
+  So a link defined elsewhere, or written in HTML, does not count as a link there.
+- The link test reads a heading's anchor through
+  [regex](https://github.com/mrabarnett/mrab-regex), for the `\p{...}` classes Python's own `re`
+  lacks.
+- cmarkgfm, the packages it needs, and regex are pinned in
+  [`.github/requirements.txt`](.github/requirements.txt).\
+  No other suite needs a package.
 
 ## Recording a change
 
-A change a user of the actions would notice gets an entry under `## [Unreleased]` in
-[`CHANGELOG.md`](CHANGELOG.md), in the group Keep a Changelog gives its kind: `### Added`,
-`### Changed`, `### Deprecated`, `### Removed`, `### Fixed` or `### Security`.\
-An entry for a change that breaks something a caller relied on starts with `**BREAKING**`, as
-[What `[Unreleased]` asks of the version](check-release/README.md#what-unreleased-asks-of-the-version) says.\
-Such a change also gets a section in [`UPGRADING.md`](UPGRADING.md), under the version it breaks,
-showing what a caller has to change.\
-A release with nothing under `[Unreleased]` is refused, unless it is a final release taking in the
-entries of the pre-releases since the final release before it, as
-[The changelog](check-release/README.md#the-changelog) says.
+A change that a user of the actions would notice gets an entry under `## [Unreleased]` in
+[`CHANGELOG.md`](CHANGELOG.md).\
+The entry goes in the group Keep a Changelog gives its kind: `### Added`, `### Changed`,
+`### Deprecated`, `### Removed`, `### Fixed` or `### Security`.
+
+A change that breaks something a caller relied on:
+
+- has an entry that starts with `**BREAKING**`, as
+  [What `[Unreleased]` asks of the version](check-release/README.md#what-unreleased-asks-of-the-version)
+  says;
+- gets a section in [`UPGRADING.md`](UPGRADING.md), under the version it breaks, that shows what a
+  caller has to change.
+
+A release with nothing under `[Unreleased]` is refused.\
+The exception is a final release that takes in the entries of the pre-releases since the final
+release before it, as [The changelog](check-release/README.md#the-changelog) says.
 
 ## Releasing this repository
 
-This repository is released through its own actions, as any other repository would be, except that:
+This repository is released through its own actions, like any other repository, with two
+differences:
 
-- its workflows take them by path, unpinned, this being the one repository they already sit in;
-- its release workflows run them on the Python its suites run on rather than the runner's own.
+- Its workflows use the actions by path, unpinned, because this is the repository they are in.
+- Its release workflows run them on the Python its suites run on, not on the runner's own.
 
 It declares its version nowhere, so [`release.yml`](.github/workflows/release.yml) asks for one when
 it is dispatched:
 
-- left empty, the version after the highest release is taken, or a later one where `[Unreleased]`
-  asks for more;
-- the first release has to be named outright.
+- Left empty, it is the version after the highest release, or a later one where `[Unreleased]` asks
+  for more.
+- The first release has to be named outright.
 
 There is nothing to build, so `release-flow/draft` follows `release-flow/prepare` directly.
 
-Publishing the draft is the decision to release, and
-[`release-publish.yml`](.github/workflows/release-publish.yml) carries the release back onto the
-default branch.\
-Where it carries the release in a pull request instead, the repository needs the settings under
+Publishing the draft is the decision to release.\
+[`release-publish.yml`](.github/workflows/release-publish.yml) then carries the release back onto
+the default branch.\
+Where it carries it back in a pull request instead, the repository needs the settings under
 [What the pull request needs of the repository][settings].
 
 [settings]: release-flow/README.md#what-the-pull-request-needs-of-the-repository
 
-GitHub reads each the way [Where GitHub reads each workflow from][reads] says:
+GitHub reads each workflow as [Where GitHub reads each workflow from][reads] says:
 
-- `release.yml` only once it has landed on the default branch, and then from the branch it is
-  dispatched on, which is why its job runs on the default branch alone;
-- `release-publish.yml` from the commit a release tags, which carries the file because a release is
-  cut from the default branch.
+- `release.yml` only once it is on the default branch, and then from the branch it is dispatched
+  on.\
+  That is why its job runs on the default branch only.
+- `release-publish.yml` from the commit a release tags.\
+  That commit has the file, because a release is cut from the default branch.
 
 [reads]: release-flow/README.md#where-github-reads-each-workflow-from
 
-The `guards` job in [`test.yml`](.github/workflows/test.yml) runs the rules over this repository
-itself on every push and pull request, through the action at `./check-release`, by path as well, on
-the runner's own `python3`.
+The `guards` job in [`test.yml`](.github/workflows/test.yml) runs the checks over this repository on
+every push and pull request.\
+It uses the action at `./check-release`, by path as well, on the runner's own `python3`.

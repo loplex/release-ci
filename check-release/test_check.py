@@ -38,7 +38,7 @@ class TheAction(unittest.TestCase):
         written.write_text("", encoding="utf-8")
         done = subprocess.run(
             ["bash", str(CHECK_SH)], cwd=self.work, capture_output=True, text=True,
-            env={**os.environ, "SOURCE": source, "TAG_PREFIX": tag_prefix, "CHECKS": checks, "VERSION": version,
+            env={**os.environ, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix, "CHECKS": checks, "VERSION": version,
                  "GITHUB_OUTPUT": str(written)},
         )
         outputs = dict(

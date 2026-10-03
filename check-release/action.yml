@@ -8,7 +8,7 @@ description: >-
   under `tags` with no version given, which finds no release to count from.
 
 inputs:
-  source:
+  version-source:
     description: >-
       Where the version a release is asked to be comes from - `gradle.properties`, or `tags` for a
       repository that declares no version: it is handed one, or takes the one after its highest
@@ -64,7 +64,7 @@ runs:
       # Inputs reach the script as environment variables rather than through ${{ }} interpolated into it,
       # so that a value carrying a quote or a newline is data here and not more script.
       env:
-        SOURCE: ${{ inputs.source }}
+        VERSION_SOURCE: ${{ inputs.version-source }}
         TAG_PREFIX: ${{ inputs.tag-prefix }}
         CHECKS: ${{ inputs.checks }}
         VERSION: ${{ inputs.version }}

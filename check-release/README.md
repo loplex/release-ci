@@ -135,7 +135,7 @@ jobs:
       - uses: loplex/release-ci/check-release@<tag>
         id: release
         with:
-          source: gradle.properties
+          version-source: gradle.properties
           checks: version changelog ancestry
 ```
 
@@ -208,8 +208,8 @@ How one is spelled under each source is under
 
 ## Where the version comes from
 
-Every invocation that reads the source names it, with `--version-source` or an action's `source`
-input, because the wrong guess is silent.\
+Every invocation that reads the source names it, with `--version-source` or an action's
+`version-source` input, because the wrong guess is silent.\
 Two are implemented, and they differ in more than a filename:
 
 | `--version-source`  | The version a release is asked to be                                                                         | After a release           |
@@ -256,8 +256,8 @@ write that failed.
   front, are the two lines it needs.
 - A source naming no file, as `tags` does, has to be told, and `--tag-prefix ''` tells it the tags
   carry nothing in front.
-- Every action taking `source` takes the prefix as its `tag-prefix` input, `^none` saying the tags
-  carry none, as [above](#tag-prefix-is-left-out-where-the-source-declares-it).
+- Every action taking `version-source` takes the prefix as its `tag-prefix` input, `^none` saying
+  the tags carry none, as [above](#tag-prefix-is-left-out-where-the-source-declares-it).
 
 #### No default tag prefix, on purpose
 

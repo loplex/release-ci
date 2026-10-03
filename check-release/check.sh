@@ -3,7 +3,7 @@
 # by arguments, because that is how a composite action hands its inputs over - and kept out of action.yml so
 # that it can be run against a repository in a test.
 #
-# Reads:  SOURCE TAG_PREFIX CHECKS VERSION GITHUB_OUTPUT
+# Reads:  VERSION_SOURCE TAG_PREFIX CHECKS VERSION GITHUB_OUTPUT
 # Writes: version, channel  (to GITHUB_OUTPUT, where `version` ran and said yes)
 set -uo pipefail
 
@@ -19,7 +19,7 @@ if [[ $TAG_PREFIX == '^none' ]]; then
 elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
-source_arguments=(--version-source "$SOURCE" "${prefix_arguments[@]}")
+source_arguments=(--version-source "$VERSION_SOURCE" "${prefix_arguments[@]}")
 
 # Split at spaces and newlines, without glob expansion.
 # `*` is then a name that is no check, not the files in the workspace.

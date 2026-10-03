@@ -50,5 +50,5 @@ jobs:
           fetch-depth: 0  # ancestry reads the whole history, and both default checks read the tags.
       - uses: ./check-release
         with:
-          source: tags
+          version-source: tags
           tag-prefix: v

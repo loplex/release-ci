@@ -52,7 +52,7 @@ class Staged(unittest.TestCase):
         written.write_text("", encoding="utf-8")
         done = subprocess.run(
             ["bash", str(PREPARE)], cwd=self.work, capture_output=True, text=True,
-            env={**os.environ, "SOURCE": source, "TAG_PREFIX": tag_prefix, "VERSION": version,
+            env={**os.environ, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix, "VERSION": version,
                  "REPOSITORY_URL": repository_url, "GITHUB_OUTPUT": str(written)},
         )
         outputs = dict(

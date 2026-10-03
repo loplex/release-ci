@@ -3,7 +3,7 @@ description: >-
   Build, check, verify and sign an IntelliJ platform plugin from the commit the workspace is on, and say where
   the signed archive landed. Everything between release-flow/prepare and release-flow/draft for a JetBrains
   plugin, and nothing that is not: the version and the changelog were settled before this ran, and the draft
-  that carries the archive comes after. The release runs with `source: gradle.properties`, whose `version`
+  that carries the archive comes after. The release runs with `version-source: gradle.properties`, whose `version`
   line release-flow/prepare rewrites, and the plugin has to take its version from that line. Needs the signing
   certificate chain and private key, without which there is no signed archive to hand on. The Plugin
   Verifier's report is uploaded as the artifact `pluginVerifier-result`, whether or not it passed. The build

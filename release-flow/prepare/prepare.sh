@@ -9,7 +9,7 @@
 # Driven by environment rather than by arguments, because that is how a composite action hands its inputs
 # over - and kept out of action.yml so that it can be run against a repository in a test.
 #
-# Reads:  SOURCE TAG_PREFIX VERSION REPOSITORY_URL GITHUB_OUTPUT
+# Reads:  VERSION_SOURCE TAG_PREFIX VERSION REPOSITORY_URL GITHUB_OUTPUT
 # Writes: version, tag, branch  (to GITHUB_OUTPUT)
 set -uo pipefail
 
@@ -22,7 +22,7 @@ elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
 check_release=(python3 "$script")
-source_arguments=(--version-source "$SOURCE" "${prefix_arguments[@]}")
+source_arguments=(--version-source "$VERSION_SOURCE" "${prefix_arguments[@]}")
 
 # The rules first, and all of them, before anything is written: a release that fails them is one that was
 # never cut, not one that has to be undone.
@@ -71,11 +71,11 @@ git switch -C "$branch" || exit 1
 # Written by the tool that also reads that line, rather than by a pattern here. A source that declares no
 # version has nothing to write and says so with a status of its own, 3; the release is still the version it
 # was asked to be. Any other failure stops here, before a commit names a release the build would not make.
-"${check_release[@]}" set-version "$version" --version-source "$SOURCE" >/dev/null; rc=$?
+"${check_release[@]}" set-version "$version" --version-source "$VERSION_SOURCE" >/dev/null; rc=$?
 if (( rc == 3 )); then
-  echo "${SOURCE} declares no version, so none was written; ${prefix}${version} is what the tag will say"
+  echo "${VERSION_SOURCE} declares no version, so none was written; ${prefix}${version} is what the tag will say"
 elif (( rc != 0 )); then
-  echo "::error::${SOURCE} could not be given ${version}, so no release commit was made"
+  echo "::error::${VERSION_SOURCE} could not be given ${version}, so no release commit was made"
   exit 1
 fi
 

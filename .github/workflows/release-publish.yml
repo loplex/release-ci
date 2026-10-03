@@ -29,7 +29,7 @@ jobs:
           python-version-file: .python-version
       - uses: ./release-flow/merge-back
         with:
-          source: tags
+          version-source: tags
           tag-prefix: v
           tag: ${{ github.event.release.tag_name }}
           default-branch: ${{ github.event.repository.default_branch }}

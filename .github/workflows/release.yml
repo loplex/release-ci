@@ -42,7 +42,7 @@ jobs:
       - uses: ./release-flow/prepare
         id: cut
         with:
-          source: tags
+          version-source: tags
           tag-prefix: v
           version: ${{ inputs.version }}
           repository-url: ${{ github.server_url }}/${{ github.repository }}

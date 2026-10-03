@@ -9,6 +9,9 @@ released it, so once a version has a section here, that section may not be edite
 
 ### Changed
 
+- **BREAKING** The `source` input of `check-release`, `release-flow/prepare` and
+  `release-flow/merge-back` is now `version-source`.
+  [UPGRADING.md](UPGRADING.md#the-source-input-is-now-version-source) shows the change.
 - **BREAKING** `check-release.py`: `--source` is now `--version-source`.
   It and `--tag-prefix` go after the command, and a command refuses the ones it never reads.
   `channel` takes the version without the tag prefix.

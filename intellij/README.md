@@ -40,8 +40,8 @@ passed or not.
   rather than from a property of its own, or the archive goes out under the version it had before.\
   No version is handed to the build: the archive carries whatever version the build script gives
   it.\
-  A plugin's release runs with `source: gradle.properties`, the file carrying the `version` and
-  `tagPrefix` lines
+  A plugin's release runs with `version-source: gradle.properties`, the file carrying the `version`
+  and `tagPrefix` lines
   [Where the version comes from](../check-release/README.md#where-the-version-comes-from) names, and
   `release-flow/prepare` rewrites that `version` line.
 
@@ -163,7 +163,7 @@ jobs:
       - uses: loplex/release-ci/release-flow/merge-back@<tag>
         id: back
         with:
-          source: gradle.properties
+          version-source: gradle.properties
           tag: ${{ github.event.release.tag_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           check-workflow: ci.yml

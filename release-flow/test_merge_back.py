@@ -85,7 +85,7 @@ class Staged(unittest.TestCase):
         done = subprocess.run(
             ["bash", str(MERGE_BACK)], cwd=self.work, capture_output=True, text=True,
             env={**os.environ, "PATH": f"{self.stubs}:{os.environ['PATH']}",
-                 "SOURCE": source, "TAG": self.tag, "TAG_PREFIX": tag_prefix, "DEFAULT_BRANCH": "main",
+                 "VERSION_SOURCE": source, "TAG": self.tag, "TAG_PREFIX": tag_prefix, "DEFAULT_BRANCH": "main",
                  "CHECK_WORKFLOW": check_workflow,
                  "GITHUB_OUTPUT": str(written), "GH_TOKEN": "stub"},
         )

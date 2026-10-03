@@ -3,7 +3,7 @@
 # because that is how a composite action hands its inputs over - and kept out of action.yml so that it can be
 # run against a repository in a test rather than only by GitHub.
 #
-# Reads:  SOURCE TAG TAG_PREFIX DEFAULT_BRANCH CHECK_WORKFLOW GITHUB_OUTPUT
+# Reads:  VERSION_SOURCE TAG TAG_PREFIX DEFAULT_BRANCH CHECK_WORKFLOW GITHUB_OUTPUT
 #         GH_TOKEN, by `gh` rather than by anything here
 # Writes: version, next, landed  (to GITHUB_OUTPUT)
 set -uo pipefail
@@ -24,7 +24,7 @@ elif [[ -n $TAG_PREFIX ]]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
 check_release=(python3 "$script")
-source_arguments=(--version-source "$SOURCE" "${prefix_arguments[@]}")
+source_arguments=(--version-source "$VERSION_SOURCE" "${prefix_arguments[@]}")
 
 prefix=$("${check_release[@]}" prefix "${source_arguments[@]}"); rc=$?
 if (( rc != 0 )); then
@@ -71,13 +71,13 @@ fi
 # and is believed. Any other failure stops the run before anything reaches the default branch: the release is
 # out either way, and landing it with the released version still declared would have the next release
 # refused, the file naming a version that is no longer being worked on.
-"${check_release[@]}" set-version "${next}" --version-source "$SOURCE" >/dev/null; rc=$?
+"${check_release[@]}" set-version "${next}" --version-source "$VERSION_SOURCE" >/dev/null; rc=$?
 if (( rc == 0 )); then
   git diff --quiet || git commit -qam "chore: start ${next}" || exit 1
 elif (( rc == 3 )); then
-  echo "${SOURCE} records no version after a release, so none was written"
+  echo "${VERSION_SOURCE} records no version after a release, so none was written"
 else
-  echo "::error::${SOURCE} could not be given ${next}, so nothing was carried back"
+  echo "::error::${VERSION_SOURCE} could not be given ${next}, so nothing was carried back"
   exit 1
 fi
 

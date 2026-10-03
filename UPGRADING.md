@@ -6,6 +6,30 @@ A version that asks for no change is not listed.\
 
 ## From 0.2
 
+### The `source` input is now `version-source`
+
+In `check-release`, `release-flow/prepare` and `release-flow/merge-back`.\
+The new name says what it is the source of: the version of the next release.
+
+Before:
+
+```yaml
+- uses: loplex/release-ci/check-release@v0.2.0
+  with:
+    source: gradle.properties
+```
+
+After:
+
+```yaml
+- uses: loplex/release-ci/check-release@<tag>
+  with:
+    version-source: gradle.properties
+```
+
+A workflow that still passes `source` fails.
+GitHub only warns about the unknown input, and the action then refuses the empty `version-source`.
+
 ### `check-release.py` takes its options after the command
 
 This matters only to a workflow that runs `check-release.py` itself.

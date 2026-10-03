@@ -15,7 +15,7 @@ GitHub, and says on the release when that did not complete.
 `release-flow/prepare`, `release-flow/draft` and `release-flow/merge-back` run after a checkout with
 `fetch-depth: 0`.
 
-`release-flow/prepare` and `release-flow/merge-back` take `source` and `tag-prefix` as
+`release-flow/prepare` and `release-flow/merge-back` take `version-source` and `tag-prefix` as
 [check-release's action](../check-release/README.md#using-check-release-from-another-repository)
 does, `^none` included.\
 `release-flow/draft` and `release-flow/warn` take neither.\
@@ -81,7 +81,7 @@ jobs:
       - uses: loplex/release-ci/release-flow/prepare@<tag>
         id: cut
         with:
-          source: gradle.properties
+          version-source: gradle.properties
           version: ${{ inputs.version }}
           repository-url: ${{ github.server_url }}/${{ github.repository }}
       # Build from the commit now checked out, then:
@@ -172,7 +172,7 @@ jobs:
           fetch-depth: 0
       - uses: loplex/release-ci/release-flow/merge-back@<tag>
         with:
-          source: gradle.properties
+          version-source: gradle.properties
           tag: ${{ github.event.release.tag_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           check-workflow: ci.yml

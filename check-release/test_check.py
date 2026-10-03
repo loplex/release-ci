@@ -65,6 +65,19 @@ class TheAction(unittest.TestCase):
         self.assertIn("'ancestory' is not a check this action runs", done.stdout)
         self.assertNotIn("reachable", done.stdout)
 
+    def test_checks_on_lines_of_their_own_all_run(self):
+        """What a YAML block scalar hands over: one name per line, and every line is a check."""
+        _, done = self.check("changelog\nancestry\n")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Compared 1 released section(s)", done.stdout)
+        self.assertIn("All 1 released tag(s) are reachable", done.stdout)
+
+    def test_a_glob_is_a_name_and_not_the_files_it_matches(self):
+        """The workspace holds CHANGELOG.md, which `*` would match: the refusal has to name what was asked."""
+        _, done = self.check("*")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("'*' is not a check this action runs", done.stdout)
+
     def test_asking_for_no_check_at_all_fails(self):
         for checks in ("", " ", "\n"):
             with self.subTest(checks=checks):

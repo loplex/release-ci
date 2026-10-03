@@ -20,14 +20,18 @@ elif [ -n "$TAG_PREFIX" ]; then
   prefix_arguments=(--tag-prefix "$TAG_PREFIX")
 fi
 
+# Split at spaces and newlines, without glob expansion.
+# `*` is then a name that is no check, not the files in the workspace.
+read -rd '' -a check_names <<< "$CHECKS"
+
 # Nothing asked for is refused for the same reason a name that is no check is: a run that compared nothing
 # and passed reads exactly like one that compared everything.
-if [ -z "${CHECKS//[[:space:]]/}" ]; then
+if [ "${#check_names[@]}" -eq 0 ]; then
   echo "::error::no check was asked for: name some of version, changelog and ancestry"
   exit 1
 fi
 
-for check in $CHECKS; do
+for check in "${check_names[@]}"; do
   case "$check" in
     version|changelog|ancestry) ;;
     *)
@@ -37,7 +41,7 @@ for check in $CHECKS; do
 done
 
 failed=0
-for check in $CHECKS; do
+for check in "${check_names[@]}"; do
   if [ "$check" = version ] && [ -n "$VERSION" ]; then
     out=$(python3 "$script" --source "$SOURCE" "${prefix_arguments[@]}" version --version "$VERSION" 2>&1)
     rc=$?

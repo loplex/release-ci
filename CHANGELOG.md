@@ -30,6 +30,8 @@ released it, so once a version has a section here, that section may not be edite
 
 ### Fixed
 
+- `check-release`: a glob in `checks`, such as `*`, is refused under its own name.
+  It used to be expanded to the files in the workspace, and the error named those instead.
 - A `tagPrefix` in `gradle.properties` holding an unpaired `\uD800`-`\uDFFF` escape is refused.
   `prefix` ended in a traceback printing it, and the other checks passed having found no release.
 - A command-line argument holding a byte that does not decode is refused by name before any

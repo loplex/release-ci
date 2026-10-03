@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""What the action does with its inputs, exercised against a repository built for the purpose: which checks it
-runs, how it reads the prefix it is given, and what it says `version` answered.
+"""Tests for what the action does with its inputs, run against a repository built for the purpose:
+- which checks it runs;
+- how it reads the prefix it is given;
+- what it says `version` answered.
 
 Run with `python3 -m unittest discover` over the directory this file sits in.
 """
@@ -59,7 +61,7 @@ class TheAction(unittest.TestCase):
         self.assertEqual(outputs, {})
 
     def test_a_name_that_is_no_check_fails_before_anything_runs(self):
-        """A typo skipped would be a check nobody notices was not run."""
+        """A typo that was skipped would be a check that did not run, and nobody would notice."""
         _, done = self.check("ancestry ancestory")
         self.assertEqual(done.returncode, 1)
         self.assertIn("'ancestory' is not a check this action runs", done.stdout)
@@ -73,7 +75,8 @@ class TheAction(unittest.TestCase):
         self.assertIn("All 1 released tag(s) are reachable", done.stdout)
 
     def test_a_glob_is_a_name_and_not_the_files_it_matches(self):
-        """The workspace holds CHANGELOG.md, which `*` would match: the refusal has to name what was asked."""
+        """The workspace holds CHANGELOG.md, which `*` would match.
+        The refusal has to name what was asked for, not the file."""
         _, done = self.check("*")
         self.assertEqual(done.returncode, 1)
         self.assertIn("'*' is not a check this action runs", done.stdout)
@@ -86,8 +89,8 @@ class TheAction(unittest.TestCase):
                 self.assertIn("no check was asked for", done.stdout)
 
     def test_none_says_the_tags_carry_no_prefix(self):
-        """`^none` handed on as a prefix of its own would count no release at all, and pass having compared
-        nothing."""
+        """`^none` passed on as a prefix of its own would count no release at all.
+        The check would then pass having compared nothing."""
         self.stage(tag="0.1.0")
         _, done = self.check("ancestry", tag_prefix="^none")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -99,8 +102,8 @@ class TheAction(unittest.TestCase):
                 outputs, done = self.check("version", version=asked)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 self.assertEqual(outputs, {"version": asked, "channel": channel})
-        # Under a source that declares its version, what is handed in may carry the marker, and what comes out
-        # does not.
+        # Under a source that declares its version, the version given may carry the marker.
+        # The version in the output does not.
         (self.work / "gradle.properties").write_text("version = 0.2.0-SNAPSHOT\ntagPrefix = v\n", encoding="utf-8")
         outputs, done = self.check("version", version="0.2.0-SNAPSHOT", source="gradle.properties")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)

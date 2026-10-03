@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""What draft does to a repository and asks of GitHub, exercised against a repository built for the purpose.
+"""What draft does to a repository and asks of GitHub, tested against a repository built for the purpose.
 
-A bare repository stands in for the remote, so the forced push is a real push. `gh` is a stub on PATH that
-records what it would say to GitHub and answers `release view` from a file, so that a draft left by an
-earlier run can be staged; nothing is sent anywhere.
+A bare repository stands in for the remote, so the forced push is a real push.
+`gh` is a stub on PATH that records what it would send to GitHub.
+It answers `release view` from a file, so a test can stage a draft left by an earlier run.
+Nothing is sent anywhere.
 
 Run with `python3 -m unittest discover` over the directory this file sits in.
 """
@@ -40,7 +41,7 @@ def git(*arguments, cwd, check=True):
 
 
 class Draft(unittest.TestCase):
-    """A release commit cut and built, the workspace on it, waiting to be pushed and drafted."""
+    """A release commit, cut and built, with the workspace on it, waiting to be pushed and drafted."""
 
     def setUp(self):
         self.cut()
@@ -109,7 +110,10 @@ class Draft(unittest.TestCase):
         self.assertFalse([line for line in self.said() if "prerelease" in line], self.said())
 
     def test_build_metadata_does_not_mark_a_pre_release(self):
-        """A hyphen in the metadata is no pre-release suffix: the rule is check-release's, not a pattern here."""
+        """A hyphen in the build metadata is not a pre-release suffix.
+
+        The rule is check-release's, not a pattern in draft.sh.
+        """
         self.cut("1.0.0+build-7", CUT.replace("0.1.1", "1.0.0+build-7"))
         done = self.draft()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -117,14 +121,14 @@ class Draft(unittest.TestCase):
         self.assertFalse([line for line in self.said() if "prerelease" in line], self.said())
 
     def test_a_pre_release_is_marked_as_one(self):
-        """So that GitHub does not hold it out as the latest release to everyone."""
+        """So that GitHub does not show it to everyone as the latest release."""
         self.cut("0.2.0-rc.1", CUT.replace("0.1.1", "0.2.0-rc.1"))
         done = self.draft()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("--prerelease", self.created())
 
     def test_a_draft_left_by_an_earlier_run_goes_first(self):
-        """GitHub would put a second draft beside it rather than replace it."""
+        """GitHub would add a second draft beside it, not replace it."""
         (self.stubs / "isDraft").write_text("true\n", encoding="utf-8")
         self.draft()
         said = self.said()
@@ -134,7 +138,7 @@ class Draft(unittest.TestCase):
         self.assertLess(deleted_at, said.index(self.created()))
 
     def test_every_draft_of_the_tag_goes(self):
-        """`gh` finds one draft of a tag at a time, so two standing side by side take two deletions."""
+        """`gh` finds one draft of a tag at a time, so two drafts side by side take two deletions."""
         (self.stubs / "isDraft").write_text("true\n", encoding="utf-8")
         (self.stubs / "drafts").write_text("2\n", encoding="utf-8")
         done = self.draft()
@@ -144,8 +148,10 @@ class Draft(unittest.TestCase):
         self.assertEqual({line.split()[2] for line in self.said() if line.startswith("release view")}, {"v0.1.1"})
 
     def test_drafts_that_outlast_the_bound_stop_the_run(self):
-        """Drafts are deleted a bounded number of times, twenty, rather than for as long as GitHub answers one: past
-        that the run stops, and no draft is created beside the one still standing."""
+        """Drafts are deleted at most twenty times, not for as long as GitHub still shows one.
+
+        Past that the run stops, and no draft is created beside the one still there.
+        """
         (self.stubs / "isDraft").write_text("true\n", encoding="utf-8")
         (self.stubs / "drafts").write_text("21\n", encoding="utf-8")
         done = self.draft()
@@ -162,8 +168,11 @@ class Draft(unittest.TestCase):
         self.assertIsNotNone(self.created())
 
     def test_a_second_attempt_replaces_the_branch(self):
-        """The one forced push in the flow. The attempts differ in content, as a real second attempt does:
-        two identical commits in the same second are one commit, and pushing it again proves nothing."""
+        """The only forced push in the flow.
+
+        The two attempts differ in content, as a real second attempt does.
+        Two identical commits made in the same second are one commit, and pushing it again would prove nothing.
+        """
         self.draft()
         first = self.on_origin("release/0.1.1")
         git("reset", "-q", "--hard", "HEAD~1", cwd=self.work)
@@ -182,8 +191,10 @@ class Draft(unittest.TestCase):
         self.assertIsNone(self.created())
 
     def test_a_path_naming_no_file_stops_the_run_before_anything_is_pushed(self):
-        """A plain path has no glob character for nullglob to act on, so it comes back as itself, and a build
-        that names the one file it made hands over exactly that."""
+        """A plain path has no glob character for nullglob to act on, so it comes back unchanged.
+
+        A build that names the one file it made hands over exactly such a path.
+        """
         done = self.draft(files="build/plugin-signed.zip\nbuild/missing.zip")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("build/missing.zip is no file here", done.stdout + done.stderr)
@@ -198,15 +209,14 @@ class Draft(unittest.TestCase):
         self.assertIsNone(self.created())
 
     def test_a_path_holding_a_space_is_one_path(self):
-        """An archive named after a project called "My Plugin" is attached whole, rather than taken for two
-        paths naming no file."""
+        """An archive named after a project called "My Plugin" is attached whole, not split into two paths."""
         (self.work / "build" / "My Plugin-signed.zip").write_text("an archive", encoding="utf-8")
         done = self.draft(files="build/My Plugin-signed.zip")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("build/My Plugin-signed.zip", self.created())
 
     def test_every_line_is_one_pattern_and_a_blank_line_none(self):
-        """The shape a YAML `|` block hands over, blank lines and the newline at its end included."""
+        """The shape a YAML `|` block hands over, including blank lines and the newline at its end."""
         (self.work / "build" / "the checksums.txt").write_text("a checksum", encoding="utf-8")
         done = self.draft(files="\nbuild/*-signed.zip\n\n  \nbuild/the checksums.txt\n")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)

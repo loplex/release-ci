@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Cut the release commit onto a branch of its own: [Unreleased] closed into a section for the version being
-# released; that version written back where the source declares one; one commit, on a branch named for the
-# version. Everything a release does to the repository before anything is built, and nothing that needs a
-# build. Nothing is pushed either: the build runs from this commit next, and a build that fails should leave
-# neither a branch nor a draft behind - which is why pushing waits for the build to have succeeded, and goes
-# with the draft.
+# Cut the release commit onto a branch of its own, named for the version:
+# - [Unreleased] is closed into a section for the version being released;
+# - that version is written back where the source declares one;
+# - all of it is one commit.
+# This is everything a release does to the repository before the build.
+# Nothing is pushed: the build runs from this commit next.
+# A failed build should leave neither a branch nor a draft behind, so the push waits for the build and goes with the
+# draft.
 #
-# Driven by environment rather than by arguments, because that is how a composite action hands its inputs
-# over - and kept out of action.yml so that it can be run against a repository in a test.
+# Inputs come from the environment, because that is how a composite action hands them over.
+# The script lives outside action.yml so that a test can run it against a repository.
 #
 # Reads:  VERSION_SOURCE TAG_PREFIX VERSION REPOSITORY_URL GITHUB_OUTPUT
 # Writes: version, tag, branch  (to GITHUB_OUTPUT)
@@ -24,8 +26,8 @@ fi
 check_release=(python3 "$script")
 source_arguments=(--version-source "$VERSION_SOURCE" "${prefix_arguments[@]}")
 
-# The rules first, and all of them, before anything is written: a release that fails them is one that was
-# never cut, not one that has to be undone.
+# All the checks run before anything is written.
+# A release that fails them was then never cut, and there is nothing to undo.
 failed=0
 for check in changelog ancestry; do
   "${check_release[@]}" "$check" "${source_arguments[@]}" || failed=1
@@ -43,18 +45,19 @@ prefix=$("${check_release[@]}" prefix "${source_arguments[@]}"); rc=$?
 if (( rc != 0 )); then
   exit 1
 fi
-# Not a setting: once the release is tagged, check-release names release/<version> first among the remote
-# branches holding its tag, or among the local ones where no remote one does.
+# Not a setting: once the release is tagged, check-release names release/<version> first among the branches
+# that hold its tag - the remote ones, or the local ones where no remote one does.
 branch="release/${version}"
 
-# What patchChangelog does in a Gradle plugin, done by the same file that later checks the result against the
-# tag: the entries under [Unreleased] become the section for this version, dated today, and where a
-# repository URL is given the link definitions are written afresh to include it.
+# What patchChangelog does in a Gradle plugin, done by the tool that later checks the result against the tag.
+# The entries under [Unreleased] become the section for this version, dated today.
+# Where a repository URL is given, the link definitions are written again to include it.
 #
-# First of the writes, and the last of the rules with it: an [Unreleased] with nothing to release - nothing
-# under it, and for a final release no pre-release since the final release before it to take in - is refused
-# before the file is rewritten, so a release with nothing to say about itself leaves no branch and no output
-# behind either.
+# This is the first write, and also the last check.
+# An [Unreleased] with nothing to release is refused before the file is rewritten:
+# nothing under it, and for a final release no pre-release since the final release before it, in SemVer order,
+# to take in.
+# Such a release then leaves no branch and no output behind.
 repository_url_arguments=()
 if [[ -n $REPOSITORY_URL ]]; then
   repository_url_arguments=(--repository-url "$REPOSITORY_URL")
@@ -64,13 +67,14 @@ fi
 git config user.name 'github-actions[bot]'
 git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-# Created from here rather than switched to, so that a branch left behind by an earlier attempt is replaced
-# rather than continued: a second attempt at the same version starts again from the commit checked out.
+# Created here, not switched to, so that a branch left by an earlier attempt is replaced, not continued.
+# A second attempt at the same version starts again from the commit checked out.
 git switch -C "$branch" || exit 1
 
-# Written by the tool that also reads that line, rather than by a pattern here. A source that declares no
-# version has nothing to write and says so with a status of its own, 3; the release is still the version it
-# was asked to be. Any other failure stops here, before a commit names a release the build would not make.
+# Written by the tool that also reads that line, not by a pattern here.
+# A source that declares no version has nothing to write and exits with 3.
+# The release is still the version it was asked to be.
+# Any other failure stops here, before a commit names a release the build would not make.
 "${check_release[@]}" set-version "$version" --version-source "$VERSION_SOURCE" >/dev/null; rc=$?
 if (( rc == 3 )); then
   echo "${VERSION_SOURCE} declares no version, so none was written; ${prefix}${version} is what the tag will say"
@@ -81,8 +85,8 @@ fi
 
 git commit -qam "chore(release): ${version}" || exit 1
 
-# Written once the commit is made, so that a step which failed leaves nothing for a later one to read as
-# though the release had been cut.
+# Written only once the commit is made.
+# A failed step then leaves nothing that a later step could read as a release that was cut.
 {
   echo "version=${version}"
   echo "tag=${prefix}${version}"

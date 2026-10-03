@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""What merge-back does to a repository, exercised against one built for the purpose.
+"""What merge-back does to a repository, tested against one built for the purpose.
 
-A bare repository stands in for the remote, so that pushing is a real push and a refused fast-forward is a
-real refusal - which is the branch worth testing, being the one that catches the race. `gh` is a stub on
-PATH: what it would say to GitHub is recorded and asserted, and nothing is sent anywhere.
+A bare repository stands in for the remote, so a push is a real push and a refused fast-forward a real refusal.
+That refusal is the path most worth testing, because it is the one that catches the race.
+`gh` is a stub on PATH: what it would send to GitHub is recorded and asserted, and nothing is sent anywhere.
 
 Run with `python3 -m unittest discover` over the directory this file sits in.
 """
@@ -25,8 +25,11 @@ def git(*arguments, cwd, check=True):
 
 
 class Staged(unittest.TestCase):
-    """A repository in the state a published release leaves behind: a release commit on a branch of its own,
-    tagged and pushed, and a default branch that has not seen it. Holds no tests of its own."""
+    """A repository in the state a published release leaves behind.
+
+    A release commit on a branch of its own, tagged and pushed, and a default branch that does not have it yet.
+    This class holds no tests of its own.
+    """
 
     def stage(self, prefix="v", at_start=AT_START, released=RELEASED):
         self.tag = f"{prefix}0.1.0"
@@ -46,7 +49,7 @@ class Staged(unittest.TestCase):
         git("commit", "-qm", "base", cwd=self.work)
         git("push", "-q", "-u", "origin", "main", cwd=self.work)
 
-        # The release commit, on a branch of its own, tagged - the state a published release leaves behind.
+        # The release commit, on a branch of its own and tagged: the state a published release leaves behind.
         git("switch", "-qc", "release/0.1.0", cwd=self.work)
         (self.work / "gradle.properties").write_text(
             f"version = 0.1.0\ntagPrefix = {prefix}\n", encoding="utf-8")
@@ -63,8 +66,10 @@ class Staged(unittest.TestCase):
         self.stubs = stubs
 
     def land_elsewhere(self, message, files=None):
-        """Someone else landing on the default branch, from a clone of their own: `files` by name and text,
-        or an empty commit where only its place on the history matters."""
+        """Someone else pushing to the default branch from a clone of their own.
+
+        `files` maps names to text; without it the commit is empty, for where only its place in the history matters.
+        """
         theirs = Path(self.enterContext(tempfile.TemporaryDirectory())) / "theirs"
         subprocess.run(["git", "clone", "-q", "--branch", "main", str(self.origin), str(theirs)],
                        check=True, capture_output=True)
@@ -76,8 +81,9 @@ class Staged(unittest.TestCase):
         git("push", "-q", "origin", "main", cwd=theirs)
 
     def carry_back(self, source="gradle.properties", tag_prefix="", fetch=True, check_workflow="ci.yml"):
-        # Not fetching is how the race is staged: the checkout knows the default branch as it stood when it
-        # was made, which is exactly what a run holds while someone else pushes.
+        # Not fetching is how the race is staged.
+        # The checkout knows the default branch as it was when the checkout was made, as a run does while someone
+        # else pushes.
         if fetch:
             git("fetch", "-q", "origin", cwd=self.work)
         written = Path(self.enterContext(tempfile.TemporaryDirectory())) / "output.txt"
@@ -121,8 +127,11 @@ class MergeBack(Staged):
         self.assertIn("version = 0.1.1-SNAPSHOT", properties)
 
     def test_a_check_is_asked_for_and_the_branch_taken_down(self):
-        """A push made with GITHUB_TOKEN starts no run, so the branch would otherwise arrive unchecked. Asked for
-        once the release is on it: asked before, it would check the default branch as it was."""
+        """A push made with GITHUB_TOKEN starts no run, so the branch would otherwise arrive unchecked.
+
+        The check is started once the release is on the branch.
+        Started before, it would check the default branch as it was.
+        """
         asked_of = self.gh_log.with_name("asked-of.txt")
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
         (self.stubs / "gh").write_text(
@@ -136,8 +145,10 @@ class MergeBack(Staged):
         self.assertNotIn("release/0.1.0", git("branch", "-a", cwd=self.origin).stdout)
 
     def test_a_check_that_cannot_be_asked_for_only_warns(self):
-        """The release is out and on the default branch by then, so a refused dispatch - a token without
-        `actions: write` - is said, and the branch is still taken down."""
+        """The release is out and on the default branch by then.
+
+        A refused dispatch, from a token without `actions: write`, only warns, and the branch is still deleted.
+        """
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
         (self.stubs / "gh").write_text(gh + '[[ "$1 $2" == "workflow run" ]] && exit 1\nexit 0\n', encoding="utf-8")
         outputs, done = self.carry_back()
@@ -147,7 +158,7 @@ class MergeBack(Staged):
         self.assertNotIn("release/0.1.0", git("branch", "-a", cwd=self.origin).stdout)
 
     def test_a_branch_that_cannot_be_taken_down_only_warns(self):
-        """Deleting the branch is tidying after a release that has landed: refused, it is said, not failed."""
+        """Deleting the branch is cleanup after a release that has landed: a refusal warns, it does not fail."""
         hook = self.origin / "hooks" / "pre-receive"
         hook.write_text('#!/bin/bash\nwhile read -r old new ref; do\n'
                         '  [[ $ref == refs/heads/release/0.1.0 && $new =~ ^0+$ ]] && exit 1\n'
@@ -160,8 +171,10 @@ class MergeBack(Staged):
         self.assertIn("release/0.1.0", git("branch", "-a", cwd=self.origin).stdout)
 
     def test_a_check_workflow_left_out_is_refused_before_anything_lands(self):
-        """GitHub does not hold an action to `required`: left out, the input arrives empty, and skipping the
-        check would land a release nothing is asked to check."""
+        """GitHub does not enforce `required`: an input left out arrives empty.
+
+        Skipping the check would land a release with nothing started to check it.
+        """
         outputs, done = self.carry_back(check_workflow="")
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         self.assertIn("check-workflow names no workflow", done.stdout)
@@ -169,8 +182,11 @@ class MergeBack(Staged):
         self.assertFalse(self.on_default_branch(self.tag))
 
     def test_work_that_landed_since_the_release_was_cut_is_taken_in(self):
-        """Taken in whole, not only as history: a merge keeping the commit and dropping what it changed would
-        put its subject on the default branch and the work nowhere."""
+        """The other work is taken in whole, not only as history.
+
+        A merge that kept the commit but dropped its changes would put its subject on the default branch and the
+        work nowhere.
+        """
         self.land_elsewhere("landed since the release was cut", {"work.txt": "landed\n"})
         outputs, done = self.carry_back()
         self.assertEqual(outputs.get("landed"), "true", done.stderr)
@@ -180,12 +196,14 @@ class MergeBack(Staged):
         self.assertEqual(git("show", "main:work.txt", cwd=self.origin, check=False).stdout, "landed\n")
 
     def test_a_default_branch_that_moves_under_the_push_is_not_pushed_past(self):
-        """The race the unforced push exists to catch. Landing anyway would need --force, and would throw
-        away whatever arrived in between."""
+        """The race the unforced push exists to catch.
+
+        Landing anyway would need --force, and would throw away whatever arrived in between.
+        """
         self.land_elsewhere("won the race")
-        # Run without fetching: the branch merges the default branch as this checkout knows it, and the push
-        # then meets a remote that has moved. Fetching first would make the race disappear: the push would land,
-        # and the test would be asserting a race it never staged.
+        # Run without fetching: the branch merges the default branch as this checkout knows it.
+        # The push then meets a remote that has moved.
+        # Fetching first would remove the race: the push would land, and the test would assert a race it never staged.
         outputs, done = self.carry_back(fetch=False)
         self.assertEqual(outputs.get("landed"), "false", done.stdout + done.stderr)
         self.assertFalse(self.on_default_branch(self.tag))
@@ -193,8 +211,10 @@ class MergeBack(Staged):
         self.assertIn("Until this is merged, `main` does not reach `v0.1.0`", self.gh_said())
 
     def test_a_default_branch_that_takes_no_push_is_left_to_the_pull_request(self):
-        """A protected default branch refuses the push every time, and the warning names that as well as the
-        race, not being able to tell the two apart."""
+        """A protected default branch refuses the push every time.
+
+        The warning cannot tell that from the race, so it names both.
+        """
         hook = self.origin / "hooks" / "pre-receive"
         hook.write_text('#!/bin/bash\ngrep -q " refs/heads/main$" && exit 1\nexit 0\n', encoding="utf-8")
         hook.chmod(0o755)
@@ -227,20 +247,23 @@ class MergeBack(Staged):
         self.assertIn("did not merge", printed)
         on_branch = git("log", "--format=%s", f"{self.tag}..release/0.1.0", cwd=self.origin).stdout.splitlines()
         self.assertEqual(on_branch, ["chore: start 0.1.1-SNAPSHOT", "ours"], "the branch as it was before the merge")
-        # Told apart from the race above: reporting a conflict as merged would reach the push, be refused
-        # for a different reason, and send the reader looking for a race that never happened.
+        # Told apart from the race above.
+        # A conflict reported as merged would reach the push and be refused for a different reason.
+        # The reader would then look for a race that never happened.
         self.assertNotIn("moved while this ran", printed)
 
     def test_a_source_declaring_no_version_lands_all_the_same(self):
-        """A repository versioned by its tags has nothing to write back, which is not a failure to write."""
+        """A repository versioned by its tags has nothing to write back, and that is not a failed write."""
         outputs, done = self.carry_back(source="tags", tag_prefix="v")
         self.assertEqual(outputs.get("landed"), "true", done.stdout + done.stderr)
         self.assertTrue(self.on_default_branch(self.tag), "the tag has to be reachable from the branch")
         self.assertIn("records no version", done.stdout)
 
     def test_a_pull_request_names_the_version_it_opened(self):
-        """And says that a feature which landed while the release was out asks for more than that version, so
-        that the version check refusing it here is not read as the release's fault."""
+        """The body also says that a feature that landed while the release was out asks for more than that version.
+
+        A version check refusing it here is then not read as the release's fault.
+        """
         self.land_elsewhere("won the race")
         self.carry_back(fetch=False)
         self.assertIn("--title Release 0.1.0, and start 0.1.1-SNAPSHOT --body", self.gh_said())
@@ -248,16 +271,21 @@ class MergeBack(Staged):
         self.assertIn("followed by the marker `0.1.1-SNAPSHOT` carries", self.gh_said())
 
     def test_a_pull_request_under_a_source_declaring_no_version_claims_none_opened(self):
-        """Nothing was written back, so a title saying the next version was started would name a commit the
-        branch does not have."""
+        """Nothing was written back.
+
+        A title saying the next version was started would name a commit the branch does not have.
+        """
         self.land_elsewhere("won the race")
         self.carry_back(source="tags", tag_prefix="v", fetch=False)
         self.assertIn("--title Release 0.1.0 --body", self.gh_said())
         self.assertNotIn("This branch starts", self.gh_said())
 
     def test_a_release_branch_that_cannot_be_pushed_opens_no_pull_request(self):
-        """Opened anyway, the pull request would carry the branch as the remote holds it, without the commit
-        opening the next version and under a title saying it has one, and the step would pass."""
+        """Opened anyway, the pull request would carry the branch as the remote has it.
+
+        That branch lacks the commit starting the next version, under a title saying it has one, and the step
+        would pass.
+        """
         self.land_elsewhere("won the race")
         hook = self.origin / "hooks" / "pre-receive"
         hook.write_text('#!/bin/bash\ngrep -q " refs/heads/release/" && exit 1\nexit 0\n', encoding="utf-8")
@@ -269,8 +297,10 @@ class MergeBack(Staged):
         self.assertEqual(outputs.get("landed"), "false")
 
     def test_a_version_that_cannot_be_written_stops_the_run_before_anything_lands(self):
-        """Only a source declaring no version is let through. A write that failed read the same way would
-        land the release with its own version still declared."""
+        """Only a source that declares no version is let through.
+
+        A failed write treated the same way would land the release with its own version still declared.
+        """
         git("switch", "-q", "release/0.1.0", cwd=self.work)
         (self.work / "gradle.properties").write_text("version = 0.1.0\nversion = 0.1.0\ntagPrefix = v\n",
                                                      encoding="utf-8")
@@ -282,16 +312,19 @@ class MergeBack(Staged):
         self.assertFalse(self.on_default_branch(self.tag))
 
     def test_a_run_repeated_after_its_pull_request_was_refused_carries_on(self):
-        """The first run pushed the branch, the next version opened on it, and was refused the pull request -
-        Actions not allowed to open one, say. The run repeated after it finds that commit on the branch and has
-        nothing to write, which is no reason to fail, and its pull request still says the version was opened."""
+        """The first run pushed the branch with the next version started on it, and was refused the pull request.
+
+        Actions not being allowed to open one is such a case.
+        The repeated run finds that commit on the branch and has nothing to write, which is no reason to fail.
+        Its pull request still says the next version was started.
+        """
         self.land_elsewhere("won the race")
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
         (self.stubs / "gh").write_text(gh + '[[ "$1 $2" == "pr create" ]] && exit 1\nexit 0\n', encoding="utf-8")
         _, first = self.carry_back(fetch=False)
         self.assertNotEqual(first.returncode, 0, first.stdout + first.stderr)
         (self.stubs / "gh").write_text(gh, encoding="utf-8")
-        # Checked out afresh, as a repeated run is: the tag, and the branch only as the remote holds it.
+        # A fresh checkout, as a repeated run makes: the tag, and the branch only as the remote has it.
         git("switch", "-q", "--detach", self.tag, cwd=self.work)
         git("branch", "-q", "-D", "release/0.1.0", cwd=self.work)
         _, done = self.carry_back(fetch=False)
@@ -303,10 +336,13 @@ class MergeBack(Staged):
         self.assertEqual(on_branch.count("chore: start 0.1.1-SNAPSHOT"), 1)
 
     def test_a_run_repeated_while_its_pull_request_is_open_and_the_push_still_refused_leaves_it_open(self):
-        """Repeating the job is how a later step of it that failed is tried again, and where the release went to a
-        pull request nobody has merged yet, that pull request is still there. Where the push is refused again - the
-        race staged a second time, by not fetching - GitHub would refuse a second pull request for the same branch,
-        and failing on that would put a red run over a release carried back as before."""
+        """Repeating the job is how a failed later step is retried.
+
+        Where the release went to a pull request nobody has merged yet, that pull request is still there.
+        Here the push is refused again: the race is staged a second time, by not fetching.
+        GitHub would refuse a second pull request for the same branch.
+        Failing on that would show a red run for a release carried back as before.
+        """
         self.land_elsewhere("won the race")
         _, first = self.carry_back(fetch=False)
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
@@ -314,7 +350,7 @@ class MergeBack(Staged):
         url = "https://github.com/o/r/pull/1"
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
         (self.stubs / "gh").write_text(gh + f'[[ "$1 $2" == "pr list" ]] && echo {url}\nexit 0\n', encoding="utf-8")
-        # Checked out afresh, as a repeated run is: the tag, and the branch only as the remote holds it.
+        # A fresh checkout, as a repeated run makes: the tag, and the branch only as the remote has it.
         git("switch", "-q", "--detach", self.tag, cwd=self.work)
         git("branch", "-q", "-D", "release/0.1.0", cwd=self.work)
         outputs, done = self.carry_back(fetch=False)
@@ -328,15 +364,18 @@ class MergeBack(Staged):
         self.assertIn("pr list --base main --head release/0.1.0 --state open ", self.gh_said())
 
     def test_a_run_repeated_while_its_pull_request_is_open_lands_where_it_now_can(self):
-        """The race is over by the time the job is run again, and a fresh checkout sees the default branch as it
-        now stands: the release lands, and the branch the pull request carried goes with it."""
+        """The race is over by the time the job runs again.
+
+        A fresh checkout sees the default branch as it is now.
+        The release lands, and the branch the pull request carried is deleted.
+        """
         self.land_elsewhere("won the race")
         _, first = self.carry_back(fetch=False)
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         gh = (self.stubs / "gh").read_text(encoding="utf-8")
         (self.stubs / "gh").write_text(
             gh + '[[ "$1 $2" == "pr list" ]] && echo https://github.com/o/r/pull/1\nexit 0\n', encoding="utf-8")
-        # Checked out afresh, as a repeated run is: the tag, and the branch only as the remote holds it.
+        # A fresh checkout, as a repeated run makes: the tag, and the branch only as the remote has it.
         git("switch", "-q", "--detach", self.tag, cwd=self.work)
         git("branch", "-q", "-D", "release/0.1.0", cwd=self.work)
         outputs, done = self.carry_back()
@@ -348,11 +387,13 @@ class MergeBack(Staged):
         self.assertEqual(len(create_calls), 1, "no second pull request beside the one the first run opened")
 
     def test_a_run_repeated_after_the_release_landed_passes_and_pushes_nothing(self):
-        """Repeating the job is how a later step of it that failed is tried again, and by then the release
-        branch is deleted. The run finds the tag on the default branch and says the release has landed."""
+        """Repeating the job is how a failed later step is retried, and by then the release branch is deleted.
+
+        The run finds the tag on the default branch and says the release has landed.
+        """
         self.carry_back()
         refs_before = git("for-each-ref", cwd=self.origin).stdout
-        # Checked out afresh, as a repeated run is: the tag, and no release branch.
+        # A fresh checkout, as a repeated run makes: the tag, and no release branch.
         git("switch", "-q", "--detach", self.tag, cwd=self.work)
         git("branch", "-q", "-D", "release/0.1.0", cwd=self.work)
         outputs, done = self.carry_back()
@@ -364,12 +405,15 @@ class MergeBack(Staged):
 
 
 class WhereAMergeRewritesTheReleasedSection(Staged):
-    """An entry added under [Unreleased] on the default branch since the release was cut. The release moved the
-    lines above it into a section of its own, and a three-way merge, which sees lines rather than headings,
-    puts the new entry into that released section - cleanly, without a conflict to stop it."""
+    """An entry added under [Unreleased] on the default branch since the release was cut.
+
+    The release moved the lines above it into a section of its own.
+    A three-way merge sees lines, not headings, so it puts the new entry into that released section.
+    It does so cleanly, with no conflict to stop it.
+    """
 
     PREFIX = "v"
-    # What the run writes on the release branch before it tries the merge: the commit opening the next version.
+    # What the run writes on the release branch before it tries the merge: the commit starting the next version.
     OPENED = ["chore: start 0.1.1-SNAPSHOT"]
 
     def setUp(self):
@@ -392,8 +436,10 @@ class WhereAMergeRewritesTheReleasedSection(Staged):
         self.assertIn("pr create", self.gh_said())
 
     def test_the_branch_offered_is_the_one_from_before_the_merge(self):
-        """The pull request is where the entry is put back under [Unreleased], so it starts from the release
-        as published, not from the merge that moved the entry."""
+        """The entry is put back under [Unreleased] in the pull request.
+
+        So the pull request starts from the release as published, not from the merge that moved the entry.
+        """
         outputs, done = self.carry_back()
         self.assertEqual(outputs.get("landed"), "false", done.stdout + done.stderr)
         offered = git("show", "release/0.1.0:CHANGELOG.md", cwd=self.origin).stdout
@@ -403,8 +449,11 @@ class WhereAMergeRewritesTheReleasedSection(Staged):
 
 
 class WhereTagsCarryNoPrefix(WhereAMergeRewritesTheReleasedSection):
-    """`^none` says the tags are bare. Handed on as a prefix of its own it would count no release, and the
-    rules asked of the merged tree would pass having compared nothing."""
+    """`^none` says the tags have no prefix.
+
+    Passed on as a literal prefix, it would match no release.
+    The checks on the merged tree would then pass having compared nothing.
+    """
 
     PREFIX = ""
     OPENED = []  # A source declaring no version has no next version to open.
@@ -414,10 +463,13 @@ class WhereTagsCarryNoPrefix(WhereAMergeRewritesTheReleasedSection):
 
 
 class WhereTagsAreNamedDifferently(Staged):
-    """The prefix is read from the source, not assumed. A repository tagging `release-0.1.0` and read as
-    tagging `v*` keeps the whole tag as the version, which is no version, and stops before anything is
-    carried back. Under `release-`, taking off whatever stands in front of the first digit gives the same
-    version; the subclass below is where the two part."""
+    """The prefix is read from the source, not assumed.
+
+    A repository tagging `release-0.1.0`, read as tagging `v*`, would keep the whole tag as the version.
+    That is no version, and the run stops before anything is carried back.
+    Under `release-`, cutting off everything before the first digit gives the same version.
+    The subclass below is where the two differ.
+    """
 
     def setUp(self):
         self.stage("release-")
@@ -430,8 +482,10 @@ class WhereTagsAreNamedDifferently(Staged):
 
 
 class WhereThePrefixCarriesADigit(WhereTagsAreNamedDifferently):
-    """`r2-v0.1.0`: what comes off is the prefix declared, not whatever stands in front of the first digit, nor
-    whatever stands up to a hyphen."""
+    """`r2-v0.1.0`: what comes off is the declared prefix.
+
+    Not everything before the first digit, and not everything up to a hyphen.
+    """
 
     def setUp(self):
         self.stage("r2-v")

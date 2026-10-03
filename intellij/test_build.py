@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""What the build stops on: a Plugin Verifier that left no report, and anything but exactly one signed archive
-where it says the archive landed.
+"""What stops the build:
+- a Plugin Verifier that left no report;
+- anything but exactly one signed archive where the build reports the archive to be.
 
 Run with `python3 -m unittest discover` over the directory this file sits in.
 """
@@ -14,8 +15,7 @@ from pathlib import Path
 
 ARCHIVE_SH = Path(__file__).resolve().parent / "build" / "archive.sh"
 VERIFIER_REPORT_SH = ARCHIVE_SH.parent / "verifier-report.sh"
-# The pattern a caller gets unless it sets `archive-pattern`, read from the action rather than copied, so that the
-# archive picked here is the one the action picks.
+# The default `archive-pattern`, read from the action rather than copied, so that this test picks what the action picks.
 DEFAULT_PATTERN = re.search(r"^  archive-pattern:\n(?:    .*\n)*?    default: (.+)$",
                             (ARCHIVE_SH.parent / "action.yml").read_text(encoding="utf-8"), re.MULTILINE).group(1)
 
@@ -56,8 +56,7 @@ class TheSignedArchive(unittest.TestCase):
         self.assertEqual(output, "")
 
     def test_a_path_naming_no_file_is_refused(self):
-        """No glob character, so nothing for nullglob to act on: the path comes back as itself, one word
-        and no file."""
+        """A path with no glob character comes back as itself, even though no file has that name."""
         done, output = self.run_archive_sh("build/distributions/plugin-signed.zip")
         self.assertEqual(done.returncode, 1)
         self.assertIn("names no file here", done.stdout)
@@ -65,8 +64,7 @@ class TheSignedArchive(unittest.TestCase):
         self.assertEqual(output, "")
 
     def test_a_pattern_holding_a_space_is_one_pattern(self):
-        """An archive named after a project called "My Plugin" is found whole, rather than taken for two words
-        naming no file."""
+        """An archive named after a project called "My Plugin" is found whole, not split into two words."""
         self.made("My Plugin-1.0.0-signed.zip")
         done, output = self.run_archive_sh("build/distributions/My Plugin-*-signed.zip")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -93,7 +91,7 @@ class TheVerifierReport(unittest.TestCase):
         self.assertIn("left no report in build/reports/pluginVerifier", done.stdout)
 
     def test_an_empty_report_directory_is_no_report(self):
-        """What a Verifier that never ran can leave behind: the directory, made by the build, and nothing in it."""
+        """A Verifier that never ran can leave the directory behind, made by the build, with nothing in it."""
         self.reports.mkdir(parents=True)
         done = self.run_verifier_report_sh()
         self.assertEqual(done.returncode, 1)

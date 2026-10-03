@@ -1,10 +1,11 @@
-# Python here is written to 120 columns, the right margin IntelliJ gives by default and the one this code was written
-# against, rather than PEP 8's 79 or the 99 it lets a team agree on. Every other file is held to the same, but for
-# Markdown prose, which is written to 100; a block of code in Markdown, fenced or indented, is code. A paragraph
-# rewrapped is filled to the limit, so that text does not narrow with every edit.
-# .github/test_line_length.py holds every tracked file to these, but for a line opening with a link too long for a line
-# of its own (one word after it at most) and, in Markdown, a table row, a link definition and a released section of
-# CHANGELOG.md.
+# Every file is written to 120 columns, the right margin IntelliJ gives by default, but for Markdown prose.
+# For Python this is wider than PEP 8's 79, or the 99 it lets a team agree on.
+# Markdown prose is written to 100. A block of code in Markdown, fenced or indented, counts as code.
+# A paragraph that is rewrapped is filled up to the limit, so that text does not get narrower with every edit.
+#
+# .github/test_line_length.py holds every tracked file to these limits. It lets through:
+# - a line that opens with a link too long for a line of its own, with one word after it at most;
+# - in Markdown, a table row, a link definition, and a released section of CHANGELOG.md.
 root = true
 
 [*]

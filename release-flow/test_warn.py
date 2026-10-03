@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""What warn writes into a release's notes, exercised against a stub `gh`.
+"""What warn writes into a release's notes, tested against a stub `gh`.
 
-The stub answers `release view` with notes a test stages and keeps whatever `release edit` would have written, so
-that nothing is sent anywhere and the notes can be compared byte for byte.
+The stub answers `release view` with notes a test stages, and keeps what `release edit` would have written.
+Nothing is sent anywhere, and the notes can be compared byte for byte.
 
 Run with `python3 -m unittest discover` over the directory this file sits in.
 """
@@ -73,11 +73,11 @@ class Warn(unittest.TestCase):
         self.assertTrue(self.edited()[0].startswith("release edit v0.1.1 --notes-file "))
 
     def test_a_publish_that_did_not_run_warns_as_one_that_failed(self):
-        """The step before it failed - taking the archive off the release, say - so nothing was published."""
+        """The step before it failed, such as taking the archive off the release, so nothing was published."""
         self.assertEqual(self.warned("skipped"), self.warned("failure"))
 
     def test_a_warning_is_one_sentence_to_a_line(self):
-        """GitHub shows a line end in release notes as a line break, so a sentence wrapped would show broken."""
+        """GitHub shows a line end in release notes as a line break, so a wrapped sentence would show broken."""
         for line in self.warned().splitlines():
             if line.startswith("> ") and line != "> [!WARNING]":
                 self.assertEqual(line.count(". "), 0, line)
@@ -88,8 +88,10 @@ class Warn(unittest.TestCase):
         self.assertEqual(self.warned("success", warned), NOTES)
 
     def test_notes_edited_in_the_browser_keep_their_line_ends(self):
-        """GitHub keeps notes as they were sent, CRLF included: the warning is written in their line ends, and
-        taken off gives them back byte for byte."""
+        """GitHub stores notes as they were sent, CRLF included.
+
+        The warning is written with their line ends, and taking it off gives them back byte for byte.
+        """
         notes = NOTES.replace("\n", "\r\n")
         warned = self.warned(notes=notes)
         self.assertNotIn("\n", warned.replace("\r\n", ""), repr(warned))
@@ -113,7 +115,7 @@ class Warn(unittest.TestCase):
         self.assertEqual(self.edited(), [])
 
     def test_a_warning_in_other_words_is_replaced_by_this_one(self):
-        """Found by its markers, not by its wording, so that one written by another version is said once."""
+        """Found by its markers, not its wording, so a warning written by another version is not repeated."""
         older = "<!-- release-flow/warn -->\n> [!WARNING]\n> Older words.\n<!-- /release-flow/warn -->\n\n" + NOTES
         written = self.warned(notes=older)
         self.assertNotIn("Older words", written)
@@ -133,8 +135,11 @@ class Warn(unittest.TestCase):
         self.assertTrue(self.warned(notes=own).endswith("-->\n\n" + own))
 
     def test_a_marker_anywhere_but_at_the_start_stops_the_run(self):
-        """A marker on a line of its own is looked for only where this action puts one. Anywhere else it may be an
-        example shown as code, or the warning after someone wrote above it, and neither is guessed at."""
+        """A marker on a line of its own is looked for only where this action puts one.
+
+        Anywhere else it may be an example shown as code, or the warning after someone wrote above it.
+        Neither is guessed at.
+        """
         warning = f"{START}\n> [!WARNING]\n> x\n{END}\n\n"
         cases = {
             "the warning, below text written above it": "Read this first.\n\n" + warning + NOTES,
@@ -156,8 +161,11 @@ class Warn(unittest.TestCase):
         self.assertIn("on line 3,", done.stdout)
 
     def test_a_warning_at_the_start_that_does_not_read_as_this_action_s_stops_the_run(self):
-        """Not closed, taking it off would take the notes' own text with it; holding more than quoted lines, it is
-        not what this action writes."""
+        """Two cases.
+
+        Not closed: taking it off would take the notes' own text with it.
+        Holding more than quoted lines: it is not what this action writes.
+        """
         cases = {
             "not closed": f"{START}\n> [!WARNING]\n\n" + NOTES,
             "holding a line that is not quoted": f"{START}\n> [!WARNING]\nThe notes' own.\n{END}\n\n" + NOTES,
@@ -176,9 +184,12 @@ class Warn(unittest.TestCase):
                     self.assertEqual(self.edited(), [])
 
     def test_a_marker_mentioned_in_a_line_of_text_is_text(self):
-        """Only a line holding a marker alone, spaces and tabs aside, is taken for one. A line ends where CommonMark
-        ends one - at a line feed, a carriage return or both - and is indented by spaces and tabs alone, so a form
-        feed or a Unicode line separator sets no marker apart."""
+        """Only a line holding a marker alone, apart from spaces and tabs, counts as a marker.
+
+        A line ends where CommonMark ends one: at a line feed, a carriage return, or both.
+        Only spaces and tabs indent it.
+        So a form feed or a Unicode line separator does not set a marker apart.
+        """
         cases = {
             "a line holding more than a marker": f"Written as {START}\n",
             "a line only a Unicode line separator would end": f"Written as\u2028{START}\n",
@@ -192,27 +203,32 @@ class Warn(unittest.TestCase):
                 self.assertEqual(self.warned("success", self.warned(notes=notes)), notes)
 
     def test_notes_ended_by_carriage_returns_alone_keep_them(self):
-        """A carriage return alone ends a line in CommonMark, and the warning is written in the notes' own ends."""
+        """A carriage return alone ends a line in CommonMark, and the warning uses the notes' own line ends."""
         notes = NOTES.replace("\n", "\r")
         warned = self.warned(notes=notes)
         self.assertNotIn("\n", warned, repr(warned))
         self.assertEqual(self.warned("success", warned), notes)
 
     def test_only_a_blank_line_after_the_warning_goes_with_it(self):
-        """A blank line is CommonMark's: nothing on it but spaces and tabs. A form feed is text."""
+        """A blank line as CommonMark defines it: nothing on it but spaces and tabs.
+
+        A form feed is text.
+        """
         notes = self.warned().replace("-->\n\n", "-->\n\x0c\n", 1)
         self.assertEqual(self.warned("success", notes), "\x0c\n" + NOTES)
 
     def test_an_outcome_that_names_no_step_stops_the_run(self):
-        """`steps.<id>.outcome` of an id naming no step is nothing, and read as a failure it would warn on every
-        release."""
+        """`steps.<id>.outcome` is empty for an id that names no step.
+
+        Read as a failure, it would warn on every release.
+        """
         done = self.warn("")
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("does steps.<id> name the step that publishes?", done.stdout)
         self.assertEqual(self.edited(), [])
 
     def test_an_outcome_but_success_failure_or_skipped_stops_the_run(self):
-        """`cancelled` included: a step is that only in a run that was cancelled, where this does not run."""
+        """`cancelled` included: a step has that outcome only in a cancelled run, where this does not run."""
         for outcome in ("cancelled", "Failure"):
             with self.subTest(outcome=outcome):
                 done = self.warn(outcome)
@@ -221,8 +237,10 @@ class Warn(unittest.TestCase):
                 self.assertEqual(self.edited(), [])
 
     def test_what_the_release_is_published_to_has_to_be_said_on_one_line(self):
-        """A line end would show as a line break halfway through the sentence, and leave a line in the warning that
-        is not quoted, which the next run would not take for this action's."""
+        """A line end would show as a line break halfway through the sentence.
+
+        It would also leave an unquoted line in the warning, and the next run would not take it for this action's.
+        """
         for to in ("", " ", "the JetBrains\nMarketplace", "the JetBrains\rMarketplace"):
             with self.subTest(to=to):
                 done = self.warn("failure", to=to)

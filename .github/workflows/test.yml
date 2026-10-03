@@ -1,7 +1,7 @@
-# The suites that hold this repository to its word, run on every push and pull request. Their Python comes
-# from .python-version so that the version the tests are written against and the one they run on cannot
-# drift apart, and those that run the actions' code run again on the oldest python3 the actions ask for. The
-# guards take the runner's own python3 instead, as any repository using the action does.
+# This repository's test suites, run on every push and pull request.
+# - `suite` takes its Python from .python-version, so the tests run on the version they are written against.
+# - `oldest-python` runs the suites that reach the actions' code again, on the oldest python3 the actions ask for.
+# - `guards` uses the runner's own python3, as any repository using the action does.
 name: test
 
 on:
@@ -25,9 +25,9 @@ jobs:
       - run: python3 -m unittest discover -s .github
 
   oldest-python:
-    # The actions run on the caller's own python3, and their descriptions ask for 3.10 or later. The suites run
-    # the actions' code in-process and through python3 on PATH, which setup-python makes 3.10 here, so anything
-    # newer than 3.10 in the code they reach fails this job while `suite` passes.
+    # The actions run on the caller's own python3, and their descriptions ask for 3.10 or later.
+    # The suites run the actions' code in-process and through python3 on PATH, which setup-python makes 3.10 here.
+    # So anything newer than 3.10 in the code the suites reach fails this job, while `suite` passes.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -39,10 +39,10 @@ jobs:
       - run: python3 .github/unittest-3.10.py intellij
 
   guards:
-    # The rules run against this repository through the action that offers them, which makes this their first
-    # consumer and the action's. It declares no version in a file, so it is the smallest consumer of the
-    # `tags` source there is. The default checks leave `version` out: it asks what may be released next,
-    # which is a question a release asks and not every push.
+    # The checks run against this repository through the check-release action, so this job is its first user.
+    # The repository declares no version in a file, so it uses the `tags` source in its simplest form.
+    # The default checks leave out `version`: it asks what may be released next, a question for a release,
+    # not for every push.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

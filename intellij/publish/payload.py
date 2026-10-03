@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Whether two plugin archives carry the same payload, which is what survives being signed.
+"""Whether two plugin archives carry the same payload: the part that survives being signed.
 
-A signature is not appended to a zip. It sits in a block of its own between the entry data and the central
-directory, and writing it moves the central directory along and rewrites the one offset pointing at it, in the
-end-of-central-directory record. The Marketplace counter-signs what it is given
-(https://plugins.jetbrains.com/docs/intellij/plugin-signing.html), so the file it serves can never be
-byte-identical to the file that was accepted - and it would differ again every time the certificate behind it
-changed, which is not a defect either. What a signature leaves alone is every entry's name, size and CRC, so
-that is what can be held to.
+A signature is not appended to a zip.
+It sits in a block of its own, between the entry data and the central directory.
+Writing it moves the central directory, and rewrites the one offset that points at it,
+in the end-of-central-directory record.
 
-Run as `payload.py accepted.zip served.zip`: says so and exits 0 where the two agree, and names what differs
-and exits 1 where they do not.
+The Marketplace counter-signs what it is given (https://plugins.jetbrains.com/docs/intellij/plugin-signing.html).
+So the file it serves is never byte-identical to the file that was accepted.
+It would also differ again every time the certificate behind it changed, which is not a defect either.
+A signature leaves every entry's name, size and CRC alone, so those are what is compared.
+
+Run as `payload.py accepted.zip served.zip`.
+Where the two agree, it says so and exits 0.
+Where they do not, it names what differs and exits 1.
 """
 
 import sys
@@ -18,18 +21,19 @@ import zipfile
 
 
 def payload(path: str) -> list[tuple[str, int, int]]:
-    """Every entry's name, uncompressed size and CRC, sorted. Not the compressed size: it is not payload, and
-    the same bytes stored at another level of compression are the same entry."""
+    """Every entry's name, uncompressed size and CRC, sorted.
+
+    Not the compressed size: the same bytes stored at another level of compression are the same entry."""
     with zipfile.ZipFile(path) as archive:
         return sorted((entry.filename, entry.file_size, entry.CRC) for entry in archive.infolist())
 
 
 def differences(accepted: list[tuple[str, int, int]], served: list[tuple[str, int, int]]) -> list[str]:
-    """What one archive has that the other does not, and what they both have but differently. Named entry by
-    entry rather than counted, because the answer a reader needs is which file to go and look at.
+    """What one archive has that the other does not, and what both have but differently.
 
-    A zip may hold one name more than once, so each name is held to every entry carrying it: a name kept once
-    would let an archive with an entry twice pass for one that has it once."""
+    Named entry by entry rather than counted, because a reader needs to know which file to look at.
+    A zip may hold one name more than once, so every entry with that name is compared.
+    Keeping each name once would let an archive with an entry twice pass for one that has it once."""
     found = []
     accepted_by_name, served_by_name = {}, {}
     for entries, by_name in ((accepted, accepted_by_name), (served, served_by_name)):
@@ -52,8 +56,8 @@ def differences(accepted: list[tuple[str, int, int]], served: list[tuple[str, in
 
 
 def main() -> int:
-    # What is served back can be something other than an archive - a page of HTML answered 200 - and that is
-    # said as the finding it is rather than as a traceback.
+    # What is served back may not be an archive at all, such as a page of HTML answered 200.
+    # That is reported as a finding, not as a traceback.
     try:
         accepted, served = (payload(path) for path in sys.argv[1:3])
     except zipfile.BadZipFile as error:

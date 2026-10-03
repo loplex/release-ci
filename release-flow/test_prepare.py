@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""What prepare does to a repository, exercised against one built for the purpose.
+"""What prepare does to a repository, tested against one built for the purpose.
 
-A bare repository stands in for the remote, so that nothing reaching it is seen not to - prepare pushes
-nothing, the build running from its commit next. Nothing here needs `gh`: prepare stops before anything is
-drafted.
+A bare repository stands in for the remote, so a test can see that nothing reaches it.
+prepare pushes nothing: the build runs from its commit next.
+Nothing here needs `gh`: prepare stops before anything is drafted.
 
 Run with `python3 -m unittest discover` over the directory this file sits in.
 """
@@ -24,8 +24,11 @@ def git(*arguments, cwd, check=True):
 
 
 class Staged(unittest.TestCase):
-    """A repository between releases: 0.1.0 tagged, work under [Unreleased], and the next version declared
-    with its marker where the source declares one."""
+    """A repository between releases.
+
+    0.1.0 is tagged and work is under [Unreleased].
+    Where the source declares a version, the next one is declared with its marker.
+    """
 
     def stage(self, properties="version = 0.1.1-SNAPSHOT\ntagPrefix = v\n", changelog=PENDING, tag="v0.1.0"):
         root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -79,9 +82,11 @@ class Prepare(Staged):
                          "no other branch holds the release commit")
 
     def test_nothing_reaches_the_remote(self):
-        """A build that fails after this should leave neither a branch nor a draft: pushing waits for it. Every ref
-        the remote has is compared, not only the release branch, since a tag or another branch pushed early would
-        be as much on the remote."""
+        """A build that fails after this should leave neither a branch nor a draft, so pushing waits for it.
+
+        Every ref the remote has is compared, not only the release branch.
+        A tag or another branch pushed early would be on the remote just as much.
+        """
         before = git("for-each-ref", cwd=self.origin).stdout
         _, done = self.prepare()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -97,8 +102,10 @@ class Prepare(Staged):
         self.assertIn("version = 0.1.1\n", self.file_on("release/0.1.1", "gradle.properties"))
 
     def test_a_version_handed_in_without_the_marker_is_released_as_it_is(self):
-        """Only a marker ending the version comes off, and 0.2.0 has none to lose. Not the declared 0.1.1, so that
-        a version handed in and then dropped is told apart from one released."""
+        """Only a marker at the end of the version comes off, and 0.2.0 has none.
+
+        The version differs from the declared 0.1.1, so a version handed in and then ignored would show.
+        """
         outputs, done = self.prepare(version="0.2.0")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(outputs["version"], "0.2.0")
@@ -112,8 +119,11 @@ class Prepare(Staged):
         self.assertRegex(changelog, r"## \[Unreleased\]\n\n## \[0\.1\.1\]")  # Nothing is left pending.
 
     def test_the_default_branch_is_not_touched(self):
-        """The local one, which is the one prepare can reach: the remote's is held by
-        test_nothing_reaches_the_remote. A release commit made there as well would go out with its next push."""
+        """The local default branch, the one prepare can reach.
+
+        test_nothing_reaches_the_remote covers the remote's.
+        A release commit made on the local one too would go out with its next push.
+        """
         before = git("rev-parse", "main", cwd=self.work).stdout
         _, done = self.prepare()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -128,10 +138,12 @@ class Prepare(Staged):
         self.assertIn("## [0.2.0] - ", self.file_on("release/0.2.0", "CHANGELOG.md"))
 
     def test_a_source_declaring_no_version_defaults_to_the_version_after_the_highest(self):
-        """A patch here because the highest, 0.10.0, is a final release and [Unreleased] holds only a fix. What
-        follows an open pre-release train is the release it was heading for, and that is pinned beside
-        `next_candidate` in check-release, not here. Lower releases beside it, 0.9.0 listed after it by name, so
-        that the highest is neither the only one nor the last `git tag -l` gives."""
+        """A patch, because the highest release, 0.10.0, is final and [Unreleased] holds only a fix.
+
+        What follows an open pre-release train is tested beside `next_candidate` in check-release, not here.
+        Lower releases sit beside it, and 0.9.0 sorts after it by name.
+        So the highest is neither the only release nor the last one `git tag -l` lists.
+        """
         self.stage(properties=None)
         for tag in ("v0.0.9", "v0.9.0", "v0.10.0"):
             git("tag", tag, cwd=self.work)
@@ -140,19 +152,23 @@ class Prepare(Staged):
         self.assertEqual(outputs["version"], "0.10.1")
 
     def test_none_says_the_tags_carry_no_prefix(self):
-        """Handed on as a prefix of its own, `^none` would count no release, and there would be nothing to
-        count the default from."""
+        """Passed on as a literal prefix, `^none` would match no release.
+
+        There would then be no release to count the default from.
+        """
         self.stage(properties=None, tag="0.1.0")
         outputs, done = self.prepare(source="tags", tag_prefix="^none")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual((outputs["version"], outputs["tag"]), ("0.1.1", "0.1.1"))
 
     def test_a_second_attempt_at_the_same_version_starts_again(self):
-        """A branch left by an earlier attempt is replaced rather than continued, so the release commit is
-        still the one commit on top of the default branch. The default branch moves between the two, so that
-        a branch continued with the new tree carried onto it makes a second commit, and the count reads 2.
-        Continued any other way, the run fails at the switch or on an empty commit, and the return code is
-        what says so."""
+        """A branch left by an earlier attempt is replaced, not continued.
+
+        The release commit is then still the only commit on top of the default branch.
+        The default branch moves between the two attempts.
+        A branch continued with the new tree carried onto it would get a second commit, and the count would be 2.
+        Continued any other way, the run fails at the switch or on an empty commit, and the return code shows it.
+        """
         self.prepare()
         git("switch", "-q", "main", cwd=self.work)
         (self.work / "more.txt").write_text("landed meanwhile\n", encoding="utf-8")
@@ -164,10 +180,13 @@ class Prepare(Staged):
         self.assertEqual(git("rev-list", "--count", "main..release/0.1.1", cwd=self.work).stdout.strip(), "1")
 
     def test_a_version_that_cannot_be_written_leaves_its_branch_with_no_commit(self):
-        """Declared twice, which the writer refuses. Read as a source declaring nothing, the release commit
-        would still carry -SNAPSHOT on the line Gradle reads, and the build would make a snapshot of it. The
-        branch is cut after the changelog is closed and before the version is written, so it is left
-        standing, with no commit on it, and the next attempt at the version replaces it."""
+        """The version is declared twice, which the writer refuses.
+
+        Treated like a source that declares nothing, the release commit would keep -SNAPSHOT on the line Gradle
+        reads, and the build would make a snapshot.
+        The branch is cut after the changelog is closed and before the version is written.
+        So it is left with no commit on it, and the next attempt at the version replaces it.
+        """
         self.stage(properties="version = 0.1.1-SNAPSHOT\nversion = 0.1.1-SNAPSHOT\ntagPrefix = v\n")
         outputs, done = self.prepare()
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
@@ -179,8 +198,10 @@ class Prepare(Staged):
 
 
 class NothingIsCutWhereTheRulesSayNo(Staged):
-    """A release that fails the rules is one that was never cut, not one that has to be undone: no release
-    branch, no output, nothing written, and the workspace still on the default branch."""
+    """A release that fails the checks is never cut, so there is nothing to undo.
+
+    No release branch, no output, nothing written, and the workspace still on the default branch.
+    """
 
     def assert_nothing_was_cut(self, outputs, done, saying):
         self.assertNotEqual(done.returncode, 0)

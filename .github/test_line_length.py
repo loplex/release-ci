@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Every tracked file that git does not take for binary keeps to the line length .editorconfig sets for it, but for
-the lines `overlong` lets through.
+"""Every tracked text file keeps to the line length .editorconfig sets for it, except the lines `overlong` lets through.
 
-Markdown is read by cmarkgfm, the Python binding of GitHub's own cmark-gfm. Run with
-`python3 -m unittest discover -s .github` from the repository's root, with the packages in `.github/requirements.txt`
-installed.
+Markdown is read by cmarkgfm, the Python binding of GitHub's own cmark-gfm.
+Run with `python3 -m unittest discover -s .github` from the repository's root,
+with the packages in `.github/requirements.txt` installed.
 """
 
 import fnmatch
@@ -20,18 +19,20 @@ import cmarkgfm
 from cmarkgfm.cmark import Options
 
 ROOT = Path(__file__).resolve().parent.parent
-# The heading of a released section of CHANGELOG.md, as check-release reads a section's: up to three spaces, `##`,
-# spaces or tabs, `[`, a label other than Unreleased, and `]`.
+# The heading of a released section of CHANGELOG.md, as check-release reads one:
+# up to three spaces, `##`, spaces or tabs, `[`, a label other than Unreleased, and `]`.
 RELEASED = re.compile(r" {0,3}##[ \t]+\[(?!Unreleased\])[^\]]+\]")
 
 
 def limits(editorconfig):
-    """Each section's pattern and `max_line_length`, in file order: a later section that matches wins.
+    """Each section's pattern and `max_line_length`, in file order. A later section that matches wins.
 
-    Only a pattern `fnmatch` reads the way EditorConfig does is taken, one with no `/`, `**`, braces or backslash,
-    matched against the file's name; any other section is refused rather than matched wrongly. A key is read regardless
-    of case, as the specification has it; `unset`, which the property's description names, or `off` is no limit. A limit
-    standing before any section applies to nothing, and is refused."""
+    - Only a pattern that `fnmatch` reads the way EditorConfig does is accepted:
+      one with no `/`, `**`, braces or backslash, matched against the file's name.
+      Any other section is refused rather than matched wrongly.
+    - A key is read regardless of case, as the specification says.
+    - `unset`, which the property's description names, and `off` mean no limit.
+    - A limit before any section applies to nothing, and is refused."""
     sections, pattern = [], None
     for line in editorconfig.splitlines():
         line = line.strip()
@@ -90,10 +91,11 @@ class Blocks(HTMLParser):
 
 
 def let_through(line, previous, width, in_footnote=False):
-    """Whether a line of Markdown prose past `width` is let through, as cmark-gfm reads the line: a link definition,
-    on one line or with its destination on the next, unless the line is part of a footnote the text refers to; or a
-    line whose first content, after any list, quote or heading marker, is a link too long for a line of its own,
-    whatever sticks to it included, with one word after it at most."""
+    """Whether a line of Markdown prose past `width` is let through, as cmark-gfm reads the line. It is when it is:
+    - a link definition, on one line or with its destination on the next,
+      unless the line is part of a footnote the text refers to;
+    - a line whose first content, after any list, quote or heading marker, is a link too long for a line of its own,
+      including whatever is attached to it, with one word after it at most."""
     if not in_footnote and renders_nothing(line.lstrip()):
         return True
     if not in_footnote and previous.strip() and renders_nothing(previous.lstrip() + "\n" + line.lstrip()):
@@ -112,8 +114,9 @@ def let_through(line, previous, width, in_footnote=False):
 
 
 def let_through_in_code(line, width):
-    """Whether a line of code past `width` is let through: one whose first word, after any comment marker and any list
-    marker, is a URL too long for a line of its own, with one word after it at most."""
+    """Whether a line of code past `width` is let through.
+    It is when its first word, after any comment marker and any list marker, is a URL too long for a line of its own,
+    with one word after it at most."""
     body = re.sub(r"^\s*(?:(?:#+|//)\s*)?(?:(?:[-*+]|\d+[.)])\s+)?", "", line)
     first, _, rest = body.partition(" ")
     return "://" in first and len(line) - len(body) + len(first) > width and len(rest.split()) <= 1
@@ -130,18 +133,19 @@ def limit_for(name, sections):
 def overlong(name, text, sections):
     """The lines past the file's limit, as (line number, length).
 
-    - A line opening with a link too long for a line of its own, one word after it at most, is let through; a link
-      short enough goes to a line of its own instead. In code, the link is a URL after any comment and list marker.
-    - In Markdown prose, a link definition is let through too, on one line or two, but not a footnote the text
-      refers to, which GitHub renders.
+    - A line opening with a link too long for a line of its own, with one word after it at most, is let through.
+      A link short enough to fit goes on a line of its own instead.
+      In code, the link is a URL after any comment and list marker.
+    - In Markdown prose, a link definition is let through too, on one line or two.
+      A footnote the text refers to is not, because GitHub renders it.
     - In Markdown, a table row is as wide as its widest cell, and is let through too.
-    - A block of code in Markdown, fenced or indented, is held to the limit of `[*]` rather than that of prose.
-    - Every line of CHANGELOG.md from the first released section on is let through: those are the sections
-      releases close, `check-release changelog` refuses any edit to one once its release is tagged, and the link
-      definitions ending the file are let through anyway.
+    - A block of code in Markdown, fenced or indented, is held to the limit of `[*]`, not to that of prose.
+    - Every line of CHANGELOG.md from the first released section on is let through.
+      Those sections are closed by releases, and `check-release changelog` refuses any edit to one once it is tagged.
+      The link definitions at the end of the file are let through anyway.
 
-    A line ends at a line feed, as for cmark-gfm, and not at the form feed and the like `str.splitlines` ends one at
-    too. A length is counted in characters, which for the text here is the columns an editor shows."""
+    A line ends at a line feed, as in cmark-gfm, not also at a form feed and the like, as with `str.splitlines`.
+    A length is counted in characters, which for the text here is the columns an editor shows."""
     limit, code, lines, found = limit_for(name, sections), dict(sections).get("*"), text.split("\n"), []
     blocks = Blocks(text) if name.endswith(".md") else None
     released = min((number for number in blocks.headings if RELEASED.match(lines[number - 1])),
@@ -163,15 +167,15 @@ def overlong(name, text, sections):
 
 
 def tracked(root):
-    """Each tracked file's name, and whether git takes it for binary - an image, say - which has no lines to hold."""
+    """Each tracked file's name, and whether git takes it for binary, such as an image, which has no lines to check."""
     entries = subprocess.run(["git", "ls-files", "-z", "--eol"], cwd=root, check=True, capture_output=True,
                              text=True).stdout.split("\0")[:-1]
     return [(name, info.split()[0] == "i/-text") for info, _, name in (entry.partition("\t") for entry in entries)]
 
 
 def texts(root, files):
-    """The name and text of each of `files` that is a file, read as UTF-8, binary ones passed over. One that does not
-    decode is refused by name, where a traceback would leave which file it was to be guessed."""
+    """The name and text of each of `files` that is a file, read as UTF-8, skipping binary ones.
+    A file that does not decode is refused by name; a traceback would leave the reader to guess which file it was."""
     for name, binary in files:
         if binary or not (root / name).is_file():
             continue
@@ -242,8 +246,8 @@ class LineLength(unittest.TestCase):
         self.assertEqual(overlong("README.md", text, self.SECTIONS), [(3, 126), (4, 129)])
 
     def test_a_link_that_a_rewrap_could_move_does_not_excuse_its_line(self):
-        """Text before the link could go to the line above, more than a word after it to the line below, and a link
-        short enough for a line of its own belongs on one."""
+        """Text before the link could go to the line above, and more than one word after it to the line below.
+        A link short enough for a line of its own belongs on one."""
         long = f"[the guide to {'x' * 20}](https://example.com/{'y' * 60})"
         for line in (f"See {long}.", f"{long} says so.", f"[a short one](README.md) and then {'words ' * 20}",
                      f"[a short one](README.md) {'x' * 90}",
@@ -262,8 +266,9 @@ class LineLength(unittest.TestCase):
         self.assertEqual(overlong("README.md", text, self.SECTIONS), [(2, 101)])
 
     def test_a_fence_closes_only_the_way_commonmark_closes_it(self):
-        """Neither a fence with an info string nor one indented four spaces closes a block, and a shorter one does
-        not close a longer; a line of prose after any of them would otherwise be held to the limit of code."""
+        """A fence with an info string does not close a block, nor does one indented four spaces,
+        nor a shorter one after a longer, nor one of tildes after one of backticks.
+        Otherwise a line of prose after any of them would be held to the limit of code."""
         for fence, inside in (("```", "```yaml"), ("```", "    ```"), ("````", "```"), ("```", "~~~")):
             with self.subTest(inside):
                 text = f"{fence}\n{inside}\n" + "x" * 101 + f"\n{fence}\n" + "y" * 101
@@ -281,8 +286,8 @@ class LineLength(unittest.TestCase):
         self.assertEqual(overlong("CHANGELOG.md", indented, self.SECTIONS), [(2, 101)])
 
     def test_a_line_ends_where_cmark_gfm_ends_one(self):
-        """`str.splitlines` ends a line at a form feed too, which would number the prose before a block of code as
-        part of it."""
+        """`str.splitlines` also ends a line at a form feed.
+        That would count the prose before a block of code as part of it."""
         text = "a\x0c" + "y" * 110 + "\n```\nz\n```\n"
         self.assertEqual(overlong("README.md", text, self.SECTIONS), [(1, 112)])
 

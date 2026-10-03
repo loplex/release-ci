@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """What a signature does to a zip, and what it leaves alone.
 
-The archives here are built rather than described: a real zip, given bytes where a counter-signature puts
-them - between the entry data and the central directory, with the offset pointing at the directory moved
-along - so that what the comparison is held to is a file and not a belief about files.
+The archives here are real zip files.
+A counter-signature is imitated by inserting bytes where one goes: between the entry data and the central directory,
+with the offset that points at the central directory moved along.
+So the comparison is tested on actual files, not on assumptions about them.
 
 Run with `python3 -m unittest discover` over the directory this file sits in.
 """
@@ -28,8 +29,8 @@ class ThePayloadOfAnArchive(unittest.TestCase):
             for name, data in (entries or ENTRIES).items():
                 written.writestr(name, data)
         if signing_block:
-            # Where a signing block goes: between the entry data and the central directory, with the one offset
-            # pointing at the central directory, in the end record, moved along by as much.
+            # A signing block goes between the entry data and the central directory.
+            # The offset of the central directory, in the end record, moves along by the block's length.
             raw = path.read_bytes()
             end_record_at = raw.rindex(b"PK\x05\x06")
             directory_at = int.from_bytes(raw[end_record_at + 16 : end_record_at + 20], "little")
@@ -42,7 +43,7 @@ class ThePayloadOfAnArchive(unittest.TestCase):
                               capture_output=True, text=True)
 
     def test_a_counter_signed_archive_carries_the_same_payload(self):
-        """The case this exists for: the served file is not the accepted file and must still pass."""
+        """The main case: the served file is not the accepted file, and must still pass."""
         accepted = self.archive()
         served = self.archive(signing_block=b"a signature block")
         self.assertNotEqual(accepted.read_bytes(), served.read_bytes(), "the files have to differ")
@@ -51,7 +52,7 @@ class ThePayloadOfAnArchive(unittest.TestCase):
         self.assertIn("2 entries, all matching", done.stdout)
 
     def test_recompressing_an_entry_is_not_a_difference(self):
-        """Compressed size is not payload: the same bytes stored instead of deflated are the same entry."""
+        """Compressed size is not compared: the same bytes stored instead of deflated are the same entry."""
         done = self.compare(self.archive(), self.archive(compression=zipfile.ZIP_STORED))
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
@@ -63,8 +64,8 @@ class ThePayloadOfAnArchive(unittest.TestCase):
         self.assertIn("accepted 1900B", done.stderr)
 
     def test_an_entry_rebuilt_to_the_same_length_is_caught(self):
-        """What the CRC is there for, and the only shape size alone cannot see: as many bytes as before and
-        not the same ones - a second build of the same source, or an entry somebody swapped."""
+        """The CRC catches what the size alone cannot: as many bytes as before, but not the same ones.
+        That is a second build of the same source, or an entry somebody swapped."""
         same_length = dict(ENTRIES, **{"lib/plugin.jar": b"a JAR, more or less" * 100})
         self.assertEqual(len(same_length["lib/plugin.jar"]), len(ENTRIES["lib/plugin.jar"]))
         done = self.compare(self.archive(), self.archive(same_length))
@@ -82,7 +83,7 @@ class ThePayloadOfAnArchive(unittest.TestCase):
     def test_an_entry_held_twice_is_not_the_same_as_once(self):
         path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "twice.zip"
         with warnings.catch_warnings(), zipfile.ZipFile(path, "w") as written:
-            warnings.simplefilter("ignore")  # zipfile warns of a duplicate name, which is the point here.
+            warnings.simplefilter("ignore")  # zipfile warns about the duplicate name, which is what this test wants.
             for name, data in (*ENTRIES.items(), ("META-INF/plugin.xml", ENTRIES["META-INF/plugin.xml"])):
                 written.writestr(name, data)
         done = self.compare(path, self.archive())

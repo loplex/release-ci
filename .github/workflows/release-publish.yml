@@ -1,7 +1,7 @@
 name: release-publish
 
-# Carries a published release of this repository back onto the default branch by fast-forward, through the
-# same action it offers everyone else.
+# Carries a published release of this repository back onto the default branch by fast-forward.
+# It uses the same action this repository offers everyone else.
 on:
   release:
     types: [published]
@@ -22,8 +22,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      # The Python the suites run on, from .python-version, rather than the runner's own that the
-      # actions ask for: merge-back holds the merged tree to the rules on the one the tests were run with.
+      # The Python from .python-version, the one the suites run on, rather than the runner's own.
+      # So merge-back checks the merged tree on the same Python the tests were run with.
       - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version

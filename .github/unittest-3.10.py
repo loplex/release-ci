@@ -1,8 +1,9 @@
-"""`python3 -m unittest discover -s <directory>` on the 3.10 the actions ask for, as test.yml runs it.
+"""`python3 -m unittest discover -s <directory>` on Python 3.10, the version the actions ask for, as test.yml runs it.
 
-The suites are written against .python-version and set themselves up with TestCase.enterContext, which arrived in
-3.11. It is put back here and nothing else is: a construct newer than 3.10 in the actions' code the tests reach
-still fails, and that is the failure this run is for.
+The suites are written against .python-version and use TestCase.enterContext, which arrived in 3.11.
+This file adds that one method and nothing else.
+Anything else newer than 3.10 in the actions' code that the tests reach still fails,
+and catching that is what this run is for.
 """
 
 import sys

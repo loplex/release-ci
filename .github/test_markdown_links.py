@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Every relative link in a tracked Markdown file reaches a tracked file or directory, and a heading in it where it
-names one.
+"""Every relative link in a tracked Markdown file reaches a tracked file or directory.
+Where it names a heading, the heading exists there.
 
-The Markdown is read by cmarkgfm, the Python binding of GitHub's own cmark-gfm, so what counts as a link, a heading or
-code is what GitHub renders. Run with `python3 -m unittest discover -s .github` from the repository's root, with the
-packages in `.github/requirements.txt` installed.
+The Markdown is read by cmarkgfm, the Python binding of GitHub's own cmark-gfm.
+So a link, a heading or code is whatever GitHub renders as one.
+Run with `python3 -m unittest discover -s .github` from the repository's root,
+with the packages in `.github/requirements.txt` installed.
 """
 
 import re
@@ -55,8 +56,8 @@ DROPPED = regex.compile(r"[^\p{Alphabetic}\p{M}\p{Nd}\p{Pc}\p{Join_Control}\- ]"
 
 
 def anchors(text):
-    """The anchors GitHub gives the headings, and a repeated one numbered from -1. cmark-gfm gives headings no
-    anchor; github.com adds them, by this rule:
+    """The anchors GitHub gives the headings, with a repeated one numbered from -1.
+    cmark-gfm gives headings no anchor; github.com adds them, by this rule:
     - Each character is lower-cased on its own, so a final sigma stays `σ`, where `str.lower()` writes `ς`.
     - Alphabetic characters (letters, letter numbers such as `Ⅻ`, circled letters), marks, decimal numbers,
       connector punctuation, the two joiners, `-` and spaces are kept. Python's `\\w` is not that set: it drops a
@@ -75,8 +76,8 @@ def anchors(text):
 
 
 def tracked():
-    """The files git tracks, and the directories holding them: a link to anything else resolves on this machine
-    alone, and breaks in a clone."""
+    """The files git tracks, and the directories that hold them.
+    A link to anything else resolves only on this machine, and breaks in a clone."""
     files = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True,
                            text=True).stdout.split("\0")[:-1]
     return set(files) | {parent.as_posix() for name in files for parent in Path(name).parents}
@@ -87,9 +88,9 @@ def broken(path, text, files):
 
     - A link with a scheme (`https:`, `mailto:`) is not a relative one, and is left alone.
     - A link starting with `/` is read from the root of the repository, as GitHub reads it.
-    - A heading is looked for in a Markdown file, or in the README.md GitHub shows for a directory; the anchor of any
-      other file (`#L10` of a script), or of one shown with a query (`README.md?plain=1#L3`), is GitHub's, not a
-      heading's, and is not looked at. The query is not part of the path.
+    - A heading is looked for in a Markdown file, or in the README.md GitHub shows for a directory.
+      The anchor of any other file (`#L10` of a script), or of one shown with a query (`README.md?plain=1#L3`),
+      is GitHub's, not a heading's, and is not checked. The query is not part of the path.
     - A link definition nothing uses renders nothing, and is not read."""
     found = []
     for link in Rendered(text).links:
@@ -134,7 +135,7 @@ class MarkdownLinks(unittest.TestCase):
             "raw.md: no such file"])
 
     def test_a_file_git_does_not_track_is_no_target(self):
-        """A file on disk that git does not have - an ignored or excluded one - is not in a clone."""
+        """A file on disk that git does not track, such as an ignored or excluded one, is not in a clone."""
         text = "[a](README.md) [b](CONTRIBUTING.md) [c](.github)\n"
         self.assertEqual(broken(ROOT / "probe.md", text, {"README.md", ".github"}), ["CONTRIBUTING.md: no such file"])
 

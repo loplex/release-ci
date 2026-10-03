@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""The rules check-release.py holds: the rules themselves exercised without a repository to release, and
-the helpers beside them that face git over one built for the purpose.
+"""Tests for the rules check-release.py holds.
+
+Most tests exercise the rules over text, without a repository.
+The helpers that talk to git are tested against a repository built for the purpose.
 
 Run with `python3 -m unittest discover` over the directory this file sits in.
 """
@@ -53,14 +55,14 @@ class Precedence(unittest.TestCase):
         self.assertLess(precedence("0.2.0-beta.9"), precedence("0.2.0-beta.10"))
 
     def test_a_numeric_identifier_ranks_below_an_alphanumeric_one(self):
-        """The spec's rule, and one that can read backwards as text: `1.0.0-9` is an earlier step than
-        `1.0.0-10a`, where `sorted` over the strings puts it after."""
+        """The spec's rule, which reads backwards when compared as text.
+        `1.0.0-9` is an earlier step than `1.0.0-10a`, but `sorted` over the strings puts it after."""
         self.assertLess(precedence("1.0.0-9"), precedence("1.0.0-10a"))
 
     def test_build_metadata_does_not_figure_into_precedence(self):
-        """The spec's requirement, quoted in the README beside this file: two versions differing only in build
-        metadata have the same precedence. Ranking it instead would order releases by a field the spec says orders
-        nothing."""
+        """SemVer says two versions that differ only in build metadata have the same precedence.
+        The README beside this file quotes that rule.
+        Ranking by metadata would order releases by a field the spec says orders nothing."""
         self.assertEqual(precedence("1.0.0+a"), precedence("1.0.0+b"))
         self.assertEqual(precedence("1.0.0"), precedence("1.0.0+dfsg1"))
         self.assertLess(precedence("1.0.0-rc.1+z"), precedence("1.0.0+a"))
@@ -73,9 +75,9 @@ class Precedence(unittest.TestCase):
 
 
 class WhatCountsAsAVersion(unittest.TestCase):
-    """The grammar is SemVer 2.0.0's. Both halves are worth pinning: a shape the spec allows and this refused
-    would be a release nobody could name, and a shape the spec leaves undefined and this took would be ordered
-    here by rules nobody wrote down."""
+    """The grammar is SemVer 2.0.0's, and both directions are tested.
+    A shape the spec allows but this refused would be a release nobody could name.
+    A shape the spec leaves undefined but this took would be ordered by rules nobody wrote down."""
 
     def test_the_shapes_the_spec_defines_are_taken(self):
         for version in ("1.0.0", "0.0.0", "1.0.0-alpha", "1.0.0-eap-2", "1.0.0-0.3.7", "1.0.0-x.7.z.92"):
@@ -102,8 +104,9 @@ class WhatCountsAsAVersion(unittest.TestCase):
         self.assertIsNone(SEMVER.match("1.0.0\n"))
 
     def test_build_metadata_is_taken(self):
-        """The spec's own examples, plus the Debian-style repackage suffix. Metadata identifiers are looser
-        than pre-release ones - a leading zero is allowed in them, because nothing counts them."""
+        """The spec's own examples, plus the Debian-style repackage suffix.
+        Build metadata identifiers are looser than pre-release ones: a leading zero is allowed, because nothing
+        counts them."""
         for version in ("1.0.0+build.1", "1.0.0-rc.1+build.1", "1.0.0+dfsg1", "1.0.0+001",
                         "1.0.0+21AF26D3----117B344092BD"):
             with self.subTest(version=version):
@@ -129,10 +132,10 @@ class FirstRelease(unittest.TestCase):
 
 
 class AVersionBeingWorkedOn(unittest.TestCase):
-    """The marker says the version has not been released, so a release is precisely what it cannot be. The
-    rule is easiest to reach by accident: a script that appends -SNAPSHOT to a version already carrying it
-    writes `1.0.0-SNAPSHOT-SNAPSHOT`, and the plain strip in `version` then offers `1.0.0-SNAPSHOT` up as the
-    release."""
+    """The marker says the version has not been released, so it can never be a release.
+    This is the rule most easily hit by accident.
+    A script that appends -SNAPSHOT to a version that already has it writes `1.0.0-SNAPSHOT-SNAPSHOT`.
+    `version` takes the marker off once, and would then offer `1.0.0-SNAPSHOT` as the release."""
 
     def test_the_marker_is_refused_wherever_it_sits_in_the_suffix(self):
         for candidate in ("1.0.0-SNAPSHOT", "1.0.0-rc.1-SNAPSHOT", "1.0.0-rc.SNAPSHOT", "1.0.0-SNAPSHOT-SNAPSHOT",
@@ -181,8 +184,9 @@ class ThePreReleaseTrain(unittest.TestCase):
         self.assertEqual(check_version("0.2.0", ["0.1.0", "0.2.0-rc.1", "0.2.0-rc.2"]), [])
 
     def test_re_releasing_a_tagged_pre_release_is_refused(self):
-        """The equal half of the base invariant, where the step check has nothing to say: 0.2.0-rc.1 sits
-        inside a core that 0.1.0 permits, so only `<=` stands between a tag and being released twice."""
+        """The equal case of "comes after", where the step check has nothing to say.
+        0.2.0-rc.1 lies inside a core that 0.1.0 permits.
+        So only `<=` stops a tagged pre-release from being released twice."""
         problems = check_version("0.2.0-rc.1", ["0.1.0", "0.2.0-rc.1"])
         self.assertEqual(len(problems), 1)
         self.assertIn("does not come after", problems[0])
@@ -191,8 +195,8 @@ class ThePreReleaseTrain(unittest.TestCase):
         self.assertTrue(check_version("0.2.0-rc.1", ["0.1.0", "0.2.0-rc.2"]))
 
     def test_a_stable_hotfix_may_go_out_while_a_train_is_open(self):
-        """0.1.1 goes to everyone and only has to outrank the last release everyone was offered, 0.1.0. The
-        subscribers who see 0.2.0-rc.1 are not offered a downgrade by it either: 0.1.1 sorts below the rc."""
+        """0.1.1 goes to everyone, so it only has to outrank the last release everyone was offered, 0.1.0.
+        Subscribers who see 0.2.0-rc.1 are not offered a downgrade either: 0.1.1 sorts below the rc."""
         self.assertEqual(check_version("0.1.1", ["0.1.0", "0.2.0-rc.1"]), [])
 
     def test_a_hotfix_does_not_close_the_train(self):
@@ -201,27 +205,28 @@ class ThePreReleaseTrain(unittest.TestCase):
         self.assertEqual(check_version("0.2.0", releases), [])
 
     def test_a_pre_release_has_to_outrank_every_tag(self):
-        """Subscribers to a channel see everything, so a pre-release below the highest tag is one they are never
-        offered - which is what the base invariant refuses."""
+        """Channel subscribers see every release.
+        A pre-release below the highest tag would never be offered to them, so it is refused."""
         problems = check_version("0.1.2-rc.1", ["0.1.0", "0.1.1", "0.2.0-rc.1"])
         self.assertTrue(problems)
         self.assertIn("0.2.0-rc.1", problems[0])
-        # In the order `git tag -l` lists them, by name: 0.10.0-rc.1 comes first and is still the highest.
+        # Listed by name, as `git tag -l` lists them: 0.10.0-rc.1 comes first, and is still the highest.
         problems = check_version("0.9.2-rc.1", ["0.10.0-rc.1", "0.9.0", "0.9.1"])
         self.assertTrue(problems)
         self.assertIn("0.10.0-rc.1", problems[0])
 
     def test_a_hotfix_cannot_be_tried_on_a_channel_while_a_train_is_open(self):
-        """The price of the rule above: 0.1.1 may go out, but 0.1.1-rc.1 sorts below 0.2.0-rc.1, so the hotfix
-        cannot be offered to a channel first. Named here so that nobody finds it out from a red run."""
+        """The cost of the rule above.
+        0.1.1 may go out, but 0.1.1-rc.1 sorts below 0.2.0-rc.1, so the hotfix cannot be tried on a channel first.
+        Tested here so that nobody learns it from a failed run."""
         problems = check_version("0.1.1-rc.1", ["0.1.0", "0.2.0-rc.1"])
         self.assertTrue(problems)
         self.assertIn("0.2.0-rc.1", problems[0])
 
     def test_with_nothing_final_released_the_open_train_is_the_only_way_on(self):
-        """With nothing final released there is no step to take, so the open train is the whole of what may be
-        worked towards. Left unmeasured, a project that has only ever tagged pre-releases could name any core
-        at all - the step check reads the last final release, and there is none."""
+        """With nothing final released there is no step to take, so the open train is the only way on.
+        Without this, a project that has only tagged pre-releases could name any core at all:
+        the step check reads the last final release, and there is none."""
         self.assertEqual(check_version("0.2.0-rc.2", ["0.2.0-rc.1"]), [])
         self.assertEqual(check_version("0.2.0", ["0.2.0-rc.1"]), [])
         for candidate in ("0.2.1", "0.3.0", "9.9.9"):
@@ -241,8 +246,8 @@ class ThePreReleaseTrain(unittest.TestCase):
         self.assertEqual(check_version("0.10.1", ["0.10.0", "0.9.0"]), [])
 
     def test_an_open_train_does_not_widen_the_step(self):
-        """The step is measured against the last final release, which an open train does not advance: past
-        0.1.0 it is still one of 0.1.1, 0.2.0 and 1.0.0, and 0.3.0 is none of them."""
+        """The step is measured from the last final release, and an open train does not move it.
+        Past 0.1.0 the step is still one of 0.1.1, 0.2.0 and 1.0.0, and 0.3.0 is none of them."""
         problems = check_version("0.3.0", ["0.1.0", "0.2.0-rc.1"])
         self.assertTrue(problems)
         self.assertIn("does not follow 0.1.0", problems[0])
@@ -250,9 +255,11 @@ class ThePreReleaseTrain(unittest.TestCase):
 
 
 class TwoBuildsOfOneVersion(unittest.TestCase):
-    """What taking build metadata costs. The spec leaves it out of ordering, so `1.0.0+b` does not outrank
-    `1.0.0+a` - and a release nothing outranks is one no update check offers. Refused, and said in those words
-    rather than as `does not come after`, which about a version that plainly came after reads as a bug."""
+    """What accepting build metadata costs.
+    SemVer leaves metadata out of ordering, so `1.0.0+b` does not outrank `1.0.0+a`.
+    A release that outranks nothing is never offered by an update check, so it is refused.
+    The refusal names the metadata rather than saying `does not come after`.
+    About a version that plainly came later, that wording would read as a bug."""
 
     def test_two_builds_of_one_version_are_refused_by_name(self):
         problems = check_version("1.0.0+b", ["1.0.0+a"])
@@ -266,8 +273,7 @@ class TwoBuildsOfOneVersion(unittest.TestCase):
         self.assertIn("differ only in build metadata", problems[0])
 
     def test_re_releasing_the_very_same_text_still_reads_as_released_already(self):
-        """The neighbouring case, which is not a metadata question: nothing differs, so nothing has to be
-        explained about ordering."""
+        """The neighboring case, which is not about metadata: nothing differs, so there is no ordering to explain."""
         problems = check_version("1.0.0+a", ["1.0.0+a"])
         self.assertIn("does not come after", problems[0])
         self.assertEqual(len(problems), 2, problems)
@@ -283,9 +289,9 @@ class WhatFollowsARelease(unittest.TestCase):
         self.assertEqual(version_after("1.9.0"), "1.9.1")
 
     def test_what_follows_is_bare_and_the_source_adds_its_marker(self):
-        """`-SNAPSHOT` is Gradle's spelling of a version being worked on. A repository versioned by its tags
-        has no such state, so what follows a release there is the bare version, which is also what `version`
-        takes under `tags` when none is handed in."""
+        """`-SNAPSHOT` is Gradle's marker for a version being worked on.
+        A repository versioned by its tags has no such state, so what follows a release there is the bare version.
+        That is also what `version` takes under `tags` when no version is given."""
         self.assertEqual(self.next_after("v0.1.1", "gradle.properties"), ([], "0.1.2-SNAPSHOT"))
         self.assertEqual(self.next_after("v0.1.1", "tags"), ([], "0.1.2"))
 
@@ -297,8 +303,9 @@ class WhatFollowsARelease(unittest.TestCase):
         return problems, printed.getvalue().strip()
 
     def test_a_pre_release_goes_on_heading_for_the_release_it_was_for(self):
-        """0.2.0-rc.1 was a step towards 0.2.0, so work carries on towards it. Counting the patch up here would
-        skip the very release the train was running to, and the step check would refuse it afterwards."""
+        """0.2.0-rc.1 was a step toward 0.2.0, so work carries on toward it.
+        Counting up the patch would skip the release the train was heading for.
+        The step check would then refuse 0.2.1, the version that counting would give."""
         self.assertEqual(version_after("0.2.0-rc.1"), "0.2.0")
         self.assertEqual(version_after("0.2.0-beta.1"), "0.2.0")
 
@@ -315,8 +322,9 @@ class WhatFollowsARelease(unittest.TestCase):
 
 
 class WhatUnreleasedAsksFor(unittest.TestCase):
-    """How far each kind of change moves the version, read off the groups under [Unreleased]: SemVer's rules 6
-    to 8 over Keep a Changelog's kinds, and **BREAKING** for a change that breaks something under any of them."""
+    """How far each kind of change under [Unreleased] moves the version.
+    The steps are SemVer's rules 6 to 8, applied to Keep a Changelog's kinds.
+    An entry marked **BREAKING** asks for a major step under any group."""
 
     def test_each_kind_asks_for_its_step(self):
         for kind, step in (("Added", MINOR), ("Changed", MINOR), ("Deprecated", MINOR), ("Removed", MAJOR),
@@ -329,7 +337,7 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
         self.assertEqual((asked.step, asked.why), (MINOR, "### Added"))
 
     def test_an_empty_group_asks_for_nothing(self):
-        """A `### Removed` left standing as a reminder removes nothing, and a comment in it is nothing either."""
+        """A `### Removed` left as a reminder removes nothing, and neither does a comment in it."""
         self.assertEqual(asked_by("### Removed\n\n### Fixed\n\n- F\n").step, PATCH)
         self.assertEqual(asked_by("### Removed\n\n<!-- nothing yet -->\n\n### Fixed\n\n- F\n").step, PATCH)
 
@@ -349,11 +357,12 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
                                   "  **BREAKING** is not an entry\n").step, PATCH)
 
     def test_a_group_of_another_name_asks_for_a_patch_and_is_named(self):
-        """Keep a Changelog does not forbid groups of other names, and the ones people add - Documentation,
-        Dependencies - are not new functionality. Named so that `### Add`, a feature misfiled, can be seen."""
+        """Keep a Changelog allows groups of other names.
+        The ones people add, such as Documentation or Dependencies, are not new functionality.
+        They are named, so that `### Add`, a feature filed under a typo, can be seen."""
         asked = asked_by("### Documentation\n\n- D\n\n### Add\n\n- A\n\n### Fixed\n\n- F\n")
         self.assertEqual((asked.step, asked.unknown), (PATCH, ["Documentation", "Add"]))
-        # One asking for more by an entry marked BREAKING is not read as a patch, so it is not named as one.
+        # A group whose entry is marked BREAKING asks for more than a patch, so it is not named.
         self.assertEqual(asked_by("### Dependencies\n\n- **BREAKING** Java 21\n").unknown, [])
 
     def test_an_entry_under_no_group_is_handed_back_and_other_text_is_not(self):
@@ -365,8 +374,9 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
                          "a comment over several lines, and a thematic break, are not entries")
 
     def test_a_group_heading_is_read_as_commonmark_reads_one(self):
-        """Indented by up to three spaces, a tab after the #s, a closing run of #s: each still heads a group of
-        its own, rather than its entries counting under the group above it."""
+        """Each of these is a heading to CommonMark, and starts a group of its own:
+        up to three spaces of indent, a tab after the #s, a closing run of #s.
+        Its entries then do not count under the group above it."""
         for heading in ("   ### Added", "###\tAdded", "### Added ###", "### Added\t#"):
             with self.subTest(heading=heading):
                 asked = asked_by(f"### Fixed\n\n- F\n\n{heading}\n\n- A\n")
@@ -378,8 +388,8 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
 
 
 class WhatAnOpenTrainAsksFor(unittest.TestCase):
-    """train_asks: a branch whose changelog holds an open train's sections carries that train's changes, so a
-    release cut from it is held to them as well as to [Unreleased]."""
+    """train_asks: a branch whose changelog holds the sections of an open train carries that train's changes.
+    A release cut from it is held to them as well as to [Unreleased]."""
 
     RELEASES = ["0.2.0-beta.1", "0.2.0", "0.3.0-beta.1"]
 
@@ -389,7 +399,7 @@ class WhatAnOpenTrainAsksFor(unittest.TestCase):
         self.assertEqual((asked.step, asked.why, asked.where), (MINOR, "### Added", "[0.3.0-beta.1]"))
 
     def test_what_the_last_final_release_already_took_in_asks_for_nothing(self):
-        """0.2.0-beta.1 and 0.2.0 are behind the release the step is measured from."""
+        """0.2.0 is the release the step is measured from, and 0.2.0-beta.1 comes before it."""
         found = {"Unreleased": "### Fixed\n\n- F", "0.2.0": "### Removed\n\n- R", "0.2.0-beta.1": "### Removed\n\n- R"}
         self.assertEqual(train_asks(found, self.RELEASES).where, "[Unreleased]")
         self.assertEqual(train_asks(found, self.RELEASES).step, PATCH)
@@ -424,8 +434,9 @@ class TheStepWhatIsReleasedAsksFor(unittest.TestCase):
         self.assertEqual(check_step("2.0.0", ["1.2.0"], self.REMOVED), [])
 
     def test_a_pre_release_is_measured_from_the_last_final_release(self):
-        """The step is the core's, as check_version measures it, so a pre-release of a version that would pass
-        passes, and one of a version that would not is refused - open train or not."""
+        """The step is measured on the core, as check_version measures it.
+        A pre-release of a version that would pass passes; one of a version that would not is refused.
+        That holds with or without an open train."""
         self.assertEqual(check_step("0.3.0-beta.1", ["0.2.0"], self.ADDED), [])
         self.assertTrue(check_step("0.2.1-beta.1", ["0.2.0"], self.ADDED))
         self.assertEqual(check_step("0.3.0", ["0.2.0", "0.3.0-beta.1"], self.ADDED), [])
@@ -440,9 +451,9 @@ class TheStepWhatIsReleasedAsksFor(unittest.TestCase):
 
 
 class TheChannel(unittest.TestCase):
-    """What the pre-release suffix is for. A project whose build names the channel too spells this rule a
-    second time there, and the two then have to answer alike: what is uploaded and what is asked for afterwards
-    have to be the same channel."""
+    """What the pre-release suffix is for.
+    A project whose build also names the channel spells this rule a second time there.
+    The two have to agree: the channel uploaded to and the channel asked for afterwards must be the same."""
 
     def test_a_final_release_goes_to_everyone(self):
         self.assertEqual(channel_of("0.3.0"), "default")
@@ -453,24 +464,26 @@ class TheChannel(unittest.TestCase):
         self.assertEqual(channel_of("1.0.0-eap"), "eap")
 
     def test_a_hyphen_does_not_separate_identifiers(self):
-        """`1.0.0-eap-2` and `1.0.0-eap.2` are both valid and do not mean the same thing here: the channel is
-        the first dot-separated identifier, so the hyphenated spelling names a channel per build. Pinned so
-        that nobody meets it as a build uploaded where nobody is subscribed."""
+        """`1.0.0-eap-2` and `1.0.0-eap.2` are both valid, and here they mean different things.
+        The channel is the first dot-separated identifier, so the hyphenated spelling names a channel per build.
+        Tested so that nobody meets it as a build uploaded to a channel nobody subscribes to."""
         self.assertEqual(channel_of("1.0.0-eap.2"), "eap")
         self.assertEqual(channel_of("1.0.0-eap-2"), "eap-2")
 
     def test_build_metadata_is_not_part_of_the_channel(self):
         self.assertEqual(channel_of("1.0.0+dfsg1"), "default")
         self.assertEqual(channel_of("0.3.0-beta.1+sha.5114f85"), "beta")
-        # A pre-release with no dot before the `+`, and metadata carrying a hyphen: where the metadata is not
-        # cut off first, the first reads `beta+sha` and the second names a channel of `7`.
+        # A pre-release with no dot before the `+`, and metadata holding a hyphen.
+        # If the metadata were not cut off first, the first would read `beta+sha`, and the second would name
+        # the channel `7`.
         self.assertEqual(channel_of("0.3.0-beta+sha.5114f85"), "beta")
         self.assertEqual(channel_of("1.0.0+build-7"), "default")
 
     def test_the_version_being_worked_on_has_a_channel_by_the_same_rule(self):
-        """Nothing carrying -SNAPSHOT is released - `version` refuses such a candidate and released_versions()
-        leaves such a tag out - but the rule still has to answer what a second spelling of it would: with any
-        `+` metadata off, everything after the first `-`, up to the first `.`, is the channel."""
+        """Nothing carrying -SNAPSHOT is released: `version` refuses it, and released_versions() leaves out
+        such a tag.
+        The rule still has to answer the way a second copy of it elsewhere would.
+        With any `+` metadata off, everything after the first `-`, up to the first `.`, is the channel."""
         self.assertEqual(channel_of("0.2.1-SNAPSHOT"), "SNAPSHOT")
 
     def test_a_version_is_asked_about_bare(self):
@@ -485,7 +498,7 @@ class TheChannel(unittest.TestCase):
                 self.assertEqual((problems, printed.getvalue()), answer)
 
     def test_a_command_refuses_the_options_it_never_reads(self):
-        """notes and channel read no source and no prefix, and set-version names no tag."""
+        """notes and channel read neither option, and set-version names no tag, so it takes no --tag-prefix."""
         for arguments in (["notes", "0.1.0", "--version-source", "tags"], ["notes", "0.1.0", "--tag-prefix", "v"],
                           ["channel", "0.1.0", "--version-source", "tags"], ["channel", "0.1.0", "--tag-prefix", "v"],
                           ["set-version", "0.1.0", "--version-source", "tags", "--tag-prefix", "v"]):
@@ -526,8 +539,10 @@ class ReleasedSections(unittest.TestCase):
         self.assertEqual(check_changelog(head, {"0.1.0": self.AT_TAG}), [])
 
     def test_an_entry_merged_into_a_released_section_is_caught(self):
-        """The hazard the check exists for: a three-way merge puts an entry that was added to [Unreleased] after
-        the branch point into the released section instead, cleanly and without a conflict."""
+        """The hazard this check exists for.
+        A three-way merge can put an entry added to [Unreleased] after the branch point into the released
+        section instead.
+        It does so cleanly, without a conflict."""
         head = self.AT_TAG.replace("- B\n", "- B\n- C\n")
         self.assertTrue(check_changelog(head, {"0.1.0": self.AT_TAG}))
 
@@ -544,17 +559,18 @@ class ReleasedSections(unittest.TestCase):
         self.assertEqual(check_changelog(self.AT_TAG, {"0.1.0": before}), [])
 
     def test_a_tag_older_than_its_section_is_listed_as_uncompared(self):
-        """uncompared() names every version whose tag holds no text of its section, and only those. What the
-        report makes of that list is held in AskingTheRepository."""
+        """uncompared() names every version whose tag holds no text of its section, and only those.
+        What the report does with that list is tested in AskingTheRepository."""
         before = "# Changelog\n\n## [Unreleased]\n"
         later = self.AT_TAG.replace("[0.1.0]", "[0.2.0]")
         self.assertEqual(uncompared({"0.1.0": before, "0.2.0": later}), ["0.1.0"])
         self.assertEqual(uncompared({"0.1.0": self.AT_TAG}), [])
 
     def test_a_section_missing_while_its_release_is_off_this_history_is_not_called_deleted(self):
-        """Between a release being published and its branch reaching the default branch, the section exists
-        only where the tag does. `ancestry` already fails for it; this one saying the section is gone as well
-        reads as a second, separate accusation about somebody having deleted text."""
+        """A release is published before its branch reaches the default branch.
+        In between, the section exists only where the tag is.
+        `ancestry` already fails for that.
+        Saying the section is gone as well would read as a second, separate claim that somebody deleted text."""
         problems = check_changelog("# Changelog\n\n## [Unreleased]\n", {"0.1.0": self.AT_TAG}, {"0.1.0"})
         self.assertEqual(len(problems), 1)
         self.assertNotIn("is gone", problems[0])
@@ -567,23 +583,24 @@ class ReleasedSections(unittest.TestCase):
 
 
 class ClosingTheUnreleasedSection(unittest.TestCase):
-    """What a release does to the changelog before it is one, and the counterpart of check_changelog: what
-    this writes is what the tag is about to hold a copy of, and what may never be edited again."""
+    """What a release does to the changelog before it is released; the counterpart of check_changelog.
+    What this writes is what the tag will hold a copy of, and it may never be edited afterwards."""
 
     FOLLOWED = "# Log\n\n## [Unreleased]\n\n### Added\n\n- X\n\n## [0.1.0] - 2026-01-01\n\n- old\n"
     LINKED = "# Log\n\n## [Unreleased]\n\n### Added\n\n- X\n\n\n\n[Unreleased]: https://example.invalid/x\n"
 
     def test_the_entries_become_a_section_of_their_own(self):
-        """The date stays part of the section, which is `sections()` taking the rest of the heading line in
-        with it: it may not change afterwards either, the tag holding a copy of it."""
+        """The date stays part of the section, because `sections()` takes the rest of the heading line with it.
+        So the date may not change afterwards either: the tag holds a copy of it."""
         written = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
         self.assertIn("## [0.2.0] - 2026-09-21\n\n### Added\n\n- X\n", written)
         self.assertTrue(sections(written)["0.2.0"].startswith("- 2026-09-21"))
         self.assertEqual(sections(written)["Unreleased"], "")
 
     def test_a_section_heading_is_read_as_commonmark_reads_one(self):
-        """Indented by up to three spaces, or a tab after the #s, a section still starts there, and [Unreleased]
-        is still found to close; indented by four, it is a code block inside the section above."""
+        """Indented up to three spaces, or with a tab after the #s, a section heading still starts a section.
+        [Unreleased] is then still found and closed.
+        Indented by four, it is a code block inside the section above."""
         log = "# Log\n\n  ## [Unreleased]\n\n### Added\n\n- X\n\n ##\t[0.1.0] - 2026-01-01\n\n- old\n"
         self.assertEqual(sections(log), {"Unreleased": "### Added\n\n- X", "0.1.0": "- 2026-01-01\n\n- old"})
         self.assertIn("## [0.2.0] - 2026-09-21\n\n### Added\n\n- X\n\n ##\t[0.1.0]", closed(log, "0.2.0", "2026-09-21"))
@@ -592,12 +609,13 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
     def test_what_was_already_released_is_left_alone(self):
         written = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
         self.assertIn("## [0.1.0] - 2026-01-01\n\n- old\n", written)
-        self.assertIn("- X\n\n## [0.1.0]", written)  # The blank line between them is not eaten.
+        self.assertIn("- X\n\n## [0.1.0]", written)  # The blank line between them is kept.
 
     def test_link_definitions_stay_at_the_foot_of_the_file(self):
-        """They belong to the file rather than to the section being closed, so they are taken off the entries
-        before the section is written and put back below it, one blank line down however many stood above
-        them. Taken as entries instead, they would keep the blank lines the entries ended in."""
+        """Link definitions belong to the file, not to the section being closed.
+        They are taken off the entries before the section is written, and put back below it,
+        one blank line down however many blank lines stood above them.
+        If they counted as entries, the blank lines after the last entry would stay inside the section."""
         written = closed(self.LINKED, "0.2.0", "2026-09-21")
         self.assertTrue(written.endswith("## [0.2.0] - 2026-09-21\n\n### Added\n\n- X\n\n"
                                          "[Unreleased]: https://example.invalid/x\n"))
@@ -606,20 +624,22 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
         once = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
         with self.assertRaises(SystemExit) as raised:
             closed(once, "0.2.0", "2026-09-22")
-        # Which refusal matters: closing an emptied [Unreleased] is refused too, and that reading would let
-        # a second close through on a changelog that still had entries under it.
+        # The reason matters. Closing an empty [Unreleased] is refused too, and if that were the only refusal,
+        # a second close would get through where [Unreleased] still had entries.
         self.assertIn("already has a section", str(raised.exception))
 
     def test_a_release_with_nothing_to_say_is_refused(self):
-        """An empty section is not a section: check_changelog would compare that emptiness against the tag
-        ever after, and nobody reading the release notes learns anything."""
+        """An empty section is not a section.
+        check_changelog would compare that emptiness against the tag forever, and the release notes would say
+        nothing."""
         with self.assertRaises(SystemExit):
             closed("# Log\n\n## [Unreleased]\n\n## [0.1.0] - x\n\n- old\n", "0.2.0", "2026-09-21")
 
     def test_a_link_definition_is_not_something_to_release(self):
-        """The one input that tells the two readings apart: with nothing but a link definition under
-        [Unreleased], peeling only blank lines would make a released section out of it. `sections()` strips
-        link definitions before comparing, so the mistake is invisible from there - it has to be caught here."""
+        """This input tells apart the two ways of deciding [Unreleased] is empty.
+        With only a link definition under it, peeling off just blank lines would make a released section of it.
+        `sections()` strips link definitions before comparing, so the mistake cannot be seen there.
+        It has to be caught here."""
         with self.assertRaises(SystemExit) as raised:
             closed("# Log\n\n## [Unreleased]\n\n[Unreleased]: https://example.invalid/x\n", "0.2.0", "2026-09-21")
         self.assertIn("nothing is under [Unreleased]", str(raised.exception))
@@ -630,12 +650,13 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
         self.assertIn("has no [Unreleased] section", str(raised.exception))
 
     def test_what_is_closed_is_what_check_changelog_then_holds(self):
-        """The two halves have to agree: the section this writes is the one compared against the tag, so a
-        tag taken of this text must find it unchanged.
+        """The two halves have to agree: the section this writes is the one compared against the tag.
+        So a tag taken of this text must find the section unchanged.
 
-        Comparing the text with itself passes on a heading `sections()` cannot read, there being no section
-        either side to compare - so the section is asked for by name first, and the check is made to fail on
-        an edit, which is the half that says it compares anything at all."""
+        Comparing a text with itself also passes when `sections()` cannot read the heading,
+        since there is then no section on either side.
+        So the section is first looked up by name, and the check is shown to fail on an edit:
+        that is the half that proves it compares anything at all."""
         written = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
         self.assertIn("0.2.0", sections(written))
         self.assertEqual(check_changelog(written, {"0.2.0": written}), [])
@@ -643,10 +664,13 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
 
 
 class ClosingAPreReleaseTrain(unittest.TestCase):
-    """A final release takes into its own section the entries of every pre-release since the final release before
-    it, and their sections stay as released. For a train that reached its own final release that is what the
-    Gradle changelog plugin's `combinePreReleases` does, on by default there, so that a changelog that plugin kept
-    reads the same here; the plugin leaves an abandoned train out, and this takes it in."""
+    """A final release takes into its section the entries of every pre-release since the final release
+    before it.
+    The pre-releases' own sections stay as released.
+    For a train that reached its own final release, this is what the Gradle changelog plugin's
+    `combinePreReleases` does.
+    That option is on by default there, so a changelog the plugin kept reads the same here.
+    The plugin leaves an abandoned train out; this takes it in."""
 
     TRAIN = (
         "# Log\n\n## [Unreleased]\n\n### Fixed\n\n- F\n\n"
@@ -659,13 +683,13 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
         return check_release.bodies(text)[version]
 
     def test_a_final_release_takes_its_train_in_grouped_by_kind(self):
-        """In Keep a Changelog's order of kinds, each kind once, entries in the order the sections come."""
+        """Kinds in Keep a Changelog's order, each kind once, entries in the order their sections come."""
         written = closed(self.TRAIN, "0.3.0", "2026-09-21")
         self.assertEqual(self.body(written, "0.3.0"),
                          "### Added\n\n- B2\n- B1\n\n### Removed\n\n- R\n\n### Fixed\n\n- F")
 
     def test_the_train_s_sections_stay_as_they_were_released(self):
-        """What makes this safe beside check_changelog: nothing released is edited, only read."""
+        """This is safe beside check_changelog: nothing released is edited, only read."""
         written = closed(self.TRAIN, "0.3.0", "2026-09-21")
         self.assertEqual(check_changelog(written, {"0.3.0-beta.1": self.TRAIN, "0.3.0-beta.2": self.TRAIN}), [])
 
@@ -676,14 +700,14 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
         self.assertIn("- B1", self.body(written, "0.3.0"))
 
     def test_a_pre_release_takes_nothing_in(self):
-        """Where this parts from the plugin's code and keeps to its documentation: a channel was offered
-        beta.1 already, and beta.2's notes repeating it would tell them nothing."""
+        """Here this departs from the plugin's code and follows its documentation.
+        A channel was offered beta.1 already; repeating it in beta.2's notes would tell them nothing."""
         written = closed(self.TRAIN.replace("0.3.0-beta.2", "0.3.0-beta.0"), "0.3.0-beta.2", "2026-09-21")
         self.assertEqual(self.body(written, "0.3.0-beta.2"), "### Fixed\n\n- F")
 
     def test_a_train_abandoned_for_another_version_is_taken_in_by_the_next_final_release(self):
-        """0.3.0 never came, and 1.0.0 is the first final release since 0.2.0: whoever skipped the betas is told
-        what they brought, as the link of 1.0.0 compares from 0.2.0."""
+        """0.3.0 never came, and 1.0.0 is the first final release since 0.2.0.
+        Whoever skipped the betas is told what they brought, just as the link of 1.0.0 compares from 0.2.0."""
         written = closed(self.TRAIN, "1.0.0", "2026-09-21")
         self.assertEqual(self.body(written, "1.0.0"),
                          "### Added\n\n- B2\n- B1\n\n### Removed\n\n- R\n\n### Fixed\n\n- F")
@@ -709,8 +733,9 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
         self.assertIn("nothing is under [Unreleased]", str(raised.exception))
 
     def test_the_refusal_says_why_nothing_was_taken_in(self):
-        """A pre-release takes nothing in even where a train stands below it, so a refusal saying there was no
-        pre-release to take in would be untrue of it."""
+        """A pre-release takes nothing in, even where a train stands below it.
+        So "no pre-release to take in" would be untrue of it, and the refusal says why instead.
+        It would be untrue of a final release whose pre-releases say nothing, too."""
         quiet = self.TRAIN.replace("### Fixed\n\n- F\n\n", "")
         silent = "# Log\n\n## [Unreleased]\n\n## [0.3.0-beta.1] - x\n\n{}## [0.2.0] - x\n\n- old\n"
         untaken = ", and nothing in the pre-releases between 0.2.0 and 0.3.0 to take in"
@@ -726,16 +751,17 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
                              f"nothing is under [Unreleased]{said}, so there is nothing to release")
 
     def test_a_group_of_another_name_is_kept_after_the_known_kinds(self):
-        """Its text was released too; dropping it for not being one of the six would lose it."""
+        """Its text was released too; dropping it because it is not one of the six kinds would lose it."""
         odd = self.TRAIN.replace("### Removed\n\n- R", "### Notes\n\n- N")
         written = closed(odd, "0.3.0", "2026-09-21")
         self.assertTrue(self.body(written, "0.3.0").endswith("### Fixed\n\n- F\n\n### Notes\n\n- N"))
 
 
 class TheLinksAtTheFoot(unittest.TestCase):
-    """Written the way the Gradle changelog plugin writes them, so that a changelog it kept stays as it was - save
-    where pre-releases stand among the sections, or a backport stands above a newer line: each link then compares
-    from where its section's entries start."""
+    """The link definitions are written the way the Gradle changelog plugin writes them,
+    so a changelog it kept stays the same.
+    Two cases differ: pre-releases among the sections, and a backport above a newer line.
+    There each link compares from where its section's entries start."""
 
     def footer(self, *sections):
         text = "# Log\n\n## [Unreleased]\n\n" + "".join(f"## [{label}] - x\n\n- e\n\n" for label in sections)
@@ -744,8 +770,8 @@ class TheLinksAtTheFoot(unittest.TestCase):
                 if line.startswith("[") and "]: " in line}
 
     def test_the_gradle_plugin_s_own_footer_is_reproduced(self):
-        """Taken from a changelog that plugin wrote, with a prefix declared empty: the comparison runs from the
-        section below, and the oldest release points at its own commits."""
+        """Taken from a changelog that plugin wrote, with the prefix declared empty.
+        Each comparison runs from the section below, and the oldest release links to its own commits."""
         text = ("# Log\n\n## [Unreleased]\n\n## [0.2.1] - 2026-09-19\n\n- f\n\n"
                 "## [0.2.0] - 2026-09-15\n\n- a\n\n## [0.1.0] - 2026-09-13\n\n- b\n")
         repository_url = "https://github.com/loplex/intellij-maven-lens"
@@ -757,8 +783,9 @@ class TheLinksAtTheFoot(unittest.TestCase):
         ))
 
     def test_a_final_release_is_compared_from_the_final_release_below_it(self):
-        """Its section took in its train's entries, everything since 0.2.0, so its link shows everything since
-        0.2.0 too; from beta.2 it would leave out what beta.1 and beta.2 brought."""
+        """Its section took in its train's entries, everything since 0.2.0, so its link shows everything since 0.2.0
+        too.
+        Compared from beta.2, it would leave out what beta.1 and beta.2 brought."""
         links = self.footer("0.3.0", "0.3.0-beta.2", "0.3.0-beta.1", "0.2.0")
         self.assertEqual(links["0.3.0"], "compare/v0.2.0...v0.3.0")
         self.assertEqual(links["0.3.0-beta.2"], "compare/v0.3.0-beta.1...v0.3.0-beta.2")
@@ -823,9 +850,10 @@ class TheLinksAtTheFoot(unittest.TestCase):
 
 
 class TheReleaseNotes(unittest.TestCase):
-    """One released section's text, printed for the release page, from the file the changelog check holds to
-    the tag - so the two cannot come to say different things, but for the warning release-flow/warn puts above
-    the notes while publishing the release elsewhere has not completed."""
+    """One released section's text, printed for the release page.
+    It comes from the file the changelog check holds to the tag, so the two cannot say different things.
+    The one exception is the warning release-flow/warn puts above the notes while publishing elsewhere has not
+    completed."""
 
     def notes_of(self, changelog, version):
         here = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -849,9 +877,8 @@ class TheReleaseNotes(unittest.TestCase):
         self.assertEqual(notes, "### Added\n\n- A\n")
 
     def test_link_definitions_are_not_notes(self):
-        """Asked of the last section, which is the one whose body the definitions at the foot fall into. Any
-        other section ends at the heading below it, so the definitions are outside it however it is read, and
-        the question goes unasked."""
+        """Asked of the last section, because the definitions at the foot fall into its body.
+        Any other section ends at the heading below it, so the definitions are outside it however it is read."""
         notes, _ = self.notes_of(self.TEXT, "0.1.0")
         self.assertNotIn("example.invalid", notes)
 
@@ -861,8 +888,7 @@ class TheReleaseNotes(unittest.TestCase):
         self.assertIn("holds nothing for 0.2.0", problems[0])
 
     def test_a_section_holding_only_spaces_is_refused_too(self):
-        """Blank lines are taken off a body's ends, but spaces are not: a line of them is still nothing to
-        say."""
+        """Blank lines are taken off a body's ends, but spaces are not; a line of spaces is still nothing to say."""
         _, problems = self.notes_of(self.TEXT.replace("### Added\n\n- A\n", "   \n"), "0.2.0")
         self.assertTrue(problems)
         self.assertIn("holds nothing for 0.2.0", problems[0])
@@ -878,16 +904,18 @@ class ReachableTags(unittest.TestCase):
         self.assertEqual(check_ancestry({"0.1.0": True, "0.2.0": True}, "v"), [])
 
     def test_a_tag_a_rewrite_has_orphaned_is_caught(self):
-        """What a squash merge, a rebase merge, GitHub's `Update with rebase` or a force-push all do to the
-        release commit. The check asks after the property rather than after the cause, so it holds for a way of
-        rewriting a branch that nobody has thought of yet."""
+        """A squash merge, a rebase merge, GitHub's `Update with rebase` and a force-push all do this to the
+        release commit.
+        The check asks about the result, not the cause, so it also holds for a way of rewriting a branch that
+        nobody has thought of yet."""
         problems = check_ancestry({"0.1.0": True, "0.2.0": False}, "v")
         self.assertEqual(len(problems), 1)
         self.assertIn("v0.2.0", problems[0])
 
     def test_an_orphan_is_named_the_way_this_repository_tags(self):
-        """Both spellings are in use, `v0.2.0` and a bare `0.2.0`, and a report that names a tag nobody can look up
-        is a report that sends its reader to the wrong place - whether a branch still holds the tag or not."""
+        """Both spellings are in use, `v0.2.0` and a bare `0.2.0`.
+        A report naming a tag nobody can look up sends its reader to the wrong place,
+        whether or not a branch still holds the tag."""
         bare = check_ancestry({"0.2.0": False}, "")
         self.assertIn("0.2.0 is released", bare[0])
         self.assertNotIn("v0.2.0", bare[0])
@@ -906,10 +934,11 @@ class ReachableTags(unittest.TestCase):
         self.assertEqual(check_ancestry({}, "v"), [])
 
     def test_a_branch_that_still_holds_the_tag_is_named_with_both_readings(self):
-        """The state every release passes through between being published and reaching the default branch -
-        and, indistinguishably from the outside, what a squash or a rebase merge leaves behind, since both
-        replay the release commit and leave the branch that holds the original standing. Failing is right
-        either way; naming only the innocent reading sends the reader away from damage that is there."""
+        """Every release passes through this state, between being published and reaching the default branch.
+        A squash or a rebase merge leaves the same state, and from the outside the two cannot be told apart:
+        both replay the release commit, and the branch holding the original stays.
+        Failing is right either way.
+        Naming only the harmless reading would send the reader away from damage that is really there."""
         problems = check_ancestry({"0.2.0": False}, "v", {"0.2.0": "origin/release/0.2.0"})
         self.assertEqual(len(problems), 1)
         self.assertIn("origin/release/0.2.0", problems[0])
@@ -917,17 +946,20 @@ class ReachableTags(unittest.TestCase):
         self.assertIn("rebase", problems[0])
 
     def test_an_orphan_no_branch_holds_is_still_blamed_on_a_rewrite(self):
-        """Told apart by whether any branch holds the tag, so a tag that a rebase merge left behind while its
-        branch was deleted - the shape that is easiest to mistake for the other - still reads as a rewrite."""
+        """The two cases are told apart by whether any branch holds the tag.
+        A tag left behind by a rebase merge whose branch was then deleted is the easiest to mistake for the other
+        case, and it still reads as a rewrite."""
         problems = check_ancestry({"0.2.0": False}, "v", {"0.2.0": ""})
         self.assertEqual(len(problems), 1)
         self.assertIn("rewrite", problems[0])
 
 
 class AskingTheRepository(unittest.TestCase):
-    """What the checks over tags ask of Git: which releases this history reaches, which branch holds one it
-    does not, and what `changelog` reports of a tag that holds no text to compare against. A release tagged on a
-    branch the history has not taken in is the case the first two exist for."""
+    """What the checks over tags ask of git:
+    - which releases this history reaches;
+    - which branch holds a release it does not reach;
+    - what `changelog` reports for a tag that holds no text to compare against.
+    The first two exist for a release tagged on a branch this history has not taken in yet."""
 
     def setUp(self):
         self.here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -956,24 +988,24 @@ class AskingTheRepository(unittest.TestCase):
         self.assertEqual(check_release.unreachable("v", ["0.1.0", "0.2.0"]), {"0.2.0"})
 
     def test_the_release_branch_is_named_ahead_of_another_holding_the_tag(self):
-        """`aside` sorts first, so a holder that did not put the release branch ahead would name it."""
+        """`aside` sorts first, so a holder that did not put the release branch first would name `aside`."""
         self.assertEqual(check_release.holder("v0.2.0", "0.2.0"), "release/0.2.0")
 
     def test_the_remote_s_branch_is_named_ahead_of_a_local_one(self):
-        """A release is carried back from what the remote has, so the branch named is the remote's, as it is
-        fetched, even where a local branch of the same name holds the tag as well."""
+        """A release is carried back from what the remote has.
+        So the remote's branch is named, as fetched, even where a local branch of the same name holds the tag too."""
         self.git("update-ref", "refs/remotes/origin/release/0.2.0", "v0.2.0")
         self.assertEqual(check_release.holder("v0.2.0", "0.2.0"), "origin/release/0.2.0")
 
     def test_a_remote_branch_of_another_name_is_named_ahead_of_the_local_release_branch(self):
-        """Once a remote branch holds the tag, only the remote's branches are sorted, whatever the remote is
-        called: the local release branch is not pulled ahead of them."""
+        """Once a remote branch holds the tag, only the remote's branches are sorted, whatever the remote is called.
+        The local release branch is not pulled ahead of them."""
         self.git("update-ref", "refs/remotes/upstream/aside", "v0.2.0")
         self.assertEqual(check_release.holder("v0.2.0", "0.2.0"), "upstream/aside")
 
     def test_a_branch_merely_ending_in_the_release_branch_s_name_is_not_taken_for_it(self):
-        """`prerelease/0.2.0` sorts ahead of `release/0.2.0` and ends in its name, so only a whole component
-        of a branch's name is taken for the release branch."""
+        """`prerelease/0.2.0` sorts before `release/0.2.0` and ends in its name.
+        So only a whole component of a branch name counts as the release branch."""
         self.git("branch", "prerelease/0.2.0", "v0.2.0")
         self.assertEqual(check_release.holder("v0.2.0", "0.2.0"), "release/0.2.0")
 
@@ -984,8 +1016,9 @@ class AskingTheRepository(unittest.TestCase):
         self.assertIn("not on this history", problems[0])
 
     def test_a_tag_older_than_its_section_is_reported_as_not_compared(self):
-        """The report has to be honest about a section it could not compare: one whose tag holds no text of it
-        is named as not compared, rather than counted among the sections that still read as released."""
+        """The report has to be honest about a section it could not compare.
+        One whose tag holds no text of it is named as not compared, not counted among the sections that still
+        read as released."""
         self.git("tag", "-d", "v0.2.0")
         self.git("tag", "v0.0.1")
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.1] - 2025-12-01\n\n- Z\n")
@@ -997,8 +1030,8 @@ class AskingTheRepository(unittest.TestCase):
         self.assertIn("Not compared: 0.0.1 ", printed.getvalue())
 
     def test_a_tag_older_than_the_file_is_reported_as_not_compared(self):
-        """A tag made before CHANGELOG.md existed holds no text to compare against either, and is named the
-        same way rather than left out of the report."""
+        """A tag made before CHANGELOG.md existed has no text to compare against either.
+        It is named the same way, not left out of the report."""
         self.git("tag", "-d", "v0.2.0")
         self.git("rm", "-q", "CHANGELOG.md")
         self.git("commit", "-q", "-m", "no changelog")
@@ -1013,7 +1046,7 @@ class AskingTheRepository(unittest.TestCase):
 
 
 class WritingTheVersionBack(unittest.TestCase):
-    """`set-version` against a file, which is where the line endings and the read-back live."""
+    """`set-version` against a file on disk, where the line endings and the read-back matter."""
 
     def properties_file_holding(self, text: str) -> Path:
         here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -1029,15 +1062,16 @@ class WritingTheVersionBack(unittest.TestCase):
                 argparse.Namespace(version=version, version_source="gradle.properties", tag_prefix=None))
 
     def test_a_crlf_file_stays_crlf(self):
-        """Read the way open() reads by default, every line of it would come back as LF, and the release
-        commit would rewrite the whole file to change one line."""
+        """Read the way open() reads by default, every line would come back as LF.
+        The release commit would then rewrite the whole file to change one line."""
         path = self.properties_file_holding("group=a\r\nversion=0.1.1-SNAPSHOT\r\ntagPrefix=v\r\n")
         self.assertEqual(self.set_version("0.1.1"), [])
         self.assertEqual(path.read_bytes(), b"group=a\r\nversion=0.1.1\r\ntagPrefix=v\r\n")
 
     def test_a_rewrite_that_did_not_take_is_caught_on_reading_back(self):
-        """The read-back is what catches a writer and a reader that have come to disagree, which is the quiet
-        failure; a writer that changes nothing stands in for one here."""
+        """The read-back catches a writer and a reader that have come to disagree, which would otherwise fail
+        silently.
+        A writer that changes nothing stands in for that here."""
         self.properties_file_holding("version = 0.1.1-SNAPSHOT\n")
         with unittest.mock.patch.object(check_release.SOURCES["gradle.properties"], "with_version",
                                         lambda text, version: text):
@@ -1046,8 +1080,8 @@ class WritingTheVersionBack(unittest.TestCase):
         self.assertIn("still does not name 0.1.1", problems[0])
 
     def test_a_write_that_did_not_reach_the_file_is_caught_on_reading_back(self):
-        """The other half of what the read-back is for: a rewrite that is right in memory and never reaches the
-        file, which a check over the rewritten text would pass."""
+        """The other case the read-back is for: a rewrite that is right in memory but never reaches the file.
+        A check over the rewritten text would pass it."""
         self.properties_file_holding("version = 0.1.1-SNAPSHOT\n")
         real_open = open
 
@@ -1060,25 +1094,27 @@ class WritingTheVersionBack(unittest.TestCase):
         self.assertIn("still does not name 0.1.1", problems[0])
 
     def test_a_version_outside_latin_1_is_written_escaped_rather_than_breaking_the_file(self):
-        """A character the file's encoding has no byte for would stop the write halfway, with the file already
-        emptied; escaped as Properties.store(OutputStream) escapes it, it is written, and read back as it was given."""
+        """A character with no byte in the file's encoding would stop the write halfway, with the file already
+        emptied.
+        It is escaped instead, as Properties.store(OutputStream) escapes it, and reads back as it was given."""
         path = self.properties_file_holding("version = 0.1.1-SNAPSHOT\n")
         self.assertEqual(self.set_version("0.1.1-\u20ac"), [])
         self.assertEqual(path.read_bytes(), b"version = 0.1.1-\\u20AC\n")
 
     def test_a_lone_surrogate_in_the_version_leaves_the_file_as_it_was(self):
-        """A lone surrogate handed to set_version_command directly - main() refuses one from the command line before
-        it gets there - is refused by stored() before the file is opened for writing: the file is left as it was, not
-        emptied."""
+        """A lone surrogate handed to set_version_command directly is refused by stored().
+        That happens before the file is opened for writing, so the file is left as it was, not emptied.
+        From the command line, main() refuses it before it gets this far."""
         path = self.properties_file_holding("version = 0.1.1-SNAPSHOT\n")
         with self.assertRaises(UnicodeEncodeError):
             self.set_version("0.1.1-\udcff")
         self.assertEqual(path.read_bytes(), b"version = 0.1.1-SNAPSHOT\n")
 
     def test_a_comment_or_a_value_in_any_encoding_comes_back_in_its_own_bytes(self):
-        """Gradle reads gradle.properties a byte to a character, so a comment saved in UTF-8, one saved in Latin-1,
-        one holding every byte above ASCII and a value saved in UTF-8 are all as good as ASCII to it, and a release
-        leaves each of them exactly as it was."""
+        """Gradle reads gradle.properties one byte to one character.
+        So a comment in UTF-8, one in Latin-1, one holding every byte above ASCII, and a value in UTF-8
+        are all as good as ASCII to it.
+        A release leaves each of them exactly as it was."""
         path = self.properties_file_holding("")
         path.write_bytes("# sestaven\u00ed\n".encode("utf-8") + "# sestaven\u00ed\n".encode("iso-8859-1")
                          + b"# " + bytes(range(0x80, 0x100)) + b"\ndescription = " + "sestaven\u00ed".encode("utf-8")
@@ -1092,9 +1128,9 @@ class ReadingTheFile(unittest.TestCase):
     """The file a source names, read from disk in the encoding its format is read in."""
 
     def test_gradle_properties_is_read_a_byte_to_a_character_as_gradle_reads_it(self):
-        """Gradle reads every byte of the file as the one character with that code, so no byte above ASCII is
-        decoded as part of UTF-8 or through another single-byte table: the prefix a release takes has to be the one
-        the build sees."""
+        """Gradle reads each byte of the file as the character with that code.
+        So no byte above ASCII is decoded as UTF-8 or through another single-byte table.
+        The prefix a release uses has to be the one the build sees."""
         here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         (here / "gradle.properties").write_bytes(b"version = 0.1.1-SNAPSHOT\ntagPrefix = " + bytes(range(0x80, 0x100))
                                                  + b"\n")
@@ -1116,8 +1152,8 @@ class WritingTheChangelogBack(unittest.TestCase):
         return here / "CHANGELOG.md"
 
     def test_a_crlf_file_stays_crlf(self):
-        """A CRLF file stays CRLF, for the reason set-version keeps its line endings: a release commit should
-        change one section of the file, not every line of it."""
+        """A CRLF file stays CRLF, for the same reason as in set-version:
+        a release commit should change one section of the file, not every line of it."""
         path = self.changelog_file_holding("# Log\r\n\r\n## [Unreleased]\r\n\r\n### Added\r\n\r\n- A\r\n")
         with contextlib.redirect_stdout(io.StringIO()):
             problems = check_release.close_changelog_command(argparse.Namespace(
@@ -1138,7 +1174,7 @@ class WritingTheChangelogBack(unittest.TestCase):
                          b"# Log\r\r## [Unreleased]\r\r## [0.1.0] - 2026-09-21\r\r### Added\r\r- A\r")
 
     def test_a_refused_close_leaves_the_file_as_it_was(self):
-        """A refusal is the rules saying no, and the changelog they said it about is still the one to fix."""
+        """A refusal is the rules saying no, and the changelog is still the one to fix, so it is left as it was."""
         text = "# Log\n\n## [Unreleased]\n\n## [0.1.0] - 2026-09-01\n\n- A\n"
         path = self.changelog_file_holding(text)
         with self.assertRaises(SystemExit):
@@ -1148,8 +1184,9 @@ class WritingTheChangelogBack(unittest.TestCase):
 
 
 class AVersionHandedIn(unittest.TestCase):
-    """`--version` in place of what the file declares, spelled with the marker or without it. Only a marker
-    ending the version comes off, so a version carrying it anywhere else is still one being worked on."""
+    """`--version` given in place of what the file declares, with or without the marker.
+    Only a marker at the end of the version is taken off.
+    A version carrying it anywhere else is still one being worked on."""
 
     def released_as(self, given):
         here = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -1179,11 +1216,12 @@ class AVersionHandedIn(unittest.TestCase):
 
 
 class TheSourceAVersionComesFrom(unittest.TestCase):
-    """The one thing a project type decides. The two halves are not the same question: where the version is
-    read from, and whether anything is written once it is released. A repository whose version lives only in
-    its tags answers the first with "you tell me, or the one after the highest release, or a later one
-    [Unreleased] asks for" and the second with
-    "nowhere"."""
+    """The one thing a project type decides, which is two separate questions:
+    - where the version is read from;
+    - whether anything is written once it is released.
+    A repository whose version lives only in its tags answers the first with "you tell me, or the one after
+    the highest release, or a later one [Unreleased] asks for".
+    It answers the second with "nowhere"."""
 
     def repository_with(self, *tags, declaring=None, changelog="# Changelog\n\n## [Unreleased]\n"):
         here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -1202,8 +1240,8 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         return here
 
     def problems_releasing(self, given, *tags, version_source="tags", prefix="v", **repository):
-        # The command prints the candidate it accepted; swallowed here so that a suite's output holds test
-        # results and nothing else.
+        # The command prints the version it accepted.
+        # It is swallowed here, so that the suite's output holds only test results.
         self.repository_with(*tags, **repository)
         with contextlib.redirect_stdout(io.StringIO()):
             return version_command(argparse.Namespace(version=given, version_source=version_source, tag_prefix=prefix))
@@ -1216,16 +1254,16 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertEqual((problems, printed.getvalue().strip()), ([], "0.2.0"))
 
     def test_the_default_is_the_patch_after_the_highest_release(self):
-        """What a dispatch leaves to this rather than computing in a form: the field is empty, and with nothing
-        under [Unreleased] asking for more, the patch after the highest release is what comes back. Which release is
-        the highest where their names sort otherwise is the next test's."""
+        """A dispatch leaves the version field empty, rather than computing a default in its form.
+        With nothing under [Unreleased] asking for more, the patch after the highest release comes back.
+        Which release is the highest when their names sort differently is the next test's question."""
         self.repository_with("v0.1.0", "v0.2.0")
         self.assertEqual(next_candidate(check_release.released_versions("v")), "0.2.1")
 
     def test_the_default_is_measured_by_precedence_not_by_how_tags_sort(self):
-        """`git tag -l` hands them back in ASCII order, where `v0.10.0` sorts before `v0.9.0`. Taking the last
-        one listed would offer `0.9.1` as the version after `0.10.0` - a release the step check then refuses,
-        from a default this file produced."""
+        """`git tag -l` lists tags in ASCII order, where `v0.10.0` sorts before `v0.9.0`.
+        Taking the last one listed would offer `0.9.1` as the version after `0.10.0`.
+        The step check would then refuse a default this file produced."""
         self.repository_with("v0.9.0", "v0.10.0")
         self.assertEqual(next_candidate(check_release.released_versions("v")), "0.10.1")
 
@@ -1234,8 +1272,9 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertEqual(next_candidate(check_release.released_versions("v")), "0.2.0")
 
     def test_the_default_moves_as_far_as_unreleased_asks(self):
-        """Left empty, the version is the least that what waits to be released allows: the minor after an
-        addition, the major after a removal from 1.0 on, even where an open train would be followed by less."""
+        """Left empty, the version is the least one that what waits to be released allows:
+        the minor after an addition, and from 1.0 on the major after a removal.
+        That holds even where an open train would be followed by less."""
         self.repository_with("v0.2.0")
         releases = check_release.released_versions("v")
         self.assertEqual(next_candidate(releases, Asked(MINOR, "### Added", [], [])), "0.3.0")
@@ -1261,8 +1300,9 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertIn("[Unreleased] holds ### Added", " ".join(problems))
 
     def test_a_hotfix_from_a_branch_carrying_an_open_train_is_held_to_it(self):
-        """0.2.1 may go out while 0.3.0-beta.1 is open - from a branch the train has not reached. Cut from one whose
-        changelog holds the beta's section, it would release the beta's addition as a patch."""
+        """0.2.1 may go out while 0.3.0-beta.1 is open, from a branch the train has not reached.
+        Cut from a branch whose changelog holds the beta's section, it would release the beta's addition as a
+        patch."""
         on_the_train = ("# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- F\n\n## [0.3.0-beta.1] - 2026-09-20\n\n"
                         "### Added\n\n- A\n\n## [0.2.0] - 2026-09-01\n\n- old\n")
         self.assertEqual(self.problems_releasing("0.2.1", "v0.2.0", "v0.3.0-beta.1", changelog=on_the_train),
@@ -1287,8 +1327,9 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertIn("'### Documentation', which is not a kind of change Keep a Changelog names", said.getvalue())
 
     def test_a_changelog_without_an_unreleased_section_is_told_so(self):
-        """`## Unreleased`, without the brackets, is not the section Keep a Changelog writes, and what is under it
-        is not read; said rather than passed quietly as a patch."""
+        """`## Unreleased` without brackets is not the section Keep a Changelog writes, and what is under it is
+        not read.
+        That is said on stderr, not passed silently as a patch."""
         self.repository_with("v0.2.0", changelog="# Changelog\n\n## Unreleased\n\n### Added\n\n- A\n")
         said = io.StringIO()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(said):
@@ -1311,8 +1352,8 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertIn("say which version to release", str(raised.exception))
 
     def test_tags_that_are_no_release_are_noted_once(self):
-        """version_command reads the tags once and hands what it found to next_candidate, so the note that none of
-        them is a release is said once before the refusal, not once by each."""
+        """version_command reads the tags once and hands them to next_candidate.
+        So the note that none of them is a release is said once before the refusal, not once by each."""
         self.repository_with("deploy-1")
         said = io.StringIO()
         with contextlib.redirect_stderr(said), self.assertRaises(SystemExit) as raised:
@@ -1321,16 +1362,17 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertEqual(said.getvalue().count("none of them is a release"), 1, said.getvalue())
 
     def test_a_tag_source_still_answers_to_the_rules(self):
-        """The adapter decides where the candidate comes from and nothing else: what may follow what is the
-        same rule for every source."""
+        """The source decides where the candidate comes from, and nothing else.
+        What may follow what is the same rule for every source."""
         problems = self.problems_releasing("0.4.0", "v0.1.0")
         self.assertTrue(problems)
         self.assertIn("does not follow 0.1.0", problems[0])
 
     def test_a_declaring_source_with_no_marker_releases_the_version_as_declared(self):
-        """`marker_of` allows for a source that declares a version and carries no marker on it. Read off with
-        an empty marker, the declared version has to come out whole - not as the empty string a slice to `-0`
-        leaves - and be accepted, not refused as a version nobody would release."""
+        """`marker_of` allows a source that declares a version without a marker.
+        With an empty marker, the declared version has to come out whole, not as the empty string a slice to
+        `-0` leaves.
+        It has to be accepted, not refused as a version nobody would release."""
         self.repository_with("v0.1.0", declaring="version = 0.2.0\n")
         printed = io.StringIO()
         with unittest.mock.patch.object(check_release, "marker_of", lambda source: ""), \
@@ -1341,8 +1383,9 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertEqual(printed.getvalue().strip(), "0.2.0")
 
     def test_the_commit_a_release_tags_passes_as_that_release(self):
-        """Publishing a release creates its tag, and a workflow on push runs for it: the source there still names
-        the version just released, and `version` is not being asked to release it again."""
+        """Publishing a release creates its tag, and a workflow on push runs for that tag.
+        The source there still names the version just released, and `version` is not being asked to release it
+        again."""
         self.repository_with("v0.1.0", "v0.2.0", declaring="version = 0.2.0\ntagPrefix = v\n")
         printed, said = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(printed), contextlib.redirect_stderr(said):
@@ -1362,7 +1405,7 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertIn("released already", " ".join(problems))
 
     def test_a_released_version_handed_in_on_its_tagged_commit_is_still_refused(self):
-        """Handed in, a version is a release being asked for, wherever it is asked."""
+        """A version given outright is a release being asked for, wherever it is asked."""
         self.repository_with("v0.2.0", declaring="version = 0.2.0\ntagPrefix = v\n")
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             problems = version_command(argparse.Namespace(version="0.2.0",
@@ -1370,9 +1413,9 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertIn("released already", " ".join(problems))
 
     def test_a_tag_source_declares_no_version_to_write(self):
-        """`set-version` reporting success having written nothing is the failure worth refusing: a release
-        would carry on believing it had recorded something. Refused with a status of its own, so that a caller
-        can tell it from a write that failed."""
+        """`set-version` reporting success after writing nothing is the failure worth refusing:
+        a release would carry on believing it had recorded a version.
+        It is refused with a status of its own, so that a caller can tell it from a write that failed."""
         self.repository_with("v0.1.0")
         said = io.StringIO()
         with contextlib.redirect_stderr(said), self.assertRaises(SystemExit) as raised:
@@ -1395,8 +1438,9 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertEqual(prefix_from("gradle.properties", None), "v")
 
     def test_a_declared_prefix_holding_a_lone_surrogate_is_refused(self):
-        """The reader keeps an unpaired `\\uD83D` as Java keeps it. Taken as a prefix, `prefix` ended in a
-        traceback printing it; a pair is one character and is taken."""
+        """The reader keeps an unpaired `\\uD83D`, as Java keeps it.
+        Taken as a prefix, it made `prefix` end in a traceback while printing it.
+        A pair is one character, and is accepted."""
         self.repository_with(declaring="version = 1.0.0-SNAPSHOT\ntagPrefix = \\uD83D\n")
         with self.assertRaises(SystemExit) as raised:
             prefix_from("gradle.properties", None)
@@ -1406,14 +1450,16 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
 
 
 class WhichTagsCountAsReleases(unittest.TestCase):
-    """A repository carries tags that are not releases - another component's, a deployment's - and it carries
-    its releases under whichever spelling it tags with. Two things sort that out, and the tests below hold
-    both: the prefix, which is what a project tagging `v*` selects by and strips, and the version pattern,
-    which is what keeps `v0.1.0` out of a project that tags bare versions - selecting by what the tag starts
-    with passes it and the prefix takes nothing off it, so only the pattern refuses it. Getting the prefix
-    wrong passes, because what it produces is an empty list and a check that passes having compared nothing,
-    with a note on stderr at most; getting the pattern wrong passes too, a tag of another kind counted as a
-    release, with no note at all."""
+    """A repository carries tags that are not releases, such as another component's or a deployment's.
+    Its releases carry whichever spelling it tags with.
+    Two things sort this out, and the tests below cover both:
+    - the prefix, which a project tagging `v*` selects by and takes off;
+    - the version pattern, which keeps `v0.1.0` out of a project that tags bare versions.
+      The empty prefix selects `v0.1.0` and takes nothing off it, so only the pattern refuses it.
+    Both mistakes pass.
+    A wrong prefix yields no releases, and every check passes having compared nothing, with a note on stderr at
+    most.
+    A wrong pattern counts a tag of another kind as a release, with no note at all."""
 
     PLANTED = [
         "v0.1.0", "v1.2.3-rc.1", "v1.2", "version-1.0", "v2.0.0-SNAPSHOT",
@@ -1440,15 +1486,16 @@ class WhichTagsCountAsReleases(unittest.TestCase):
         self.assertEqual(self.releases_under(""), ["0.1.0", "0.9.9", "10.1.0"])
 
     def test_the_prefix_selects_rather_than_merely_being_taken_off(self):
-        """`10.1.0` is what tells the two apart. Selecting by what the tag starts with leaves it out of a `v`
-        repository; taking the prefix off whatever is listed would turn it into `0.1.0` - a version, and a
-        second one, silently colliding with the release actually tagged `v0.1.0`."""
+        """`10.1.0` tells the two readings apart.
+        Selecting by what the tag starts with leaves it out of a `v` repository.
+        Taking the prefix off whatever is listed would turn it into `0.1.0`:
+        a second one, colliding silently with the release really tagged `v0.1.0`."""
         self.assertEqual(self.releases_under("v").count("0.1.0"), 1)
 
     def test_what_is_not_a_version_is_not_a_release_under_either(self):
-        """`v1.2` has two numbers and `version-1.0` merely starts with the letter. What each would have to be
-        called to slip through depends on the prefix: under `v` it is what the tag leaves once the prefix is
-        taken off, and under none it is the tag itself."""
+        """`v1.2` has two numbers, and `version-1.0` merely starts with the letter.
+        What each would come back as depends on the prefix:
+        under `v` it is the tag with the prefix taken off, and under none it is the tag itself."""
         for prefix, two_numbers, merely_starts in (("v", "1.2", "ersion-1.0"), ("", "v1.2", "version-1.0")):
             with self.subTest(prefix=prefix):
                 found = self.releases_under(prefix)
@@ -1456,14 +1503,16 @@ class WhichTagsCountAsReleases(unittest.TestCase):
                 self.assertNotIn(merely_starts, found)
 
     def test_a_tag_on_a_version_being_worked_on_is_not_a_release(self):
-        """Somebody tagged a snapshot. Counting it would open a train on the channel `SNAPSHOT` that every
-        later pre-release has to outrank."""
+        """Somebody tagged a snapshot.
+        Counting it would open a train on the channel `SNAPSHOT`, which every later pre-release would have to
+        outrank."""
         self.assertNotIn("2.0.0-SNAPSHOT", self.releases_under("v"))
 
     def test_counting_none_out_of_many_is_said_out_loud(self):
-        """What a prefix nobody checked looks like from the outside, and the shape every check then passes on
-        having compared nothing, bar a `version` under `tags` that has no release to count from. Said rather
-        than failed: a repository may carry tags of other kinds only."""
+        """This is what an unchecked prefix looks like from the outside.
+        Every check then passes having compared nothing, except `version` under `tags`, which has no release to
+        count from.
+        It is said, not failed: a repository may carry only tags of other kinds."""
         said = io.StringIO()
         with contextlib.redirect_stderr(said):
             self.assertEqual(self.releases_under("nonesuch/"), [])
@@ -1477,8 +1526,8 @@ class WhichTagsCountAsReleases(unittest.TestCase):
         self.assertEqual(said.getvalue(), "")
 
     def test_a_repository_with_no_tags_at_all_is_not_accused_of_anything(self):
-        """A first release has nothing to be consistent with, which is not the same as having looked in the
-        wrong place for it."""
+        """A first release has nothing to be consistent with.
+        That is not the same as having looked for releases in the wrong place."""
         empty = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         subprocess.run(["git", "init", "-q"], cwd=empty, check=True)
         original = check_release.REPO
@@ -1490,8 +1539,10 @@ class WhichTagsCountAsReleases(unittest.TestCase):
         self.assertEqual(said.getvalue(), "")
 
     def test_a_tag_of_another_kind_never_counts_even_when_it_ends_in_a_version(self):
-        """It could come back two ways: whole, where nothing asks whether the tag is a version, and as the
-        version it ends in, where whatever stands in front of that is taken off. Each is refused apart."""
+        """Such a tag could come back two ways:
+        whole, where nothing asks whether the tag is a version;
+        or as the version it ends in, where whatever stands in front of it is taken off.
+        Each is refused separately."""
         for prefix in ("v", ""):
             with self.subTest(prefix=prefix):
                 found = self.releases_under(prefix)
@@ -1501,9 +1552,10 @@ class WhichTagsCountAsReleases(unittest.TestCase):
 
 
 class WhichRepositoryIsBeingChecked(unittest.TestCase):
-    """Not the one this file lives in. Run from a checkout of its own repository against another, a root
-    taken from the script's own path would name that checkout instead - and quietly so, because it carries a
-    CHANGELOG.md of its own for the checks to read."""
+    """The repository checked is the one the run is in, not the one this file lives in.
+    Run from a checkout of this repository against another one, a root taken from the script's own path would
+    name that checkout instead.
+    It would do so silently, because that checkout has a CHANGELOG.md of its own for the checks to read."""
 
     def working_in(self, directory):
         # contextlib.chdir would do, but it arrived in 3.11 and the suite runs on the 3.10 the actions ask for.
@@ -1520,8 +1572,8 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
         self.assertEqual(repository_root(), elsewhere, "the root, not the directory the run is in")
 
     def test_help_answers_outside_a_repository(self):
-        """The repository is resolved when a subcommand first reads it, not when the file is loaded: nobody
-        asking what the subcommands are should have to stand inside a repository to be told."""
+        """The repository is found when a subcommand first reads it, not when the file is loaded.
+        Asking what the subcommands are should not require standing inside a repository."""
         nowhere = Path(self.enterContext(tempfile.TemporaryDirectory()))
         done = subprocess.run([sys.executable, str(SCRIPT), "--help"], cwd=nowhere, capture_output=True, text=True)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -1535,7 +1587,7 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
         self.assertIn("inside the repository", done.stderr)
 
     def test_a_repository_missing_a_file_it_is_read_from_is_told_which(self):
-        """A traceback is the wrong kind of loud: it reads as the tool breaking and names no file to add."""
+        """A traceback is the wrong kind of loud: it reads as the tool breaking, and names no file to add."""
         empty = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         subprocess.run(["git", "init", "-q"], cwd=empty, check=True)
         for command, missing in (("prefix", "gradle.properties"), ("changelog", "CHANGELOG.md")):
@@ -1554,8 +1606,10 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
 
 
 class ArgumentsThatAreNotText(unittest.TestCase):
-    """A command-line byte that does not decode arrives as a lone surrogate (PEP 383), which nothing can print or
-    write. Run for real, with the bytes on the command line, because that is the only way one arrives."""
+    """A command-line byte that does not decode arrives as a lone surrogate (PEP 383).
+    Nothing can print or write one.
+    The tests run the script for real, with the bytes on the command line, because that is the only way one
+    arrives."""
 
     def run_with(self, *arguments):
         here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()

@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 """Say on a published release that publishing it somewhere else did not complete, or take that back once it has.
 
-Someone who has the release's files in hand looks at the release, not through the runs of a workflow, so a
-publish that went red is said where they will see it: a warning at the start of the notes, linking the run. The
-next run whose publish completes takes that warning off again, and only it - the notes around it are the
-release's own.
+Someone with the release's files in hand looks at the release, not at workflow runs.
+So a failed publish is reported where they will see it: a warning at the start of the notes, linking the run.
+The next run whose publish completes takes that warning off again, and only the warning.
+The rest of the notes belongs to the release.
 
-The warning sits between two HTML comments, which GitHub keeps in the notes as they were written and does not
-show, and it is looked for only where this puts it: at the very start of the notes. A line that starts the
-notes from its first column cannot stand inside a code block, a list or a quote, so nothing has to be parsed to
-know that a marker there is this action's, whatever the words between the markers - a warning written by
-another version of this action is still the one taken off. A marker on a line of its own anywhere else is not
-guessed at: it may be an example the notes show as code, or this warning after someone wrote above it, and
-either way the run stops and the notes are left as they are. It runs after the release and everything before
-it are done, so stopping undoes nothing.
+The warning sits between two HTML comments, which GitHub keeps in the notes as written and does not show.
+It is looked for only where this script puts it: at the very start of the notes.
+A line at the start of the notes, in its first column, cannot be inside a code block, a list or a quote.
+So a marker there is this action's, whatever the words between the markers, and nothing has to be parsed.
+A warning written by another version of this action is taken off all the same.
 
-Driven by environment rather than by arguments, because that is how a composite action hands its inputs over -
-and kept out of action.yml so that it can be run against a stub `gh` in a test.
+A marker on a line of its own anywhere else is not guessed at.
+It may be an example shown as code, or this warning after someone wrote above it.
+Either way the run stops and the notes are left as they are.
+This runs after the release and everything before it are done, so stopping undoes nothing.
+
+Inputs come from the environment, because that is how a composite action hands them over.
+The script lives outside action.yml so that a test can run it against a stub `gh`.
 
 Reads: OUTCOME TAG TO RUN
-       GH_TOKEN GH_REPO, by `gh` rather than by anything here
+       GH_TOKEN GH_REPO, read by `gh`, not by this script
 """
 
 import json
@@ -38,21 +40,21 @@ def fail(message):
     sys.exit(1)
 
 
-# A line and its end, the ends being those CommonMark knows: str.splitlines would also end a line at a form
-# feed or a Unicode line separator, which Markdown reads as text.
+# A line and its line end, with the line ends CommonMark knows.
+# str.splitlines would also end a line at a form feed or a Unicode line separator, which Markdown reads as text.
 LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z")
 
 
 def without_warning(notes):
-    """The notes with the warning at their start taken off, and the blank line that follows it.
+    """The notes without the warning at their start, and without the blank line after it.
 
-    Line ends are kept as they were: GitHub keeps notes as they were sent, CRLF included, so taking the warning
-    off gives back the notes as they stood before it, and one put on is written in their line ends.
+    Line ends are kept: GitHub stores notes as they were sent, CRLF included.
+    Taking the warning off gives back the notes as they were before it, and a warning put on uses their line ends.
     """
     lines = LINE.findall(notes)
-    # Whatever its indentation, and whatever it stands in: a line that holds a marker alone, and is not the
-    # warning's own, is one this cannot tell from the warning's. Spaces and tabs are all that is taken off, as
-    # CommonMark indents with nothing else.
+    # A line holding only a marker counts whatever its indentation and whatever it stands in.
+    # Unless it is the warning's own, this cannot tell it from the warning's.
+    # Only spaces and tabs are stripped, because CommonMark indents with nothing else.
     markers = [at for at, line in enumerate(lines) if line.strip(" \t\r\n") in (START, END)]
     if not markers:
         return notes
@@ -76,8 +78,10 @@ def without_warning(notes):
 
 
 def with_warning(notes):
-    """The notes with the warning at their start, in place of the one they carried: a run that fails again, or
-    a later version of this action, says it once and says it the way it says it now."""
+    """The notes with the warning at their start, in place of any warning they had.
+
+    A run that fails again, or a later version of this action, says it once, in its current wording.
+    """
     rest = without_warning(notes)
     newline = "\r\n" if "\r\n" in notes else "\r" if "\r" in notes else "\n"
     block = [
@@ -94,12 +98,14 @@ def with_warning(notes):
 
 OUTCOME, TAG, TO, RUN = (os.environ.get(name, "") for name in ("OUTCOME", "TAG", "TO", "RUN"))
 
-# The outcome is a step's, handed over as `steps.<id>.outcome`. An id that names no step hands over nothing,
-# which is refused rather than read as a failure: every release would be said to have failed to publish.
+# The outcome is a step's, handed over as `steps.<id>.outcome`.
+# An id that names no step hands over nothing.
+# That is refused, not read as a failure: otherwise every release would be said to have failed to publish.
 if not OUTCOME:
     fail("outcome is empty: does steps.<id> name the step that publishes?")
-# `cancelled` is refused with the rest: a step's outcome is that only where the run was cancelled, and then a step
-# under `!cancelled()` does not run. A step that runs out of its timeout-minutes has failed.
+# `cancelled` is refused with the rest.
+# A step's outcome is `cancelled` only where the run was cancelled, and then a step under `!cancelled()` does not run.
+# A step that runs out of its timeout-minutes has failed.
 if OUTCOME not in ("success", "failure", "skipped"):
     fail(f"outcome is '{OUTCOME}', where success, failure or skipped was expected")
 if not TAG:
@@ -107,15 +113,15 @@ if not TAG:
 if not TO.strip() or "\n" in TO or "\r" in TO:
     fail("to has to say, on one line, what the release is published to")
 
-# Read as JSON rather than through `--jq`: jq ends what it prints with a line end, which the notes need not.
+# Read as JSON, not through `--jq`: jq adds a line end to what it prints, and the notes may not end with one.
 viewed = subprocess.run(["gh", "release", "view", TAG, "--json", "body"], capture_output=True, text=True)
 if viewed.returncode != 0:
     print(viewed.stderr, file=sys.stderr, end="")
     fail(f"the notes of {TAG} could not be read")
 notes = json.loads(viewed.stdout)["body"] or ""
 
-# `skipped` warns as `failure` does: the publish step not running is a publish that did not complete, the step
-# before it having failed - taking the archive off the release, say.
+# `skipped` warns like `failure`: a publish step that did not run is a publish that did not complete.
+# It was skipped because a step before it failed, such as the one taking the archive off the release.
 wanted = without_warning(notes) if OUTCOME == "success" else with_warning(notes)
 if wanted == notes:
     print(f"The notes of {TAG} already say what this run would; they are left as they are.")

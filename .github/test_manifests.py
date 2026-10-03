@@ -44,9 +44,9 @@ def required(manifest):
 class Manifests(unittest.TestCase):
 
     def test_an_expression_stands_only_as_a_value(self):
-        """GitHub evaluates `${{ }}` wherever it stands in action.yml, a description's text included, and one it
-        cannot evaluate there fails every step that uses the action before anything runs. In a `run:` script it
-        would be pasted into the code, which is why inputs reach the scripts through `env:`."""
+        """GitHub evaluates `${{ }}` wherever it stands in action.yml, including a description's text.
+        One it cannot evaluate there fails every step that uses the action, before anything runs.
+        In a `run:` script it would be pasted into the code, which is why inputs reach the scripts through `env:`."""
         self.assertTrue(MANIFESTS)
         for manifest in MANIFESTS:
             for number, line in enumerate((ROOT / manifest).read_text(encoding="utf-8").splitlines(), 1):
@@ -55,11 +55,12 @@ class Manifests(unittest.TestCase):
                                      f"{manifest}:{number}: {line}")
 
     def test_a_change_to_the_required_inputs_is_made_on_purpose(self):
-        """An input that comes to be required breaks every caller whose workflow does not pass it by the time its
-        pin moves: a workflow started by a release runs from the file in the commit the release tags, so a release
-        cut before then runs without the input however often it is run again. CHANGELOG.md marks such an input
-        **BREAKING**, saying a caller has to pass it, before REQUIRED follows. GitHub does not hold a caller to
-        `required`, so this reads what a manifest promises; refusing an input left out is up to each script."""
+        """An input that becomes required breaks every caller whose workflow does not pass it when its pin moves.
+        A workflow started by a release runs from the file in the commit the release tags.
+        So a release cut before the workflow passes the input runs without it, however often it is run again.
+        CHANGELOG.md marks such an input **BREAKING**, saying a caller has to pass it, before REQUIRED is updated.
+        GitHub does not enforce `required`, so this checks what a manifest promises.
+        Refusing an input that was left out is up to each script."""
         self.assertEqual(sorted(REQUIRED), MANIFESTS)
         for manifest in MANIFESTS:
             with self.subTest(manifest):

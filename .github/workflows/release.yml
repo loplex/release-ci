@@ -1,11 +1,15 @@
 name: release
 
-# Cuts a release of this repository through release-flow, as any other repository would, except that it
-# takes the actions by path, unpinned, this being the one repository they already sit in, and runs them
-# on the Python its suites run on. It declares its version nowhere, so the version is asked for here: left
-# empty, the version after the highest release is taken, or a later one where [Unreleased] asks for more, and
-# the first release has to be named outright. There is nothing to build, so the draft follows the cut
-# directly; publishing it is the decision, and release-publish.yml carries the release back.
+# Cuts a release of this repository through release-flow, as any other repository would. The differences:
+# - it takes the actions by path, unpinned, because they already sit in this repository;
+# - it runs them on the Python its suites run on.
+#
+# The repository declares its version nowhere, so the version is asked for here.
+# Left empty, it is the version after the highest release, or a later one where [Unreleased] asks for more.
+# The first release has to be named outright.
+#
+# There is nothing to build, so the draft follows the cut directly.
+# Publishing the draft is the decision to release, and release-publish.yml carries the release back.
 on:
   workflow_dispatch:
     inputs:
@@ -26,16 +30,16 @@ concurrency:
 
 jobs:
   release:
-    # Dispatched on any other branch, it would cut the release from that one, and release-publish.yml would
-    # carry it onto the default branch.
+    # Dispatched on any other branch, it would cut the release from that branch,
+    # and release-publish.yml would carry it onto the default branch.
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      # The Python the suites run on, from .python-version, rather than the runner's own that the
-      # actions ask for: a release goes out on the one its tests were run with.
+      # The Python from .python-version, the one the suites run on, rather than the runner's own.
+      # So a release goes out on the same Python its tests were run with.
       - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version

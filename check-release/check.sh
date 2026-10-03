@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Run the checks the action was asked for, and say what `version` answered. Driven by environment rather than
-# by arguments, because that is how a composite action hands its inputs over - and kept out of action.yml so
-# that it can be run against a repository in a test.
+# Run the checks the action was asked for, and output what `version` answered.
+# It reads environment variables, not arguments, because that is how a composite action passes its inputs.
+# It is a file of its own, not part of action.yml, so that a test can run it against a repository.
 #
 # Reads:  VERSION_SOURCE TAG_PREFIX CHECKS VERSION GITHUB_OUTPUT
 # Writes: version, channel  (to GITHUB_OUTPUT, where `version` ran and said yes)
@@ -9,10 +9,11 @@ set -uo pipefail
 
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release.py"
 
-# Passed on only where the caller gave one, so that a source declaring its own prefix is the one
-# answering. An empty input is "not given" and not "the empty prefix": GitHub cannot tell the two
-# apart, and of the two readings this is the one whose mistake is loud. `^none` is how the other
-# one is said, git refusing `^` in a ref name and so never leaving it a real prefix's spelling.
+# The prefix is passed on only where the caller gave one, so that a source declaring its own prefix answers.
+# An empty input means "not given", not "the empty prefix":
+# GitHub passes a missing input as an empty string too, so the two cannot be told apart.
+# Read as "not given", a mistake fails loudly; read as "no prefix", it would pass having found no release.
+# `^none` says "no prefix": git refuses `^` in a ref name, so it can never be a real prefix.
 prefix_arguments=()
 if [[ $TAG_PREFIX == '^none' ]]; then
   prefix_arguments=(--tag-prefix '')
@@ -25,8 +26,8 @@ source_arguments=(--version-source "$VERSION_SOURCE" "${prefix_arguments[@]}")
 # `*` is then a name that is no check, not the files in the workspace.
 read -rd '' -a check_names <<< "$CHECKS"
 
-# Nothing asked for is refused for the same reason a name that is no check is: a run that compared nothing
-# and passed reads exactly like one that compared everything.
+# No check at all is refused, like a name that is no check:
+# a run that compared nothing and passed looks exactly like one that compared everything.
 if (( ${#check_names[@]} == 0 )); then
   echo "::error::no check was asked for: name some of version, changelog and ancestry"
   exit 1

@@ -9,6 +9,7 @@ Run with `python3 -m unittest discover -s check-release` from the repository roo
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,8 +41,8 @@ class TheAction(unittest.TestCase):
         written.write_text("", encoding="utf-8")
         done = subprocess.run(
             ["bash", str(CHECK_SH)], cwd=self.work, capture_output=True, text=True,
-            env={**os.environ, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix, "CHECKS": checks, "VERSION": version,
-                 "GITHUB_OUTPUT": str(written)},
+            env={**os.environ, "PYTHON": sys.executable, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix,
+                 "CHECKS": checks, "VERSION": version, "GITHUB_OUTPUT": str(written)},
         )
         outputs = dict(
             line.split("=", 1) for line in written.read_text(encoding="utf-8").splitlines() if "=" in line

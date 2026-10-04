@@ -1,7 +1,6 @@
 # This repository's test suites, run on every push and pull request.
 # - `suite` takes its Python from .python-version, so the tests run on the version they are written against.
-# - `oldest-python` runs the suites that reach the actions' code again, on the oldest python3 the actions ask for.
-# - `guards` uses the runner's own python3, as any repository using the action does.
+# - `guards` runs the checks over this repository through the action, as any repository using it does.
 name: test
 
 on:
@@ -23,20 +22,6 @@ jobs:
       - run: python3 -m unittest discover -s intellij
       - run: python3 -m pip install -r .github/requirements.txt
       - run: python3 -m unittest discover -s .github
-
-  oldest-python:
-    # The actions run on the caller's own python3, and their descriptions ask for 3.10 or later.
-    # The suites run the actions' code in-process and through python3 on PATH, which setup-python makes 3.10 here.
-    # So anything newer than 3.10 in the code the suites reach fails this job, while `suite` passes.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.10"
-      - run: python3 .github/unittest-3.10.py check-release
-      - run: python3 .github/unittest-3.10.py release-flow
-      - run: python3 .github/unittest-3.10.py intellij
 
   guards:
     # The checks run against this repository through the check-release action, so this job is its first user.

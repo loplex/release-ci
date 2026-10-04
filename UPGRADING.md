@@ -85,3 +85,18 @@ has the whole rule.
 - Move an entry that stands under no `###` group under the group of its kind: such an entry is
   refused.
 - Under `tags` with no `version` given, the default version already moves as far as is asked.
+
+### Actions that run Python install their own
+
+Every action but `intellij/build` now installs the Python this repository's
+[`.python-version`](.python-version) names with `actions/setup-python`, instead of running on the
+runner's `python3`.\
+A job without a `container:`, on a GitHub-hosted runner, has nothing to change.
+
+- A job with a `container:` runs these actions in that container, where they are not tried.\
+  The image's own `python3` is not used.\
+  [What an action needs of the runner](README.md#what-an-action-needs-of-the-runner) names the
+  limits of `actions/setup-python` and `actions/checkout` there: run such a job once before moving
+  the pin.
+- A self-hosted runner needs a system `actions/setup-python` publishes a build for, and a way to
+  download it unless it already has that version.

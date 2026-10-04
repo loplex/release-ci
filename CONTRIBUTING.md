@@ -14,12 +14,9 @@ The first line installs what the `.github` suite needs.
 
 All four suites run on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml).\
-They run on the Python that [`.python-version`](.python-version) names.
-
-The first three need Python 3.11 or later, while the actions ask only for 3.10.\
-So those three run again on 3.10, through [`.github/unittest-3.10.py`](.github/unittest-3.10.py).\
-It adds back the one 3.11 method the tests use to set themselves up, and nothing the actions run.\
-Anything newer than 3.10 in the actions' code that the tests reach then fails there.
+They run on the Python that [`.python-version`](.python-version) names.\
+The actions install that same Python for themselves, so the tests and the actions run on one
+version.
 
 ### The `check-release` suite
 
@@ -69,7 +66,8 @@ It reads the repository as text:
   Markdown file to a tracked file or directory.\
   Where the link names a heading, the heading has to exist.
 - [`test_manifests.py`](.github/test_manifests.py) reads every `action.yml` as text, for what GitHub
-  would take wrongly from any of them.
+  would take wrongly from any of them, and with the scripts beside each, for which Python they run
+  on.
 
 The suite reads Markdown through [cmarkgfm](https://github.com/theacodes/cmarkgfm), the Python
 binding of GitHub's own cmark-gfm.\
@@ -105,11 +103,8 @@ release before it, as [The changelog](check-release/README.md#the-changelog) say
 
 ## Releasing this repository
 
-This repository is released through its own actions, like any other repository, with two
-differences:
-
-- Its workflows use the actions by path, unpinned, because this is the repository they are in.
-- Its release workflows run them on the Python its suites run on, not on the runner's own.
+This repository is released through its own actions, like any other repository, with one difference:
+its workflows use the actions by path, unpinned, because this is the repository they are in.
 
 It declares its version nowhere, so [`release.yml`](.github/workflows/release.yml) asks for one when
 it is dispatched:
@@ -140,4 +135,4 @@ GitHub reads each workflow as [Where GitHub reads each workflow from][reads] say
 
 The `guards` job in [`test.yml`](.github/workflows/test.yml) runs the checks over this repository on
 every push and pull request.\
-It uses the action at `./check-release`, by path as well, on the runner's own `python3`.
+It uses the action at `./check-release`, by path as well.

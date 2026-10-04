@@ -9,11 +9,11 @@
 # Inputs come from the environment, because that is how a composite action hands them over.
 # The script lives outside action.yml so that a test can run it against a repository.
 #
-# Reads:  VERSION TAG BRANCH FILES GH_TOKEN
+# Reads:  PYTHON VERSION TAG BRANCH FILES GH_TOKEN
 set -uo pipefail
 
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
-check_release=(python3 "$script")
+check_release=("$PYTHON" "$script")
 
 # The notes, the files and the channel are checked here, before anything is pushed.
 # A draft refused over one of them then leaves no branch behind.

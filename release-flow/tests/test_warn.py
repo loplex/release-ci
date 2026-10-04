@@ -10,6 +10,7 @@ Run with `python3 -m unittest discover -s release-flow` from the repository root
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -44,7 +45,7 @@ class Warn(unittest.TestCase):
         if notes is not None:
             (self.stubs / "view.json").write_text(json.dumps({"body": notes}), encoding="utf-8")
         return subprocess.run(
-            ["python3", str(WARN)], capture_output=True, text=True,
+            [sys.executable, str(WARN)], capture_output=True, text=True,
             env={**os.environ, "PATH": f"{self.stubs}:{os.environ['PATH']}",
                  "OUTCOME": outcome, "TAG": "v0.1.1", "TO": to, "RUN": RUN, "GH_TOKEN": "stub"},
         )

@@ -13,6 +13,10 @@ The third depends on the kind of project, as
 
 ## Subcommands
 
+`check-release.py` runs on the Python [`.python-version`](../.python-version) names, which the
+actions install for themselves.\
+No older Python is tested.
+
 `check-release.py` has one subcommand per question a release asks:
 
 | Subcommand        | What it does                                                                                                |

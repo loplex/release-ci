@@ -3,7 +3,7 @@
 # What matters is not that the upload answered 2xx, but that the Marketplace serves the archive that was accepted.
 # So the upload's answer is only reported, and what is served decides.
 #
-# Reads:  PUBLISH_TOKEN PLUGIN_ID VERSION ARCHIVE ATTEMPTS WAIT
+# Reads:  PYTHON PUBLISH_TOKEN PLUGIN_ID VERSION ARCHIVE ATTEMPTS WAIT
 #         RUNNER_TEMP, or TMPDIR, as the place for the upload's answer and for what the Marketplace serves back
 set -uo pipefail
 
@@ -28,7 +28,7 @@ temp="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 # The channel is read off the version, by the same rule the draft was marked with, rather than passed in.
 # Two places spelling it out could come to disagree.
 # And once a release is published, there is no `version` check left to answer it.
-channel=$(python3 "${here}/../../check-release/check-release.py" channel "$VERSION") || exit 1
+channel=$("$PYTHON" "${here}/../../check-release/check-release.py" channel "$VERSION") || exit 1
 
 # A final release sends no channel field.
 # The Marketplace takes an empty channel as its default one
@@ -101,4 +101,4 @@ if [[ $download_code != 200 ]]; then
   exit 1
 fi
 
-python3 "${here}/payload.py" "$ARCHIVE" "$served"
+"$PYTHON" "${here}/payload.py" "$ARCHIVE" "$served"

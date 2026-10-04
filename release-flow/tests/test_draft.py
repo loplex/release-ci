@@ -11,6 +11,7 @@ Run with `python3 -m unittest discover -s release-flow` from the repository root
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -72,7 +73,7 @@ class Draft(unittest.TestCase):
         self.refs_before = git("for-each-ref", cwd=self.origin).stdout
         return subprocess.run(
             ["bash", str(DRAFT)], cwd=self.work, capture_output=True, text=True,
-            env={**os.environ, "PATH": f"{self.stubs}:{os.environ['PATH']}",
+            env={**os.environ, "PYTHON": sys.executable, "PATH": f"{self.stubs}:{os.environ['PATH']}",
                  "VERSION": self.version,
                  "TAG": f"v{self.version}", "BRANCH": f"release/{self.version}", "FILES": files, "GH_TOKEN": "stub"},
         )

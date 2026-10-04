@@ -19,7 +19,8 @@ description: |
   and a JetBrains blog post says that an update to a custom channel is approved without a review
   where the plugin had an update approved in the default channel within the last 120 days.
 
-  Needs `curl` and python3 3.10 or later. GitHub-hosted runners have both.
+  Needs `curl`, which GitHub-hosted runners have.
+  Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.
 
 inputs:
   plugin-id:
@@ -54,12 +55,24 @@ inputs:
 runs:
   using: composite
   steps:
+    # The Python .python-version names, the one the tests run on, whatever python3 the runner carries.
+    # update-environment: false keeps it out of the calling job, whose steps go on with their own python3.
+    - id: python
+      uses: actions/setup-python@v7
+      with:
+        python-version-file: ${{ github.action_path }}/../../.python-version
+        update-environment: false
     - shell: bash
       env:
+        PYTHON: ${{ steps.python.outputs.python-path }}
         PUBLISH_TOKEN: ${{ inputs.token }}
         PLUGIN_ID: ${{ inputs.plugin-id }}
         VERSION: ${{ inputs.version }}
         ARCHIVE: ${{ inputs.archive }}
         ATTEMPTS: ${{ inputs.attempts }}
         WAIT: ${{ inputs.wait }}
-      run: "$GITHUB_ACTION_PATH/publish.sh"
+      # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
+      # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
+      run: |
+        export LD_LIBRARY_PATH="${PYTHON%/bin/*}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        "$GITHUB_ACTION_PATH/publish.sh"

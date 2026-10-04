@@ -6,7 +6,7 @@ description: |
   - `ancestry`: whether every release tag is still reachable from the history.
 
   Runs in the calling workspace.
-  Needs python3 3.10 or later. GitHub-hosted runners have it.
+  Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.
   Needs a checkout with `fetch-depth: 0`.
   A shallow checkout has no tags and no history, so the checks find nothing to compare and pass.
   The exception is `version` under `version-source: tags` without a `version` input: it fails, because it finds no
@@ -77,6 +77,13 @@ outputs:
 runs:
   using: composite
   steps:
+    # The Python .python-version names, the one the tests run on, whatever python3 the runner carries.
+    # update-environment: false keeps it out of the calling job, whose steps go on with their own python3.
+    - id: python
+      uses: actions/setup-python@v7
+      with:
+        python-version-file: ${{ github.action_path }}/../.python-version
+        update-environment: false
     # One step calling one script, rather than the steps written out here: the shell is then something a test
     # can run against a repository of its own, which is not true of anything living inside action.yml.
     - id: check
@@ -84,8 +91,13 @@ runs:
       # Inputs reach the script as environment variables rather than through ${{ }} interpolated into it,
       # so that a value carrying a quote or a newline is data here and not more script.
       env:
+        PYTHON: ${{ steps.python.outputs.python-path }}
         VERSION_SOURCE: ${{ inputs.version-source }}
         TAG_PREFIX: ${{ inputs.tag-prefix }}
         CHECKS: ${{ inputs.checks }}
         VERSION: ${{ inputs.version }}
-      run: "$GITHUB_ACTION_PATH/check.sh"
+      # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
+      # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
+      run: |
+        export LD_LIBRARY_PATH="${PYTHON%/bin/*}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        "$GITHUB_ACTION_PATH/check.sh"

@@ -32,7 +32,8 @@ description: |
   Opening the pull request with GITHUB_TOKEN also needs the repository setting
   "Allow GitHub Actions to create and approve pull requests", which a new personal repository has off.
   Merging it needs merge commits to be allowed.
-  Needs `gh` and python3 3.10 or later. GitHub-hosted runners have both.
+  Needs `gh`, which GitHub-hosted runners have.
+  Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.
 
 inputs:
   version-source:
@@ -101,15 +102,27 @@ outputs:
 runs:
   using: composite
   steps:
+    # The Python .python-version names, the one the tests run on, whatever python3 the runner carries.
+    # update-environment: false keeps it out of the calling job, whose steps go on with their own python3.
+    - id: python
+      uses: actions/setup-python@v7
+      with:
+        python-version-file: ${{ github.action_path }}/../../.python-version
+        update-environment: false
     # One step calling one script, rather than the steps written out here: the shell is then something a test
     # can run against a repository of its own, which is not true of anything living inside action.yml.
     - id: merge-back
       shell: bash
       env:
+        PYTHON: ${{ steps.python.outputs.python-path }}
         VERSION_SOURCE: ${{ inputs.version-source }}
         TAG_PREFIX: ${{ inputs.tag-prefix }}
         TAG: ${{ inputs.tag }}
         DEFAULT_BRANCH: ${{ inputs.default-branch }}
         CHECK_WORKFLOW: ${{ inputs.check-workflow }}
         GH_TOKEN: ${{ inputs.token }}
-      run: "$GITHUB_ACTION_PATH/merge-back.sh"
+      # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
+      # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
+      run: |
+        export LD_LIBRARY_PATH="${PYTHON%/bin/*}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        "$GITHUB_ACTION_PATH/merge-back.sh"

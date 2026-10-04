@@ -15,7 +15,8 @@ description: |
   so that it runs whatever failed before it.
   Needs no checkout.
   Needs `contents: write` on the job.
-  Needs `gh` and python3 3.10 or later. GitHub-hosted runners have both.
+  Needs `gh`, which GitHub-hosted runners have.
+  Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.
 
 inputs:
   tag:
@@ -45,8 +46,16 @@ inputs:
 runs:
   using: composite
   steps:
+    # The Python .python-version names, the one the tests run on, whatever python3 the runner carries.
+    # update-environment: false keeps it out of the calling job, whose steps go on with their own python3.
+    - id: python
+      uses: actions/setup-python@v7
+      with:
+        python-version-file: ${{ github.action_path }}/../../.python-version
+        update-environment: false
     - shell: bash
       env:
+        PYTHON: ${{ steps.python.outputs.python-path }}
         TAG: ${{ inputs.tag }}
         OUTCOME: ${{ inputs.outcome }}
         TO: ${{ inputs.to }}
@@ -54,4 +63,8 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         # The release is asked for in this repository by name, so that no checkout is needed to say which.
         GH_REPO: ${{ github.repository }}
-      run: python3 "$GITHUB_ACTION_PATH/warn.py"
+      # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
+      # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
+      run: |
+        export LD_LIBRARY_PATH="${PYTHON%/bin/*}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        "$PYTHON" "$GITHUB_ACTION_PATH/warn.py"

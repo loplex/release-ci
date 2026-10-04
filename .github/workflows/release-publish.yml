@@ -22,11 +22,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      # The Python from .python-version, the one the suites run on, rather than the runner's own.
-      # So merge-back checks the merged tree on the same Python the tests were run with.
-      - uses: actions/setup-python@v7
-        with:
-          python-version-file: .python-version
       - uses: ./release-flow/merge-back
         with:
           version-source: tags

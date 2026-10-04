@@ -7,7 +7,6 @@ Run with `python3 -m unittest discover -s check-release` from the repository roo
 
 import contextlib
 import io
-import os
 import subprocess
 import sys
 import tempfile
@@ -186,9 +185,7 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
     It would do so silently, because that checkout has a CHANGELOG.md of its own for the checks to read."""
 
     def working_in(self, directory):
-        # contextlib.chdir would do, but it arrived in 3.11 and the suite runs on the 3.10 the actions ask for.
-        self.addCleanup(os.chdir, os.getcwd())
-        os.chdir(directory)
+        self.enterContext(contextlib.chdir(directory))
 
     def test_the_root_is_the_repository_the_run_is_in(self):
         elsewhere = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()

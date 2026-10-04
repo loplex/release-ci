@@ -10,6 +10,7 @@ Run with `python3 -m unittest discover -s release-flow` from the repository root
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -55,8 +56,8 @@ class Staged(unittest.TestCase):
         written.write_text("", encoding="utf-8")
         done = subprocess.run(
             ["bash", str(PREPARE)], cwd=self.work, capture_output=True, text=True,
-            env={**os.environ, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix, "VERSION": version,
-                 "REPOSITORY_URL": repository_url, "GITHUB_OUTPUT": str(written)},
+            env={**os.environ, "PYTHON": sys.executable, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix,
+                 "VERSION": version, "REPOSITORY_URL": repository_url, "GITHUB_OUTPUT": str(written)},
         )
         outputs = dict(
             line.split("=", 1) for line in written.read_text(encoding="utf-8").splitlines() if "=" in line

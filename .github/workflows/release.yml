@@ -1,8 +1,7 @@
 name: release
 
-# Cuts a release of this repository through release-flow, as any other repository would. The differences:
-# - it takes the actions by path, unpinned, because they already sit in this repository;
-# - it runs them on the Python its suites run on.
+# Cuts a release of this repository through release-flow, as any other repository would, with one difference:
+# it takes the actions by path, unpinned, because they already sit in this repository.
 #
 # The repository declares its version nowhere, so the version is asked for here.
 # Left empty, it is the version after the highest release, or a later one where [Unreleased] asks for more.
@@ -38,11 +37,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      # The Python from .python-version, the one the suites run on, rather than the runner's own.
-      # So a release goes out on the same Python its tests were run with.
-      - uses: actions/setup-python@v7
-        with:
-          python-version-file: .python-version
       - uses: ./release-flow/prepare
         id: cut
         with:

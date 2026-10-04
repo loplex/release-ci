@@ -14,6 +14,15 @@ released it, so once a version has a section here, that section may not be edite
 
 ### Changed
 
+- **BREAKING** Every action that runs Python installs the version this repository's
+  `.python-version` names with `actions/setup-python`, leaving the job's own `python3` as it was.\
+  They ran on the runner's `python3`, which had to be 3.10 or later; below that they failed with a
+  traceback.\
+  In a job with a `container:`, that Python is built for the runner's system, not the image's, and
+  the actions are not tried there.\
+  A self-hosted runner needs a system `actions/setup-python` publishes a build for.\
+  [UPGRADING.md](UPGRADING.md#actions-that-run-python-install-their-own) shows what that asks of a
+  job.
 - **BREAKING** The `source` input of `check-release`, `release-flow/prepare` and
   `release-flow/merge-back` is now `version-source`.\
   [UPGRADING.md](UPGRADING.md#the-source-input-is-now-version-source) shows the change.

@@ -3,7 +3,7 @@
 # Inputs come from the environment, because that is how a composite action hands them over.
 # The script lives outside action.yml so that a test can run it against a repository, not only GitHub.
 #
-# Reads:  VERSION_SOURCE TAG TAG_PREFIX DEFAULT_BRANCH CHECK_WORKFLOW GITHUB_OUTPUT
+# Reads:  PYTHON VERSION_SOURCE TAG TAG_PREFIX DEFAULT_BRANCH CHECK_WORKFLOW GITHUB_OUTPUT
 #         GH_TOKEN, read by `gh`, not by this script
 # Writes: version, next, landed  (to GITHUB_OUTPUT)
 set -uo pipefail
@@ -18,7 +18,7 @@ fi
 
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
 
-check_release=(python3 "$script")
+check_release=("$PYTHON" "$script")
 source_arguments=(--version-source "$VERSION_SOURCE")
 if [[ -n $TAG_PREFIX ]]; then
   source_arguments+=(--tag-prefix "$TAG_PREFIX")

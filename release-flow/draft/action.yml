@@ -11,7 +11,8 @@ description: |
 
   Runs where release-flow/prepare left the workspace.
   Needs `contents: write` on the job.
-  Needs `gh` and python3 3.10 or later. GitHub-hosted runners have both.
+  Needs `gh`, which GitHub-hosted runners have.
+  Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.
 
 inputs:
   version:
@@ -45,11 +46,23 @@ inputs:
 runs:
   using: composite
   steps:
+    # The Python .python-version names, the one the tests run on, whatever python3 the runner carries.
+    # update-environment: false keeps it out of the calling job, whose steps go on with their own python3.
+    - id: python
+      uses: actions/setup-python@v7
+      with:
+        python-version-file: ${{ github.action_path }}/../../.python-version
+        update-environment: false
     - shell: bash
       env:
+        PYTHON: ${{ steps.python.outputs.python-path }}
         VERSION: ${{ inputs.version }}
         TAG: ${{ inputs.tag }}
         BRANCH: ${{ inputs.branch }}
         FILES: ${{ inputs.files }}
         GH_TOKEN: ${{ inputs.token }}
-      run: "$GITHUB_ACTION_PATH/draft.sh"
+      # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
+      # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
+      run: |
+        export LD_LIBRARY_PATH="${PYTHON%/bin/*}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        "$GITHUB_ACTION_PATH/draft.sh"

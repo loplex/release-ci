@@ -14,6 +14,7 @@ Run with `python3 -m unittest discover -s intellij` from the repository root.
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -70,7 +71,8 @@ class Publish(unittest.TestCase):
             self.serves(200)
         return subprocess.run(
             ["bash", str(PUBLISH)], capture_output=True, text=True,
-            env={**os.environ, "PATH": f"{self.stubs}:{os.environ['PATH']}", "STUBS": str(self.stubs),
+            env={**os.environ, "PYTHON": sys.executable, "PATH": f"{self.stubs}:{os.environ['PATH']}",
+                 "STUBS": str(self.stubs),
                  "PUBLISH_TOKEN": "a-publish-token", "PLUGIN_ID": plugin_id, "VERSION": version,
                  "ARCHIVE": str(self.accepted), "ATTEMPTS": str(attempts), "WAIT": str(wait),
                  "RUNNER_TEMP": str(self.runner_temp)},

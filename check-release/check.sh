@@ -3,7 +3,7 @@
 # It reads environment variables, not arguments, because that is how a composite action passes its inputs.
 # It is a file of its own, not part of action.yml, so that a test can run it against a repository.
 #
-# Reads:  VERSION_SOURCE TAG_PREFIX CHECKS VERSION GITHUB_OUTPUT
+# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX CHECKS VERSION GITHUB_OUTPUT
 # Writes: version, channel  (to GITHUB_OUTPUT, where `version` ran and said yes)
 set -uo pipefail
 
@@ -42,10 +42,10 @@ done
 failed=0
 for check in "${check_names[@]}"; do
   if [[ $check == version && -n $VERSION ]]; then
-    out=$(python3 "$script" version "${source_arguments[@]}" --version "$VERSION" 2>&1)
+    out=$("$PYTHON" "$script" version "${source_arguments[@]}" --version "$VERSION" 2>&1)
     rc=$?
   else
-    out=$(python3 "$script" "$check" "${source_arguments[@]}" 2>&1)
+    out=$("$PYTHON" "$script" "$check" "${source_arguments[@]}" 2>&1)
     rc=$?
   fi
   printf '%s\n' "$out"
@@ -56,7 +56,7 @@ for check in "${check_names[@]}"; do
   elif [[ $check == version ]]; then
     candidate=$(printf '%s' "$out" | tail -1)
     printf 'version=%s\n' "$candidate" >> "$GITHUB_OUTPUT"
-    channel=$(python3 "$script" channel "$candidate")
+    channel=$("$PYTHON" "$script" channel "$candidate")
     rc=$?
     if (( rc != 0 )); then
       echo "::error::check-release channel said no"

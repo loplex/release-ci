@@ -11,13 +11,13 @@
 # Inputs come from the environment, because that is how a composite action hands them over.
 # The script lives outside action.yml so that a test can run it against a repository.
 #
-# Reads:  VERSION_SOURCE TAG_PREFIX VERSION REPOSITORY_URL GITHUB_OUTPUT
+# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX VERSION REPOSITORY_URL GITHUB_OUTPUT
 # Writes: version, tag, branch  (to GITHUB_OUTPUT)
 set -uo pipefail
 
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
 
-check_release=(python3 "$script")
+check_release=("$PYTHON" "$script")
 source_arguments=(--version-source "$VERSION_SOURCE")
 if [[ -n $TAG_PREFIX ]]; then
   source_arguments+=(--tag-prefix "$TAG_PREFIX")

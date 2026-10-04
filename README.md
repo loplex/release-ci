@@ -31,10 +31,25 @@ So nothing in the directories that are not tied to an ecosystem may assume one e
 
 ### What an action needs of the runner
 
-- Every action but `intellij/build` runs on the runner's own `python3`, 3.10 or later.
-- `release-flow/draft`, `release-flow/merge-back` and `release-flow/warn` need `gh` as well.
-- `intellij/publish` needs `curl` as well.
-- GitHub-hosted runners have `python3`, `gh` and `curl`.
+- Every action but `intellij/build` installs the Python it runs on with `actions/setup-python`,
+  leaving the job's own `python3` as it was.\
+  It is the version [`.python-version`](.python-version) names.\
+  A self-hosted runner that does not have it downloads it, where `actions/setup-python` publishes a
+  build for its system.
+- The actions are tried in jobs that run on a GitHub-hosted runner itself.\
+  A job with a `container:` runs them in that container, where two limits apply that are not this
+  repository's own:
+  - `actions/setup-python` brings the Python built for the runner's system, not the image's.\
+    It builds Python only for
+    [the systems GitHub-hosted runners run](https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-setup-python-with-a-self-hosted-runner).\
+    In an image other than the runner's it may not start, or start without a module such as `ssl`.
+  - `actions/checkout` marks the workspace safe for git only while it runs.\
+    A later step running git as another user, as a container's `root` does, is refused the
+    repository, unless a step after the checkout runs
+    `git config --global --add safe.directory "$GITHUB_WORKSPACE"`.
+- `release-flow/draft`, `release-flow/merge-back` and `release-flow/warn` need `gh`.
+- `intellij/publish` needs `curl`.
+- GitHub-hosted runners have both.
 
 ## Pinning
 
@@ -61,8 +76,8 @@ Moving the pin to a newer version may ask for changes in the workflow.\
 [`UPGRADING.md`](UPGRADING.md) lists them, per version.
 
 The pin holds this repository's code only.\
-The actions that `intellij/build` calls in turn, `actions/setup-java` and the rest, run at the tags
-its `action.yml` names for them, and their owners can move those tags.
+The actions that these actions call in turn, `actions/setup-python`, `actions/setup-java` and the
+rest, run at the tags each `action.yml` names for them, and their owners can move those tags.
 
 ### No moving `v0`
 

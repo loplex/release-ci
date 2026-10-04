@@ -10,6 +10,7 @@ Run with `python3 -m unittest discover -s release-flow` from the repository root
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -90,7 +91,7 @@ class Staged(unittest.TestCase):
         written.write_text("", encoding="utf-8")
         done = subprocess.run(
             ["bash", str(MERGE_BACK)], cwd=self.work, capture_output=True, text=True,
-            env={**os.environ, "PATH": f"{self.stubs}:{os.environ['PATH']}",
+            env={**os.environ, "PYTHON": sys.executable, "PATH": f"{self.stubs}:{os.environ['PATH']}",
                  "VERSION_SOURCE": source, "TAG": self.tag, "TAG_PREFIX": tag_prefix, "DEFAULT_BRANCH": "main",
                  "CHECK_WORKFLOW": check_workflow,
                  "GITHUB_OUTPUT": str(written), "GH_TOKEN": "stub"},

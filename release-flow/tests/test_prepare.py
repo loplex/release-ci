@@ -5,7 +5,7 @@ A bare repository stands in for the remote, so a test can see that nothing reach
 prepare pushes nothing: the build runs from its commit next.
 Nothing here needs `gh`: prepare stops before anything is drafted.
 
-Run with `python3 -m unittest discover` over the directory this file sits in.
+Run with `python3 -m unittest discover -s release-flow` from the repository root.
 """
 
 import os
@@ -14,7 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-PREPARE = Path(__file__).resolve().parent / "prepare" / "prepare.sh"
+PREPARE = Path(__file__).resolve().parent.parent / "prepare" / "prepare.sh"
 
 PENDING = "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- F\n\n## [0.1.0] - 2026-09-01\n\n- old\n"
 

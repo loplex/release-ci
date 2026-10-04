@@ -6,7 +6,7 @@ A counter-signature is imitated by inserting bytes where one goes: between the e
 with the offset that points at the central directory moved along.
 So the comparison is tested on actual files, not on assumptions about them.
 
-Run with `python3 -m unittest discover` over the directory this file sits in.
+Run with `python3 -m unittest discover -s intellij` from the repository root.
 """
 
 import subprocess
@@ -17,7 +17,7 @@ import warnings
 import zipfile
 from pathlib import Path
 
-PAYLOAD_PY = Path(__file__).resolve().parent / "publish" / "payload.py"
+PAYLOAD_PY = Path(__file__).resolve().parent.parent / "publish" / "payload.py"
 
 ENTRIES = {"META-INF/plugin.xml": b"<idea-plugin/>", "lib/plugin.jar": b"a jar, more or less" * 100}
 

@@ -6,7 +6,7 @@ A bare repository stands in for the remote, so the forced push is a real push.
 It answers `release view` from a file, so a test can stage a draft left by an earlier run.
 Nothing is sent anywhere.
 
-Run with `python3 -m unittest discover` over the directory this file sits in.
+Run with `python3 -m unittest discover -s release-flow` from the repository root.
 """
 
 import os
@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-DRAFT = Path(__file__).resolve().parent / "draft" / "draft.sh"
+DRAFT = Path(__file__).resolve().parent.parent / "draft" / "draft.sh"
 
 CUT = ("# Changelog\n\n## [Unreleased]\n\n## [0.1.1] - 2026-09-21\n\n### Fixed\n\n- F\n\n"
        "## [0.1.0] - 2026-09-01\n\n- old\n")

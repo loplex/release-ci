@@ -5,7 +5,7 @@ A bare repository stands in for the remote, so a push is a real push and a refus
 That refusal is the path most worth testing, because it is the one that catches the race.
 `gh` is a stub on PATH: what it would send to GitHub is recorded and asserted, and nothing is sent anywhere.
 
-Run with `python3 -m unittest discover` over the directory this file sits in.
+Run with `python3 -m unittest discover -s release-flow` from the repository root.
 """
 
 import os
@@ -14,7 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-MERGE_BACK = Path(__file__).resolve().parent / "merge-back" / "merge-back.sh"
+MERGE_BACK = Path(__file__).resolve().parent.parent / "merge-back" / "merge-back.sh"
 
 AT_START = "# Changelog\n\n## [Unreleased]\n"
 RELEASED = "# Changelog\n\n## [Unreleased]\n\n## [0.1.0] - 2026-09-21\n\n### Added\n\n- A\n"

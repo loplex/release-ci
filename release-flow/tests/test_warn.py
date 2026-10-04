@@ -4,7 +4,7 @@
 The stub answers `release view` with notes a test stages, and keeps what `release edit` would have written.
 Nothing is sent anywhere, and the notes can be compared byte for byte.
 
-Run with `python3 -m unittest discover` over the directory this file sits in.
+Run with `python3 -m unittest discover -s release-flow` from the repository root.
 """
 
 import json
@@ -14,7 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-WARN = Path(__file__).resolve().parent / "warn" / "warn.py"
+WARN = Path(__file__).resolve().parent.parent / "warn" / "warn.py"
 
 RUN = "https://github.com/o/r/actions/runs/7"
 START, END = "<!-- release-flow/warn -->", "<!-- /release-flow/warn -->"

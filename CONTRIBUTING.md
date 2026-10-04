@@ -40,7 +40,8 @@ The tests sit in [`check-release/tests`](check-release/tests):
 
 ### The `release-flow` suite
 
-It builds what each of its actions needs:
+The tests sit in [`release-flow/tests`](release-flow/tests), one file per action.\
+They build what each action needs:
 
 - a repository;
 - a bare remote to push to, so that a refused fast-forward is a real refusal;
@@ -48,7 +49,8 @@ It builds what each of its actions needs:
 
 ### The `intellij` suite
 
-It builds:
+The tests sit in [`intellij/tests`](intellij/tests).\
+They build:
 
 - archives;
 - a Plugin Verifier report;

@@ -3,7 +3,7 @@
 - a Plugin Verifier that left no report;
 - anything but exactly one signed archive where the build reports the archive to be.
 
-Run with `python3 -m unittest discover` over the directory this file sits in.
+Run with `python3 -m unittest discover -s intellij` from the repository root.
 """
 
 import os
@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ARCHIVE_SH = Path(__file__).resolve().parent / "build" / "archive.sh"
+ARCHIVE_SH = Path(__file__).resolve().parent.parent / "build" / "archive.sh"
 VERIFIER_REPORT_SH = ARCHIVE_SH.parent / "verifier-report.sh"
 # The default `archive-pattern`, read from the action rather than copied, so that this test picks what the action picks.
 DEFAULT_PATTERN = re.search(r"^  archive-pattern:\n(?:    .*\n)*?    default: (.+)$",

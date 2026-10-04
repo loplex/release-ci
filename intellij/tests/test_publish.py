@@ -9,7 +9,7 @@
 
 So the waiting, the channel rule, and the upload's answer not deciding the run are all tested without a network.
 
-Run with `python3 -m unittest discover` over the directory this file sits in.
+Run with `python3 -m unittest discover -s intellij` from the repository root.
 """
 
 import os
@@ -19,7 +19,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-PUBLISH = Path(__file__).resolve().parent / "publish" / "publish.sh"
+PUBLISH = Path(__file__).resolve().parent.parent / "publish" / "publish.sh"
 
 CURL = r'''#!/bin/bash
 printf '%s\n' "$*" >> "$STUBS/curl.log"

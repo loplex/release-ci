@@ -100,3 +100,9 @@ A job without a `container:`, on a GitHub-hosted runner, has nothing to change.
   the pin.
 - A self-hosted runner needs a system `actions/setup-python` publishes a build for, and a way to
   download it unless it already has that version.
+
+### `intellij/build` leaves the job's JDK as it was
+
+A step after `intellij/build` that runs `java` or Gradle ran on the JDK `intellij/build` set up.\
+It now runs on the job's own: where it needs that JDK, set it up in the job with
+`actions/setup-java` before that step.

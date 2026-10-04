@@ -60,6 +60,11 @@ released it, so once a version has a section here, that section may not be edite
 
 ### Fixed
 
+- **BREAKING** `intellij/build` leaves the calling job's `JAVA_HOME` and `java` as they were: its
+  Gradle steps get the JDK it sets up through a `JAVA_HOME` of their own.\
+  It made that JDK the default for every later step of the job.\
+  [UPGRADING.md](UPGRADING.md#intellijbuild-leaves-the-jobs-jdk-as-it-was) says what a later step
+  that ran on it does now.
 - `intellij/publish`: `attempts` and `wait` have to be whole numbers, `attempts` from 1 to 9999,
   checked before the upload.\
   An `attempts` that was no number made no attempt, and the run failed as though the version was

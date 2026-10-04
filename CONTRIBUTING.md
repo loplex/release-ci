@@ -67,7 +67,7 @@ It reads the repository as text:
   Where the link names a heading, the heading has to exist.
 - [`test_manifests.py`](.github/test_manifests.py) reads every `action.yml` as text, for what GitHub
   would take wrongly from any of them, and with the scripts beside each, for which Python they run
-  on.
+  on and which steps get the JDK `intellij/build` sets up.
 
 The suite reads Markdown through [cmarkgfm](https://github.com/theacodes/cmarkgfm), the Python
 binding of GitHub's own cmark-gfm.\

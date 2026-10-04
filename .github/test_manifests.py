@@ -128,6 +128,24 @@ class Manifests(unittest.TestCase):
                 self.assertIn(LIBRARY_PATH, block, f"{manifest}: {block}")
         self.assertEqual(runs_python, RUNS_PYTHON)
 
+    def test_an_action_hands_its_jdk_only_to_its_gradle_steps(self):
+        """setup-java left to set the default changes JAVA_HOME and java for the calling job's later steps.
+        With `set-default: false` nothing does, so every step that runs Gradle names the JDK in its own `env:`."""
+        sets_up_java = 0
+        for manifest in MANIFESTS:
+            text = (ROOT / manifest).read_text(encoding="utf-8")
+            if "actions/setup-java@" not in text:
+                continue
+            sets_up_java += 1
+            self.assertRegex(text, r"    - id: java\n      uses: actions/setup-java@\S+\n      with:\n"
+                                   r"(?:        .*\n)*?        set-default: false\n", manifest)
+            steps = re.split(r"\n    - ", text[text.index("\nruns:"):])
+            gradle = [step for step in steps if "./gradlew" in step]
+            self.assertTrue(gradle, manifest)
+            for step in gradle:
+                self.assertIn("        JAVA_HOME: ${{ steps.java.outputs.path }}\n", step, f"{manifest}: {step}")
+        self.assertEqual(sets_up_java, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

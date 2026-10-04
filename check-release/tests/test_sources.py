@@ -1,22 +1,16 @@
-#!/usr/bin/env python3
-"""Tests for the adapters in sources.py: what every adapter has to answer, and what the Gradle one does to its file.
+"""Tests for the adapters in rules/sources.py:
+what every adapter has to answer, and what the Gradle one does to its file.
 
 All of it runs over text, because the adapters are plain objects over text.
 Reading and writing the file an adapter names is check-release.py's job, and test_check_release.py tests that.
 
-Run with `python3 -m unittest discover` over the directory this file sits in.
+Run with `python3 -m unittest discover -s check-release` from the repository root.
 """
 
-import importlib.util
 import unittest
-from pathlib import Path
 
-import sources
-
-SCRIPT = Path(__file__).resolve().parent / "check-release.py"
-specification = importlib.util.spec_from_file_location("check_release", SCRIPT)
-check_release = importlib.util.module_from_spec(specification)
-specification.loader.exec_module(check_release)
+from rules import sources
+from rules.versions import SEMVER, being_worked_on, check_version
 
 GRADLE_PROPERTIES = sources.SOURCES["gradle.properties"]
 
@@ -41,9 +35,9 @@ class WhatEverySourceAnswers(unittest.TestCase):
             with self.subTest(adapter.name):
                 if adapter.marker:
                     marked = f"1.0.0{adapter.marker}"
-                    self.assertTrue(check_release.SEMVER.match(marked), f"{marked} is no version the rules read")
-                    self.assertTrue(check_release.being_worked_on(marked))
-                    self.assertIn("being worked on", " ".join(check_release.check_version(marked, [])))
+                    self.assertTrue(SEMVER.match(marked), f"{marked} is no version the rules read")
+                    self.assertTrue(being_worked_on(marked))
+                    self.assertIn("being worked on", " ".join(check_version(marked, [])))
 
     def test_a_source_declaring_nothing_names_no_file_and_no_marker(self):
         for adapter in sources.SOURCES.values():
@@ -254,7 +248,3 @@ class ReadingGradleProperties(unittest.TestCase):
     def test_comments_and_blank_lines_declare_nothing(self):
         self.assertEqual(GRADLE_PROPERTIES.properties("# version=9.9.9\n\n  \nversion = 1.0.0\n! version=8.8.8\n"),
                          {"version": "1.0.0"})
-
-
-if __name__ == "__main__":
-    unittest.main()

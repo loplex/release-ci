@@ -4,7 +4,7 @@
 - how it reads the prefix it is given;
 - what it says `version` answered.
 
-Run with `python3 -m unittest discover` over the directory this file sits in.
+Run with `python3 -m unittest discover -s check-release` from the repository root.
 """
 
 import os
@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-CHECK_SH = Path(__file__).resolve().parent / "check.sh"
+CHECK_SH = Path(__file__).resolve().parent.parent / "check.sh"
 
 
 def git(*arguments, cwd):

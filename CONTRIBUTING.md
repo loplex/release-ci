@@ -23,12 +23,19 @@ Anything newer than 3.10 in the actions' code that the tests reach then fails th
 
 ### The `check-release` suite
 
-- [`test_check_release.py`](check-release/test_check_release.py) tests the rules.\
-  They are plain functions over text, tags and booleans, so they need no repository to release.
-- [`test_sources.py`](check-release/test_sources.py) does the same for the adapters that say where
-  the version comes from.
-- The helpers that work with git get a repository built for the purpose.
-- [`test_check.py`](check-release/test_check.py) runs the action's script,
+The tests sit in [`check-release/tests`](check-release/tests):
+
+- [`test_versions.py`](check-release/tests/test_versions.py),
+  [`test_changelog.py`](check-release/tests/test_changelog.py) and
+  [`test_steps.py`](check-release/tests/test_steps.py) test the rules.\
+  They are plain functions over text, so they need no repository to release.
+- [`test_sources.py`](check-release/tests/test_sources.py) does the same for the adapters that say
+  where the version comes from.
+- [`test_repository.py`](check-release/tests/test_repository.py) tests what reads the repository,
+  and [`test_check_release.py`](check-release/tests/test_check_release.py) the command line.\
+  Both get repositories built for the purpose, but for `check_ancestry`, a rule tested over plain
+  booleans.
+- [`test_check.py`](check-release/tests/test_check.py) runs the action's script,
   [`check.sh`](check-release/check.sh), against such a repository.
 
 ### The `release-flow` suite

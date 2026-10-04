@@ -1,6 +1,6 @@
 """Where the version of the next release comes from: one adapter per kind of repository.
 
-The rules in check-release.py know no source by name; they ask the adapter.
+The rules know no source by name; check-release.py asks the adapter for them.
 
 An adapter is a plain object over text.
 check-release.py reads and writes the file an adapter names, and the adapter says what that text declares
@@ -35,8 +35,8 @@ A source that names no file is given its prefix.
 Adding a source, such as package.json, pyproject.toml or Cargo.toml:
 - It is another adapter here, its file carrying the tag prefix beside the version,
   filed in SOURCES under its `--version-source` name.
-- Nothing in check-release.py changes, unless the source marks a version being worked on other than with
-  a `-SNAPSHOT` suffix, the only marker being_worked_on knows.
+- Nothing in check-release.py or the other modules of rules/ changes, unless the source marks a version being
+  worked on other than with a `-SNAPSHOT` suffix, the only marker being_worked_on in versions.py knows.
 - test_sources.py holds it to what every adapter has to answer, and fails if the rules do not refuse its marker.
 - A plain VERSION file has no room for a tag prefix, so it needs more than an adapter.
 """

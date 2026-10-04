@@ -1,0 +1,7 @@
+"""The rules check-release.py runs, and what they read.
+
+- versions.py, changelog.py and steps.py: the rules, as plain functions over text.
+- repository.py: git, the repository's files, and its release tags,
+  with check_ancestry, the rule over which release tags this history reaches.
+- sources.py: one adapter per kind of repository, for where the version comes from.
+"""

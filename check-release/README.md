@@ -80,7 +80,7 @@ The refusal says the two differ only in build metadata.
 It does not say "does not come after", which would look like a bug for a version made later.
 
 A project that needs `+dfsg1` to count as an upgrade needs an ordering SemVer does not define.\
-That rule would go into `precedence()` in [`check-release.py`](check-release.py).
+That rule would go into `precedence()` in [`rules/versions.py`](rules/versions.py).
 
 ### The channel a version goes to
 
@@ -327,8 +327,8 @@ A caller that wants a default writes it in its own workflow, where its readers c
 
 ### Adding a source
 
-Each source is an adapter in [`check-release/sources.py`](sources.py).\
-The rules in `check-release.py` know none of them by name.
+Each source is an adapter in [`check-release/rules/sources.py`](rules/sources.py).\
+The rules know none of them by name.
 
 Adding `package.json`, `pyproject.toml` or `Cargo.toml` means one more adapter there:
 
@@ -340,10 +340,10 @@ The rules need no change, unless the new source marks a version in progress with
 than a `-SNAPSHOT` suffix.
 
 A plain `VERSION` file has no room for a tag prefix.\
-The rules ask every source with a file for one, unless `--tag-prefix` is given, so such a file takes
-more than an adapter.
+check-release.py asks every source with a file for one, unless `--tag-prefix` is given, so such a
+file takes more than an adapter.
 
-The top of [`sources.py`](sources.py) lists what an adapter has to answer, its file and tag prefix
-included.\
-[`check-release/test_sources.py`](test_sources.py) holds every adapter to that list.\
+The top of [`rules/sources.py`](rules/sources.py) lists what an adapter has to answer, its file and
+tag prefix included.\
+[`check-release/tests/test_sources.py`](tests/test_sources.py) holds every adapter to that list.\
 It also needs a sample file for each adapter that declares a version.

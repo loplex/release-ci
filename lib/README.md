@@ -135,6 +135,65 @@ The `changelog` check compares every released section with the copy in its relea
   compared.
 - A section that is missing because its tag is not on the current history is reported as such:
   the release has not reached this branch yet.
+- The copy at a tag is read down to the end of that release's section.\
+  An older section below it is not read there.\
+  A copy without that section is read whole.
+- A line in the copy that `main.py` does not
+  [read](#what-mainpy-reads-in-changelogmd), in the part that is read, fails the check.\
+  A tag cannot be edited, so it fails on every run.
+
+### What `main.py` reads in `CHANGELOG.md`
+
+`main.py` reads the file itself, without a Markdown library, and only the part of Markdown a
+changelog needs.\
+A line outside that part is refused, with its number and what to write instead.\
+It is not guessed at: a line read differently from GitHub would count a heading or an entry where
+GitHub shows none, or miss one it shows.\
+In the copy at a release tag, which cannot be edited, the refusal does not say what to write
+instead.\
+The limits are `main.py`'s, not Keep a Changelog's, which says nothing of code or quotes.
+
+Read:
+
+- blank lines, and paragraphs, such as an introduction above the first section;
+- headings of one to six `#`, with up to three spaces before them: `## [<label>]` opens a section,
+  and `### <name>` a group within it;
+- list items opened by `-`, `*`, `+`, or a number followed by `.` or `)`, nested in each other, with
+  their lines continued, indented or not;
+- fenced code blocks, between ` ``` ` or `~~~` lines, at the top or inside a list item: a heading or
+  an entry inside one is code, not a section or an entry;
+- HTML comments: one that starts a line or an item hides all up to its `-->`, lines below included;
+  one that starts later in a line hides what it holds up to its `-->`, and is text where it does not
+  close there, unless only closed comments stand before it in an item.\
+  On a comment's own line, what follows `-->` is raw HTML: its Markdown is not read, a comment left
+  open in it hides the rest of the line, and a character reference stands for its character.
+- link definitions, `[label]: url` on a line of their own, outside list items, followed by a blank
+  line or another definition.
+
+Refused, with what to write instead:
+
+| Refused                                                         | Write instead                      |
+|-----------------------------------------------------------------|------------------------------------|
+| an indented code block: four spaces more than its place         | a fenced code block                |
+| five spaces or more after a list marker, an indented code block | one space after the marker         |
+| a tab in a line's indentation                                   | spaces                             |
+| a tab after a list marker                                       | a space                            |
+| a block quote, `>`, starting a line or an item                  | a paragraph or a list item         |
+| a line of only `=` or only `-`, which can underline a heading   | a heading of `#`s                  |
+| a line of three or more `-`, `*` or `_`, a thematic break       | a heading, or nothing              |
+| the delimiter row of a table, with `\|` or without, as `:-`     | a list                             |
+| a footnote definition, `[^label]:`, starting a line or an item  | the note in the entry itself       |
+| a heading inside a list item                                    | a heading above the list           |
+| an empty list item                                              | a list item with text              |
+| HTML starting a line or an item, other than a comment           | Markdown, or text before the HTML  |
+| a link definition inside a list item                            | it outside the lists, on one line  |
+| a link definition that goes on in the next line                 | the definition on one line         |
+| a line right after a link definition                            | a blank line between them          |
+| a fenced code block or a comment still open at the end          | its closing line                   |
+| a line of a fence or a comment in a list item, left of its text | the indentation of the item's text |
+
+A released section cannot be edited while its tag's copy is compared.\
+A refused line in one fails the `changelog` check on every run: its tag holds the line.
 
 ### What `[Unreleased]` asks of the version
 
@@ -162,7 +221,11 @@ applied to Keep a Changelog's kinds of change:
 - A group with a name Keep a Changelog does not use, such as `### Documentation`, is named in a
   note on stderr.\
   A feature filed under a misspelled `### Add` can then still be seen.
-- An empty group asks for nothing, and HTML comments are ignored.
+- An empty group asks for nothing, and HTML comments are ignored.\
+  An entry or a line with no character Python's `str.isprintable()` accepts but the space counts as
+  none, comments aside, with a link read as its text, every `*`, `_` and `~` dropped and a character
+  reference such as `&nbsp;` read as its character.\
+  That is a reading of the Markdown, not a rendering of it, so it can differ from what GitHub shows.
 - An entry under no group at all is refused, because nothing says what kind of change it is.
 - A repository with no `CHANGELOG.md`, or no `[Unreleased]` section in it, is asked for no more
   than a patch, and told so on stderr.

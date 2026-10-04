@@ -18,6 +18,7 @@ This file is the command line over the rules.
 The rules are plain functions over text, so their tests need no repository to release:
 - rules/versions.py: semantic versions, how they are ordered, and which one may follow which;
 - rules/changelog.py: CHANGELOG.md, its sections, closing `[Unreleased]`, and its links;
+- rules/markdown.py: which line of CHANGELOG.md is a heading, an entry or code, as GitHub reads it;
 - rules/steps.py: how far the next version has to move.
 rules/repository.py reads the repository: git, its files, and its release tags.
 It also holds check_ancestry, the rule over which release tags this history reaches.
@@ -31,7 +32,7 @@ import sys
 
 from rules import sources
 from rules.versions import SEMVER, channel_of, check_version, version_after
-from rules.changelog import bodies, check_changelog, closed, uncompared
+from rules.changelog import bodies, check_changelog, closed, structure, through, uncompared
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
 from rules.repository import check_ancestry, git, holder, read_file, released_versions, repository, unreachable
 
@@ -39,6 +40,13 @@ from rules.repository import check_ancestry, git, holder, read_file, released_ve
 def read_declared(adapter, newline: str | None = None) -> str:
     """The file an adapter declares its version in, read in the adapter's encoding."""
     return read_file(adapter.file, adapter.holds, adapter.encoding, newline)
+
+
+def read_changelog(holds: str, newline: str | None = None) -> str:
+    """CHANGELOG.md, refused at the first line outside the part of Markdown read here (see rules/markdown.py)."""
+    text = read_file("CHANGELOG.md", holds, newline=newline)
+    structure(text)
+    return text
 
 
 # Where the version of a release comes from is the one thing here that depends on the kind of project.
@@ -130,7 +138,7 @@ def unreleased_asks(releases: list[str]) -> Asked:
         print("note: there is no CHANGELOG.md here, so nothing under [Unreleased] says how far the version has to "
               "move", file=sys.stderr)
         return NOTHING_ASKED
-    found = bodies(read_file("CHANGELOG.md", "what waits to be released"))
+    found = bodies(read_changelog("what waits to be released"))
     if "Unreleased" not in found:
         print("note: CHANGELOG.md has no [Unreleased] section, so nothing under it says how far the version has "
               "to move", file=sys.stderr)
@@ -180,7 +188,7 @@ def version_command(arguments) -> list[str]:
 
 
 def changelog_command(arguments) -> list[str]:
-    in_tree = read_file("CHANGELOG.md", "the released sections")
+    in_tree = read_changelog("the released sections")
     prefix = prefix_from(arguments.version_source, arguments.tag_prefix)
 
     at_tag = {}
@@ -192,7 +200,19 @@ def changelog_command(arguments) -> list[str]:
             # It is reported below, with the tags older than their section.
             at_tag[version] = ""
 
-    problems = check_changelog(in_tree, at_tag, off_history=unreachable(prefix, at_tag))
+    # A copy at a tag is read by the same rules, down to the end of its own section: nothing below it is read.
+    # A copy without that section is read whole.
+    # One they do not read is told apart from the file in the tree, and a tag cannot be edited to fix it.
+    unread = {}
+    for version, text in list(at_tag.items()):
+        try:
+            at_tag[version] = through(text, version)
+        except SystemExit as refusal:
+            unread[version] = f"{refusal} - as tagged {prefix}{version}"
+            del at_tag[version]
+
+    problems = [f"{why}, which cannot be edited, so [{version}] cannot be compared" for version, why in unread.items()]
+    problems += check_changelog(in_tree, at_tag, off_history=unreachable(prefix, at_tag))
     if not problems:
         not_compared = uncompared(at_tag)
         print(f"Compared {len(at_tag) - len(not_compared)} released section(s) against the tag that released them.")
@@ -253,7 +273,7 @@ def close_changelog_command(arguments) -> list[str]:
     # A file mixing them comes back all in the first of these it holds.
     # A lone CR ends a line too, as open() reads one by default.
     # closed() works on LF text either way.
-    raw = read_file("CHANGELOG.md", "the released sections", newline="")
+    raw = read_changelog("the released sections", newline="")
     ending = "\r\n" if "\r\n" in raw else "\r" if "\r" in raw else "\n"
     text = raw.replace("\r\n", "\n").replace("\r", "\n")
     # The new text is computed before the file is opened: opening it for writing empties it,
@@ -272,7 +292,7 @@ def notes_command(arguments) -> list[str]:
     cannot drift apart. The one difference is the warning release-flow/warn puts above the notes while
     publishing the release elsewhere has not completed.
     An empty section is refused: nobody means to make a release whose notes are empty."""
-    text = bodies(read_file("CHANGELOG.md", "the released sections")).get(arguments.version, "")
+    text = bodies(read_changelog("the released sections")).get(arguments.version, "")
     if not text.strip():
         return [f"CHANGELOG.md holds nothing for {arguments.version}, so there are no notes to release it with"]
     print(text)

@@ -87,6 +87,27 @@ has the whole rule.
   refused.
 - Under `tags` with no `version` given, the default version already moves as far as is asked.
 
+### Some Markdown in `CHANGELOG.md` is refused
+
+Every `lib/main.py` command that reads `CHANGELOG.md` refuses a line outside the part of Markdown it
+reads, so every action that runs one does too.\
+[What `main.py` reads in `CHANGELOG.md`](lib/README.md#what-mainpy-reads-in-changelogmd) lists what
+is read and what is refused, such as an indented code block, a block quote or a tab in the
+indentation.\
+Fenced code blocks are read.\
+Before moving the pin, run the new version's `changelog` command in the repository, from a clone of
+this one at the new tag, with the `version-source` and `tag-prefix` the workflow gives:
+
+```sh
+python3 <clone>/lib/main.py changelog --version-source <source> [--tag-prefix <prefix>]
+```
+
+- A refusal names the line and what to write instead.\
+  Under `[Unreleased]`, write that.
+- The `changelog` check reads the copy at each release tag down to the end of that release's
+  section, or whole where it has no such section, and a tag cannot be edited.\
+  A refused line in what it reads fails the check on every run.
+
 ### Actions that run Python install their own
 
 Every action but `intellij/build` now installs the Python this repository's

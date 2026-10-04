@@ -78,8 +78,8 @@ class TheReleaseNotes(unittest.TestCase):
 
 
 class TheChangelogCommand(TwoReleasesOneOffMain):
-    """What `changelog` reports for a tag it cannot compare: one off this history, and one that holds no text of
-    its section."""
+    """What `changelog` reports for a tag it cannot compare: one off this history, one that holds no text of
+    its section, and one whose copy holds a line it does not read."""
 
     def test_a_section_off_this_history_is_not_called_deleted(self):
         with contextlib.redirect_stdout(io.StringIO()):
@@ -115,6 +115,34 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
         self.assertIn("Not compared: 0.0.1 ", printed.getvalue())
+
+    def run_changelog(self) -> tuple[list[str], str]:
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+        return problems, printed.getvalue()
+
+    def test_a_line_below_the_tagged_section_is_not_read(self):
+        """The copy at v0.1.0 is read down to the end of [0.1.0]: a block quote in an older section does not matter."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.9] - 2025-01-01\n\n> quoted\n")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.9] - 2025-01-01\n\n- quoted\n")
+        problems, printed = self.run_changelog()
+        self.assertEqual(problems, [])
+        self.assertIn("Compared 1 released section(s)", printed)
+
+    def test_a_line_not_read_in_the_tagged_section_fails(self):
+        """A tag cannot be edited, so the refusal stands for good."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n> A\n")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n- A\n")
+        problems, _ = self.run_changelog()
+        self.assertEqual(len(problems), 1)
+        for said in ("line 5 holds a block quote", "as tagged v0.1.0", "[0.1.0] cannot be compared"):
+            self.assertIn(said, problems[0])
+        self.assertNotIn(": write", problems[0])  # The tag cannot be edited.
 
 
 class WritingTheVersionBack(unittest.TestCase):
@@ -253,6 +281,32 @@ class WritingTheChangelogBack(unittest.TestCase):
             main.close_changelog_command(argparse.Namespace(
                 version="0.2.0", date="2026-09-21", repository_url=None, version_source="tags", tag_prefix="v"))
         self.assertEqual(path.read_bytes(), text.encode("utf-8"))
+
+
+class AChangelogWithALineNotRead(unittest.TestCase):
+    """Every command that reads CHANGELOG.md refuses one with a line outside the part of Markdown read here,
+    by its number (see rules/markdown.py)."""
+
+    def test_every_command_that_reads_the_changelog_refuses_it(self):
+        here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        (here / "CHANGELOG.md").write_text("# Log\n\n## [Unreleased]\n\n- A\n\n> ## [0.1.0] - x\n",
+                                           encoding="utf-8")
+        subprocess.run(["git", "init", "-q"], cwd=here, check=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t",
+                        "commit", "-q", "--allow-empty", "-m", "init"], cwd=here, check=True)
+        original = repository.REPO
+        repository.REPO = here
+        self.addCleanup(setattr, repository, "REPO", original)
+        for command, arguments in ((main.version_command, dict(version="0.1.0")),
+                                   (main.changelog_command, {}),
+                                   (main.close_changelog_command,
+                                    dict(version="0.1.0", date="2026-09-21", repository_url=None)),
+                                   (main.notes_command, dict(version="0.1.0"))):
+            with self.subTest(command.__name__):
+                with (contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()),
+                      self.assertRaises(SystemExit) as raised):
+                    command(argparse.Namespace(version_source="tags", tag_prefix="v", **arguments))
+                self.assertIn("line 7 holds a block quote", str(raised.exception))
 
 
 class AVersionHandedIn(unittest.TestCase):

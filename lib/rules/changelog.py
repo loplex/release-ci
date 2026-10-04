@@ -5,22 +5,78 @@ Plain functions over the file's text, with no repository behind them.
 
 import re
 
+from .markdown import Line, Unread, read, reading
 from .versions import SEMVER, precedence
 
 
-# Headings are read the way CommonMark 0.31.2 section 4.2 reads an ATX heading:
-# up to three spaces before the #s, spaces or tabs after them, and a closing run of #s after a space is not text.
-# A narrower reading would silently count a section's or a group's entries under the heading before it.
-SECTION_HEADING = re.compile(r"^ {0,3}##[ \t]+\[([^\]]+)\]", re.MULTILINE)
-UNRELEASED_HEADING = re.compile(r"^ {0,3}##[ \t]+\[Unreleased\][^\n]*\n", re.MULTILINE)
-GROUP_HEADING = re.compile(r"^ {0,3}###[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$", re.MULTILINE)
+# A section's heading is a `##` heading whose text starts with its label in brackets: `## [1.0.0] - 2026-10-05`.
+LABEL = re.compile(r"\[([^\]]+)\]")
 
 # The kinds of change Keep a Changelog names, in its order.
 # A section merged from several is written in this order.
 # A group of any other name follows these, in the order first met, and is kept: its text was released too.
 KINDS = ("Added", "Changed", "Deprecated", "Removed", "Fixed", "Security")
 
-LINK_DEFINITION = re.compile(r"^\[[^\]]+\]:\s.*$", re.MULTILINE)
+
+def says_something(text: str) -> bool:
+    """Whether `text` holds a character str.isprintable() accepts, the space aside: what a release has to say.
+
+    isprintable() rejects the characters of Unicode's Other and Separator categories but the space, so white space,
+    a no-break space, a zero-width space, a soft hyphen, a control character, a private use character and one not
+    assigned yet say nothing.
+    Which are assigned is up to the Unicode version of the Python this runs on.
+    Any other character says something, even one drawn blank, such as U+3164."""
+    return any(char.isprintable() and char != " " for char in text)
+
+
+def structure(changelog: str) -> list[Line]:
+    """What each line of a changelog is (see markdown.read), or a refusal naming the first line not read here."""
+    try:
+        return read(changelog)
+    except Unread as unread:
+        raise SystemExit(f"CHANGELOG.md {unread}") from None
+
+
+def through(changelog: str, label: str) -> str:
+    """The changelog down to the end of the section of `label`, read no further, or a refusal naming a line above it.
+
+    It reads the copy at a release tag, which cannot be edited, so the refusal does not say what to write instead.
+
+    Where a section starts depends on every line above it: a fenced code block opened there can hide its heading.
+    Nothing below it does, so a line there not read here does not matter to it.
+    Without that section, the whole changelog is read."""
+    lines, inside = changelog.split("\n"), False
+    try:
+        for index, line in enumerate(reading(changelog)):
+            heading = LABEL.match(line.text) if line.kind == "heading" and line.level == 2 else None
+            if heading and inside:
+                return "\n".join(lines[:index])
+            inside = inside or bool(heading and heading.group(1) == label)
+    except Unread as unread:
+        raise SystemExit(f"CHANGELOG.md {unread.found}") from None
+    return changelog
+
+
+def marks(changelog: str) -> list[tuple[int, str]]:
+    """The sections' headings, as the index of each heading's line and the label in it."""
+    found = []
+    for index, line in enumerate(structure(changelog)):
+        label = LABEL.match(line.text) if line.kind == "heading" and line.level == 2 else None
+        if label:
+            found.append((index, label.group(1)))
+    return found
+
+
+def groups(text: str) -> list[tuple[int, str]]:
+    """The `###` headings of a section's text, as the index of each heading's line and its name."""
+    return [(index, line.text) for index, line in enumerate(structure(text)) if line.kind == "heading"
+            and line.level == 3]
+
+
+def undefined(changelog: str) -> list[str]:
+    """The changelog's lines, with each link definition's line left empty."""
+    lines = changelog.split("\n")
+    return ["" if line.kind == "definition" else lines[index] for index, line in enumerate(structure(changelog))]
 
 
 def sections(changelog: str) -> dict[str, str]:
@@ -29,12 +85,14 @@ def sections(changelog: str) -> dict[str, str]:
     Link definitions are left out wherever they stand, so one inside a section is not compared either.
     The ones at the foot of the file belong to no section, and a release may write them afresh."""
 
-    text = LINK_DEFINITION.sub("", changelog)
-    found = {}
-    marks = list(SECTION_HEADING.finditer(text))
-    for index, mark in enumerate(marks):
-        end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
-        found[mark.group(1)] = text[mark.end() : end].strip()
+    lines, found = undefined(changelog), {}
+    headings = marks(changelog)
+    for at, (index, label) in enumerate(headings):
+        end = headings[at + 1][0] if at + 1 < len(headings) else len(lines)
+        heading = lines[index]
+        rest = heading[heading.index("]", heading.index("[")) + 1 :]  # The date, after the label.
+        # Only spaces and tabs are taken off, with the line ends: a no-break space is text to CommonMark.
+        found[label] = "\n".join([rest, *lines[index + 1 : end]]).strip(" \t\r\n")
     return found
 
 
@@ -88,36 +146,43 @@ def bodies(changelog: str) -> dict[str, str]:
 
     Unlike sections(), this leaves out the rest of the heading line, the date, which would read as a first entry.
     Link definitions are left out, as there."""
-    text = LINK_DEFINITION.sub("", changelog)
-    marks = list(SECTION_HEADING.finditer(text))
-    found = {}
-    for index, mark in enumerate(marks):
-        start = text.find("\n", mark.end())
-        start = len(text) if start < 0 else start + 1
-        end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
-        found[mark.group(1)] = text[start:end].strip("\n")
+    lines, found = undefined(changelog), {}
+    headings = marks(changelog)
+    for at, (index, label) in enumerate(headings):
+        end = headings[at + 1][0] if at + 1 < len(headings) else len(lines)
+        found[label] = "\n".join(lines[index + 1 : end]).strip("\n")
     return found
+
+
+def joined(entries: list[str]) -> str:
+    """One group's entries from several sections, one after another.
+    Where one section's entries end with a link definition, a blank line follows it: CommonMark reads some lines right
+    after a definition as part of it, so read() refuses any line there."""
+    text = entries[0]
+    for more in entries[1:]:
+        text += ("\n\n" if structure(text)[-1].kind == "definition" else "\n") + more
+    return text
 
 
 def combined(texts: list[str]) -> str:
     """Several sections' text merged into one.
 
     - Text before a section's first `###` goes at the top.
-    - Each group's entries go together under one heading of its name, in the order the texts come in.
+    - Each group's entries go together under one heading of its name, in the order the texts come in (see joined()).
     - Groups are ordered as KINDS has them, other names after."""
     leads, merged = [], {}
     for text in texts:
-        marks = list(GROUP_HEADING.finditer(text))
-        lead = (text[: marks[0].start()] if marks else text).strip("\n")
+        lines, headings = text.split("\n"), groups(text)
+        lead = "\n".join(lines[: headings[0][0]] if headings else lines).strip("\n")
         if lead:
             leads.append(lead)
-        for index, mark in enumerate(marks):
-            end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
-            entries = text[mark.end() : end].strip("\n")
+        for at, (index, name) in enumerate(headings):
+            end = headings[at + 1][0] if at + 1 < len(headings) else len(lines)
+            entries = "\n".join(lines[index + 1 : end]).strip("\n")
             if entries:
-                merged.setdefault(mark.group(1), []).append(entries)
+                merged.setdefault(name, []).append(entries)
     order = [kind for kind in KINDS if kind in merged] + [name for name in merged if name not in KINDS]
-    return "\n\n".join(leads + [f"### {name}\n\n" + "\n".join(merged[name]) for name in order])
+    return "\n\n".join(leads + [f"### {name}\n\n" + joined(merged[name]) for name in order])
 
 
 def compared_from(version: str, below: list[str]) -> str | None:
@@ -164,8 +229,9 @@ def linked(changelog: str, repository_url: str, prefix: str) -> str:
         target = f"compare/{prefix}{start}...{prefix}{version}" if start else f"commits/{prefix}{version}"
         definitions.append(f"[{version}]: {repository_url}/{target}")
     labels = {"Unreleased", *versions}
-    kept = [line for line in changelog.split("\n")
-            if not (LINK_DEFINITION.fullmatch(line) and line[1 : line.index("]")] in labels)]
+    lines = changelog.split("\n")
+    kept = [lines[index] for index, line in enumerate(structure(changelog))
+            if not (line.kind == "definition" and LABEL.search(lines[index]).group(1) in labels)]
     text = "\n".join(kept).rstrip("\n")
     return text + ("\n\n" + "\n".join(definitions) if definitions else "") + "\n"
 
@@ -202,19 +268,23 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
     repeating to a channel what it was already offered.
     Its documentation speaks of the final release, and so does this.
     """
-    mark = UNRELEASED_HEADING.search(changelog)
-    if mark is None:
+    headings = marks(changelog)
+    unreleased = next((at for at, (_, label) in enumerate(headings) if label == "Unreleased"), None)
+    if unreleased is None:
         raise SystemExit("CHANGELOG.md has no [Unreleased] section, so there is nothing to close")
     if version in sections(changelog):
         raise SystemExit(f"CHANGELOG.md already has a section for {version}")
 
-    rest = changelog[mark.end() :]
-    following = SECTION_HEADING.search(rest)
-    pending, after = (rest[: following.start()], rest[following.start() :]) if following else (rest, "")
+    all_lines, kinds = changelog.split("\n"), structure(changelog)
+    first = headings[unreleased][0] + 1
+    end = headings[unreleased + 1][0] if unreleased + 1 < len(headings) else len(all_lines)
+    head = "\n".join(all_lines[:first]) + "\n"
+    after = "\n".join(all_lines[end:]) if end < len(all_lines) else ""
 
-    lines = pending.split("\n")
+    # The lines below [Unreleased]: blank ones and link definitions at their end belong to the file, not the section.
+    lines, line_kinds = all_lines[first:end], kinds[first:end]
     foot_lines = []
-    while lines and (not lines[-1].strip() or LINK_DEFINITION.fullmatch(lines[-1])):
+    while lines and (not lines[-1].strip(" \t\r") or line_kinds[len(lines) - 1].kind == "definition"):
         foot_lines.insert(0, lines.pop())
 
     entries = "\n".join(lines).strip("\n")
@@ -229,7 +299,7 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
         ]
         if train_entries:
             entries = combined([entries, *train_entries])
-    if not entries:
+    if not entries.strip():
         if is_final:
             span = f"between {start} and {version}" if start else f"below {version}"
             reason = (f", and nothing in the pre-releases {span} to take in" if train_entries
@@ -248,5 +318,5 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
         replacement += f"\n{foot}\n"
     if after:
         replacement += "\n"
-    written = changelog[: mark.end()] + replacement + after
+    written = head + replacement + after
     return linked(written, repository_url.rstrip("/"), prefix) if repository_url else written

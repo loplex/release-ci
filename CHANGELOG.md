@@ -1,7 +1,7 @@
 # Changelog
 
 Notable changes to this project, in the format of
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) - which is also the format
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), written in the part of Markdown
 `lib/main.py changelog` reads. A section that has been released is compared against the tag that
 released it, so once a version has a section here, that section may not be edited again.
 
@@ -66,6 +66,18 @@ released it, so once a version has a section here, that section may not be edite
   It made that JDK the default for every later step of the job.\
   [UPGRADING.md](UPGRADING.md#intellijbuild-leaves-the-jobs-jdk-as-it-was) says what a later step
   that ran on it does now.
+- **BREAKING** `lib/main.py` reads `CHANGELOG.md` as CommonMark does, but only the part of Markdown
+  a changelog needs, and every command that reads the file refuses a line outside that part, with
+  its number and what to write instead.\
+  [What `main.py` reads in `CHANGELOG.md`](lib/README.md#what-mainpy-reads-in-changelogmd) lists
+  both.\
+  `changelog` refuses such a line in the copy at a release tag too, down to the end of that
+  release's section, or anywhere in a copy without it.\
+  That copy cannot be edited, so the refusal there does not say what to write instead.\
+  A `## [x]` or `###` heading inside a fenced code block or an HTML comment was read as a section or
+  a group.\
+  A line that only began like a link definition, such as `[scope]: entry text`, was left out of the
+  release notes and of what the `changelog` check compares.
 - `intellij/publish`: `attempts` and `wait` have to be whole numbers, `attempts` from 1 to 9999,
   checked before the upload.\
   An `attempts` that was no number made no attempt, and the run failed as though the version was

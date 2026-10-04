@@ -24,7 +24,8 @@ version.
 The tests sit in [`lib/tests`](lib/tests):
 
 - [`test_versions.py`](lib/tests/test_versions.py),
-  [`test_changelog.py`](lib/tests/test_changelog.py) and
+  [`test_changelog.py`](lib/tests/test_changelog.py),
+  [`test_markdown.py`](lib/tests/test_markdown.py) and
   [`test_steps.py`](lib/tests/test_steps.py) test the rules.\
   They are plain functions over text, so they need no repository to release.
 - [`test_sources.py`](lib/tests/test_sources.py) does the same for the adapters that say where the
@@ -72,11 +73,19 @@ It reads the repository as text:
 - [`test_manifests.py`](.github/test_manifests.py) reads every `action.yml` as text, for what GitHub
   would take wrongly from any of them, and with the scripts beside each, for which Python they run
   on and which steps get the JDK `intellij/build` sets up.
+- [`test_changelog_reader.py`](.github/test_changelog_reader.py) holds `lib/main.py`'s own reading
+  of `CHANGELOG.md` to GitHub's.\
+  Every text it reads, this repository's `CHANGELOG.md` at every commit, written cases and documents
+  put together at random, has to split into the same headings, list items and code as cmark-gfm
+  splits it.\
+  It reads the whole history, so in a shallow clone it fails.
 
 The suite reads Markdown through [cmarkgfm](https://github.com/theacodes/cmarkgfm), the Python
 binding of GitHub's own cmark-gfm.\
 Code, tables, headings and links are then what GitHub renders.
 
+- `lib/main.py` reads `CHANGELOG.md` without a package, so that the actions need none; the reader
+  test is what holds it to cmark-gfm.
 - The length test renders a line that opens with a link on its own.\
   So a link defined elsewhere, or written in HTML, does not count as a link there.
 - The link test reads a heading's anchor through

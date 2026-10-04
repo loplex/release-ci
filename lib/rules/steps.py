@@ -3,11 +3,13 @@
 Plain functions over the changelog's sections and the released versions, with no repository behind them.
 """
 
+import html
 import re
 from typing import NamedTuple
 
 from .versions import SEMVER, core, core_text, precedence, successors, version_after
-from .changelog import GROUP_HEADING
+from .changelog import groups, says_something, structure
+from .markdown import Line
 
 
 # How far past the last final release each kind moves the version, by SemVer's rules 6 to 8:
@@ -23,11 +25,18 @@ PATCH, MINOR, MAJOR = 0, 1, 2
 STEP_NAMES = ("patch", "minor", "major")
 STEP_OF_KIND = {"Added": MINOR, "Changed": MINOR, "Deprecated": MINOR, "Removed": MAJOR, "Fixed": PATCH,
                 "Security": PATCH}
-# An entry is a list item.
-# A line of three or more dashes, stars or underscores alone is a thematic break, which CommonMark reads first.
-LIST_ITEM = re.compile(r"^(?![ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$)[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\S.*$", re.MULTILINE)
-BREAKING_ENTRY = re.compile(r"^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\*\*BREAKING:?\*\*", re.MULTILINE | re.IGNORECASE)
-HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+# An entry is a list item, and one that starts with **BREAKING** asks for a major.
+BREAKING = re.compile(r"\*\*BREAKING:?\*\*", re.IGNORECASE)
+# The first list marker on an item's line, and the spaces up to that item's text.
+FIRST_ITEM = re.compile(r" *(?:[-*+]|\d{1,9}[.)]) *")
+# An HTML comment closed on its line.
+COMMENT = re.compile(r"<!--.*?-->")
+# An HTML comment left open where an item's text starts, past its list markers, which hides the rest of the line.
+OPEN_COMMENT = re.compile(r"((?: *(?:[-*+]|\d{1,9}[.)]) +)* *)<!--")
+# An inline link, whose text alone is shown, and not an image: `[text](destination "title")`.
+LINK = re.compile(r"(?<!!)\[([^\]]*)\]\([^)]*\)")
+# The marks of emphasis and strikethrough.
+EMPHASIS = re.compile(r"[*_~]")
 
 
 class Asked(NamedTuple):
@@ -42,28 +51,91 @@ class Asked(NamedTuple):
 NOTHING_ASKED = Asked(PATCH, "", [], [])
 
 
+def uncommented(lines: list[str], kinds: list[Line]) -> list[str]:
+    """The lines with each HTML comment on them blanked out by spaces where it stood, since GitHub shows none.
+
+    A comment is read on its own line only, and the lines it runs on over are read as they are written.
+    One left open hides the rest of its line where it starts an item's text, closed comments before it aside, as a
+    browser hides it; elsewhere it is text, as GitHub shows it.
+    The spaces keep each character that is left in its column."""
+    def blank(line: str, kind: Line) -> str:
+        line = COMMENT.sub(lambda comment: " " * len(comment[0]), line)
+        start = OPEN_COMMENT.match(line) if kind.kind == "item" else None
+        return line[: start.end(1)] + " " * (len(line) - start.end(1)) if start else line
+
+    return [blank(line, kind) for line, kind in zip(lines, kinds)]
+
+
+def closing(line: str) -> str:
+    """What a line of an HTML comment holds after the comment closes on it: ` gone` in `<!-- see below --> gone`, and
+    nothing where it does not close.
+    That is raw HTML, which GitHub passes on as written: its Markdown is not read, a comment in it is left out, one
+    left open hides the rest of the line, and a character reference such as `&nbsp;` stands for its character."""
+    _, end, rest = line.partition("-->")
+    return html.unescape(COMMENT.sub("", rest).partition("<!--")[0]) if end else ""
+
+
+def shown(text: str) -> str:
+    """Text whose comments uncommented() has already blanked out, read a little closer to how GitHub shows it.
+
+    A link stands for its text, every `*`, `_` and `~` goes, as the marks of emphasis and strikethrough would, and a
+    character reference such as `&nbsp;` stands for its character.
+    It is no renderer, so it can differ from GitHub either way: a code span is taken as written, an HTML tag as text,
+    and a `*`, `_` or `~` GitHub would show is dropped all the same."""
+    return html.unescape(EMPHASIS.sub("", LINK.sub(r"\1", text)))
+
+
+def item_says_something(lines: list[str], seen: list[str], kinds: list[Line], index: int) -> bool:
+    """Whether the items line `index` opens say something, on that line or in the text right below it.
+
+    `seen` holds the lines as uncommented() gives them.
+    What is read is the text after the last marker on the line, and the lines of text right below it that are indented
+    at least as far as the text of the first item: in `- - <!-- c -->`, two spaces for the outer item, four for the
+    inner one.
+    Any other line ends what is read, such as a blank line, a comment, a code block or a nested item, and so does a line
+    indented less: an item whose text stands only past it says nothing here, though GitHub may show that text."""
+    first = FIRST_ITEM.match(lines[index])
+    own = len(lines[index]) - len(kinds[index].text)
+    start = own if first is None else first.end()
+    read = [seen[index][own:]]
+    for below, look, line in zip(lines[index + 1 :], seen[index + 1 :], kinds[index + 1 :]):
+        if line.kind != "text" or len(below) - len(below.lstrip(" ")) < start:
+            break
+        read.append(look)
+    return says_something(shown("\n".join(read)))
+
+
 def asked_by(unreleased: str) -> Asked:
     """What the text under `[Unreleased]` asks of the next release: the largest step any group asks for,
     and what asks for it.
 
     - HTML comments count as nothing.
     - An empty group asks for nothing: an empty `### Removed` left as a reminder removes nothing.
+      Empty is saying nothing (see says_something()), comments aside.
     - An entry above the first group is under no kind, so nothing says how far it moves the version.
       It is handed back in `loose` for the caller to refuse, not counted as a patch.
     - Other text above the first group, such as a sentence introducing the section, is ignored.
     """
-    unreleased = HTML_COMMENT.sub("", unreleased)
-    marks = list(GROUP_HEADING.finditer(unreleased))
-    lead = unreleased[: marks[0].start()] if marks else unreleased
-    loose = [item.group(0).strip() for item in LIST_ITEM.finditer(lead)]
+    lines, kinds, headings = unreleased.split("\n"), structure(unreleased), groups(unreleased)
+    # An entry holding nothing but a comment, such as `- <!-- what changed -->` left as a reminder, is none.
+    # So is an entry or a line of text that says nothing else (see shown() and says_something()), such as a no-break
+    # space; a comment is read on its own line (see uncommented()), and what follows one that closes on it counts.
+    # An entry that says something only in the text right below its line is one: see item_says_something().
+    seen = uncommented(lines, kinds)
+    nothing = [line.kind == "blank"
+               or line.kind == "html" and not says_something(closing(lines[index]))
+               or line.kind == "item" and not item_says_something(lines, seen, kinds, index)
+               or line.kind == "text" and not says_something(shown(seen[index]))
+               for index, line in enumerate(kinds)]
+    lead = headings[0][0] if headings else len(lines)
+    loose = [lines[index].strip(" \t\r") for index in range(lead) if kinds[index].kind == "item" and not nothing[index]]
     step, why, unknown = PATCH, "", []
-    for index, mark in enumerate(marks):
-        name = mark.group(1)
-        end = marks[index + 1].start() if index + 1 < len(marks) else len(unreleased)
-        text = unreleased[mark.end() : end]
-        if not text.strip():
+    for at, (index, name) in enumerate(headings):
+        end = headings[at + 1][0] if at + 1 < len(headings) else len(lines)
+        under = kinds[index + 1 : end]
+        if all(nothing[index + 1 : end]):
             continue
-        if BREAKING_ENTRY.search(text):
+        if any(line.kind == "item" and BREAKING.match(line.text) for line in under):
             asks, reason = MAJOR, f"an entry marked **BREAKING** under ### {name}"
         else:
             asks, reason = STEP_OF_KIND.get(name, PATCH), f"### {name}"

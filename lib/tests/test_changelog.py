@@ -5,7 +5,7 @@ Run with `python3 -m unittest discover -s lib` from the repository root.
 
 import unittest
 
-from rules.changelog import bodies, check_changelog, closed, linked, sections, uncompared
+from rules.changelog import bodies, check_changelog, closed, linked, says_something, sections, through, uncompared
 
 
 class ReleasedSections(unittest.TestCase):
@@ -50,6 +50,11 @@ class ReleasedSections(unittest.TestCase):
         head = self.AT_TAG.replace("- A\n", "- A, said better\n")
         self.assertTrue(check_changelog(head, {"0.1.0": self.AT_TAG}))
 
+    def test_a_line_of_a_no_break_space_added_to_a_released_section_is_caught(self):
+        """It is text to CommonMark, so the section no longer reads as released."""
+        head = self.AT_TAG.replace("- B\n", "- B\n\u00a0\n")  # The last line of the section.
+        self.assertTrue(check_changelog(head, {"0.1.0": self.AT_TAG}))
+
     def test_a_section_that_has_gone_is_caught(self):
         head = "# Changelog\n\n## [Unreleased]\n"
         self.assertTrue(check_changelog(head, {"0.1.0": self.AT_TAG}))
@@ -89,6 +94,11 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
     FOLLOWED = "# Log\n\n## [Unreleased]\n\n### Added\n\n- X\n\n## [0.1.0] - 2026-01-01\n\n- old\n"
     LINKED = "# Log\n\n## [Unreleased]\n\n### Added\n\n- X\n\n\n\n[Unreleased]: https://example.invalid/x\n"
 
+    def test_a_last_line_of_a_no_break_space_stays_in_the_section(self):
+        """It goes on the entry above it, as CommonMark reads it; only blank lines belong to the file."""
+        written = closed(self.FOLLOWED.replace("- X\n", "- X\n\u00a0\n"), "0.2.0", "2026-10-05")
+        self.assertIn("- X\n\u00a0\n\n## [0.1.0]", written)
+
     def test_the_entries_become_a_section_of_their_own(self):
         """The date stays part of the section, because `sections()` takes the rest of the heading line with it.
         So the date may not change afterwards either: the tag holds a copy of it."""
@@ -100,11 +110,12 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
     def test_a_section_heading_is_read_as_commonmark_reads_one(self):
         """Indented up to three spaces, or with a tab after the #s, a section heading still starts a section.
         [Unreleased] is then still found and closed.
-        Indented by four, it is a code block inside the section above."""
+        Indented as far as the text of the entry above, it is a heading inside that entry, and refused."""
         log = "# Log\n\n  ## [Unreleased]\n\n### Added\n\n- X\n\n ##\t[0.1.0] - 2026-01-01\n\n- old\n"
         self.assertEqual(sections(log), {"Unreleased": "### Added\n\n- X", "0.1.0": "- 2026-01-01\n\n- old"})
         self.assertIn("## [0.2.0] - 2026-09-21\n\n### Added\n\n- X\n\n ##\t[0.1.0]", closed(log, "0.2.0", "2026-09-21"))
-        self.assertEqual(list(sections(log.replace(" ##\t[0.1.0]", "    ## [0.1.0]"))), ["Unreleased"])
+        with self.assertRaises(SystemExit):
+            sections(log.replace(" ##\t[0.1.0]", "    ## [0.1.0]"))
 
     def test_what_was_already_released_is_left_alone(self):
         written = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
@@ -188,6 +199,15 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
         self.assertEqual(self.body(written, "0.3.0"),
                          "### Added\n\n- B2\n- B1\n\n### Removed\n\n- R\n\n### Fixed\n\n- F")
 
+    def test_a_link_definition_ending_a_group_s_entries_is_set_off_from_the_next_ones(self):
+        """CommonMark reads some lines right after a link definition as part of it, and read() refuses any line there,
+        so the train's entries of that group follow a blank line; entries of one group stay together otherwise."""
+        train = self.TRAIN.replace("### Fixed\n\n- F\n\n", "### Removed\n\n- U\n\n[x]: https://a.invalid\n\n"
+                                                                "### Fixed\n\n- F\n\n")
+        written = closed(train, "0.3.0", "2026-09-21")
+        self.assertIn("### Removed\n\n- U\n\n[x]: https://a.invalid\n\n- R\n\n### Fixed", written)
+        self.assertIn("0.3.0", sections(written), "the written file is read without a refusal")
+
     def test_the_train_s_sections_stay_as_they_were_released(self):
         """This is safe beside check_changelog: nothing released is edited, only read."""
         written = closed(self.TRAIN, "0.3.0", "2026-09-21")
@@ -242,6 +262,7 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
         for changelog, version, said in (
                 (quiet, "0.2.1", ", and no pre-release between 0.2.0 and 0.2.1 to take in"),
                 (silent.format(""), "0.3.0", untaken),
+                (silent.format("  \n\n"), "0.3.0", untaken),
                 ("# Log\n\n## [Unreleased]\n", "0.1.0", ", and no pre-release below 0.1.0 to take in"),
                 (quiet, "0.3.0-beta.3", ", and 0.3.0-beta.3, a pre-release, takes no other one in"),
                 (quiet, "2026.10", "")):
@@ -347,3 +368,56 @@ class TheLinksAtTheFoot(unittest.TestCase):
     def test_without_a_repository_url_the_footer_is_left_alone(self):
         text = "# Log\n\n## [Unreleased]\n\n- n\n\n[Unreleased]: https://example.invalid/custom\n"
         self.assertIn("[Unreleased]: https://example.invalid/custom\n", closed(text, "0.1.0", "2026-09-21"))
+
+
+class CodeAndComments(unittest.TestCase):
+    """A heading or an entry inside a fenced code block or an HTML comment is code or a comment, not a section or an
+    entry. Which lines are which is markdown.read's, and test_markdown.py tests it."""
+
+    TEXT = ("# Log\n\n## [Unreleased]\n\n### Fixed\n\n- Write this:\n\n  ```yaml\n  ## [9.9.9] - x\n  - b\n  ```\n"
+            "<!--\n## [8.8.8] - x\n-->\n\n## [0.1.0] - x\n\n- a\n")
+
+    def test_a_section_heading_in_code_or_a_comment_is_none(self):
+        self.assertEqual(list(sections(self.TEXT)), ["Unreleased", "0.1.0"])
+        self.assertIn("  ## [9.9.9] - x", bodies(self.TEXT)["Unreleased"])
+
+    def test_a_line_outside_what_is_read_is_refused_by_its_number(self):
+        with self.assertRaises(SystemExit) as raised:
+            sections("# Log\n\n## [Unreleased]\n\n> quoted\n")
+        self.assertEqual(str(raised.exception), "CHANGELOG.md line 5 holds a block quote, which lib/main.py does not "
+                                                "read: write a paragraph or a list item")
+
+
+class ThroughOneSection(unittest.TestCase):
+    """A copy at a tag is read down to the end of the tag's own section, and no further."""
+
+    TEXT = "# Log\n\n## [Unreleased]\n\n## [0.2.0] - x\n\n- b\n\n## [0.1.0] - x\n\n> quoted\n"
+
+    def test_the_text_ends_where_the_next_section_starts(self):
+        self.assertEqual(through(self.TEXT, "0.2.0"), "# Log\n\n## [Unreleased]\n\n## [0.2.0] - x\n\n- b\n")
+
+    def test_a_line_not_read_above_the_end_is_refused(self):
+        for label in ("0.1.0", "0.0.1"):  # The last section, and one the text does not have.
+            with self.subTest(label=label), self.assertRaises(SystemExit) as raised:
+                through(self.TEXT, label)
+            self.assertIn("line 11 holds a block quote", str(raised.exception))
+
+    def test_a_heading_hidden_in_code_above_is_no_section(self):
+        text = "# Log\n\n```\n## [0.2.0] - x\n```\n\n## [0.2.0] - x\n\n- b\n\n## [0.1.0] - x\n\n> q\n"
+        self.assertEqual(sections(through(text, "0.2.0")), {"0.2.0": "- x\n\n- b"})
+
+
+class SayingSomething(unittest.TestCase):
+    """What says nothing: the characters str.isprintable() rejects, and the space."""
+
+    def test_white_space_and_characters_str_isprintable_rejects_say_nothing(self):
+        # U+E000 is private use, and U+0378 is assigned in no Unicode version yet.
+        for text in ("", " \t\n", "\u00a0", "\u200b", "\ufeff", "\u00ad", "\f\v", "\ue000", "\u0378"):
+            with self.subTest(text=repr(text)):
+                self.assertFalse(says_something(text))
+
+    def test_a_character_str_isprintable_accepts_says_something(self):
+        """Even one drawn blank: U+3164 is a letter to Unicode."""
+        for text in ("a", "-", "\u3164", " \u00a0x"):
+            with self.subTest(text=repr(text)):
+                self.assertTrue(says_something(text))

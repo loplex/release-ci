@@ -23,10 +23,40 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
         asked = asked_by("### Fixed\n\n- F\n\n### Added\n\n- A\n\n### Security\n\n- S\n")
         self.assertEqual((asked.step, asked.why), (MINOR, "### Added"))
 
+    def test_an_entry_or_a_line_that_says_nothing_asks_for_nothing(self):
+        """GitHub shows each empty: of what it shows, str.isprintable() accepts nothing, so it asks for nothing.
+        A comment is shown as nothing, a link as its text, the marks of emphasis not at all, and a character reference
+        as its character."""
+        for text in ("- \u00a0\n", "- \u200b\n", "\u00a0\n", "- \u00a0\n  \u200b\n", "- &nbsp;\n", "- &#8203;\n",
+                     "- *<!-- c -->*\n", "- [](https://a.invalid)\n"):
+            with self.subTest(text=repr(text)):
+                self.assertEqual(asked_by(f"### Removed\n\n{text}").step, PATCH)
+
+    def test_a_comment_is_read_on_its_own_line(self):
+        """A `<!--` in one entry and a `-->` in another, code spans here, hide nothing between them.
+        Text after a comment that closes on its line is shown, and counts."""
+        between = "### Changed\n- Accept `<!--` in templates\n### Removed\n- Legacy API\n### Fixed\n- Parse `-->`\n"
+        self.assertEqual(asked_by(between).step, MAJOR)
+        self.assertEqual(asked_by("### Removed\n\n<!-- see below --> The v1 API is gone.\n").step, MAJOR)
+        self.assertEqual(asked_by("### Removed\n\n<!-- see\nbelow --> The v1 API is gone.\n").step, MAJOR)
+        self.assertEqual(asked_by("### Removed\n\n<!-- a --> The v1 API is gone. <!-- b -->\n").step, MAJOR)
+        self.assertEqual(asked_by("### Removed\n\n- **<!--** markers are kept as text\n").step, MAJOR,
+                         "a comment left open past the start of a line is text, as GitHub shows it")
+        self.assertEqual(asked_by("### Removed\n\n**\n    <!-- The v1 API is gone.\n").step, MAJOR,
+                         "nor does one in a paragraph's line open an HTML block")
+        self.assertEqual(asked_by("### Removed\n\n<!-- c --> **\n").step, MAJOR,
+                         "what follows a comment on its line is raw HTML, whose Markdown is not read")
+        self.assertEqual(asked_by("### Removed\n\n<!-- a --> <!-- b c\n").step, PATCH,
+                         "a comment left open in that raw HTML hides the rest of the line from the browser")
+        self.assertEqual(asked_by("### Removed\n\n<!-- c --> &nbsp;\n").step, PATCH,
+                         "and a character reference in it stands for its character")
+
     def test_an_empty_group_asks_for_nothing(self):
         """A `### Removed` left as a reminder removes nothing, and neither does a comment in it."""
         self.assertEqual(asked_by("### Removed\n\n### Fixed\n\n- F\n").step, PATCH)
         self.assertEqual(asked_by("### Removed\n\n<!-- nothing yet -->\n\n### Fixed\n\n- F\n").step, PATCH)
+        self.assertEqual(asked_by("### Removed\n\n- <!-- what -->\n\n### Fixed\n\n- F\n").step, PATCH,
+                         "an entry holding nothing but a comment is none")
 
     def test_an_entry_marked_breaking_asks_for_a_major_under_any_group(self):
         for text in ("### Changed\n\n- **BREAKING** the input is required\n",
@@ -37,6 +67,9 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
                 asked = asked_by(text)
                 self.assertEqual(asked.step, MAJOR)
                 self.assertTrue(asked.why.startswith("an entry marked **BREAKING** under ### "), asked.why)
+
+    def test_breaking_counts_in_an_entry_nested_on_the_line(self):
+        self.assertEqual(asked_by("### Fixed\n\n- - **BREAKING** nested\n").step, MAJOR)
 
     def test_breaking_counts_only_where_an_entry_starts(self):
         self.assertEqual(asked_by("### Fixed\n\n- a note that is **BREAKING** nothing\n").step, PATCH)
@@ -57,8 +90,20 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
         self.assertEqual(asked.loose, ["- loose"])
         self.assertEqual(asked_by("- only this\n").loose, ["- only this"])
         self.assertEqual(asked_by("").loose, [])
-        self.assertEqual(asked_by("<!--\n- a template\n-->\n\n- - -\n***\n\n### Fixed\n\n- F\n").loose, [],
-                         "a comment over several lines, and a thematic break, are not entries")
+        self.assertEqual(asked_by("<!--\n- a template\n-->\n\n### Fixed\n\n- F\n").loose, [],
+                         "a comment over several lines is no entry")
+        self.assertEqual(asked_by("- <!-- what changed -->\n- <!--\n  over lines -->\n\n### Fixed\n\n- F\n").loose, [],
+                         "an entry holding nothing but a comment is none")
+        self.assertEqual(asked_by("- - <!-- nested -->\n\n### Fixed\n\n- F\n").loose, [])
+        self.assertEqual(asked_by("- <!-- c -->\n  what changed\n\n### Fixed\n\n- F\n").loose,
+                         ["- <!-- c -->"], "an entry whose text follows its comment is one")
+        self.assertEqual(asked_by("- <!-- c -->\nText after the list.\n\n### Fixed\n\n- F\n").loose, [],
+                         "text left of the entry's own is no part of it")
+        self.assertEqual(asked_by("- \u00a0\n  \u200b\n  what changed\n\n### Fixed\n\n- F\n").loose,
+                         ["- \u00a0"], "a line below that says something makes it an entry, handed back with its "
+                         "no-break space")
+        self.assertEqual(asked_by("- - <!-- c -->\n  what changed\n\n### Fixed\n\n- F\n").loose,
+                         ["- - <!-- c -->"], "the text goes on the outer entry, which the line opens first")
 
     def test_a_group_heading_is_read_as_commonmark_reads_one(self):
         """Each of these is a heading to CommonMark, and starts a group of its own:
@@ -66,10 +111,10 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
         Its entries then do not count under the group above it."""
         for heading in ("   ### Added", "###\tAdded", "### Added ###", "### Added\t#"):
             with self.subTest(heading=heading):
-                asked = asked_by(f"### Fixed\n\n- F\n\n{heading}\n\n- A\n")
+                asked = asked_by(f"### Fixed\n\n- F\n\nText.\n\n{heading}\n\n- A\n")
                 self.assertEqual((asked.step, asked.why, asked.unknown), (MINOR, "### Added", []))
-        self.assertEqual(asked_by("### Fixed\n\n- F\n\n    ### Added\n\n- A\n").step, PATCH,
-                         "four spaces make a code block, not a heading")
+        with self.assertRaises(SystemExit, msg="indented into the entry above, a heading belongs to it"):
+            asked_by("### Fixed\n\n- F\n\n   ### Added\n\n- A\n")
         self.assertEqual(asked_by("### Added#\n\n- A\n").unknown, ["Added#"],
                          "a # with no space before it is part of the text")
 

@@ -7,6 +7,11 @@ released it, so once a version has a section here, that section may not be edite
 
 ## [Unreleased]
 
+### Added
+
+- `--tag-prefix '^none'` of `check-release.py` says the tags have no prefix, as the actions'
+  `tag-prefix` input does.
+
 ### Changed
 
 - **BREAKING** The `source` input of `check-release`, `release-flow/prepare` and

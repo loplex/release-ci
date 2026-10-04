@@ -17,14 +17,11 @@ set -uo pipefail
 
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
 
-prefix_arguments=()
-if [[ $TAG_PREFIX == '^none' ]]; then
-  prefix_arguments=(--tag-prefix '')
-elif [[ -n $TAG_PREFIX ]]; then
-  prefix_arguments=(--tag-prefix "$TAG_PREFIX")
-fi
 check_release=(python3 "$script")
-source_arguments=(--version-source "$VERSION_SOURCE" "${prefix_arguments[@]}")
+source_arguments=(--version-source "$VERSION_SOURCE")
+if [[ -n $TAG_PREFIX ]]; then
+  source_arguments+=(--tag-prefix "$TAG_PREFIX")
+fi
 
 # All the checks run before anything is written.
 # A release that fails them was then never cut, and there is nothing to undo.

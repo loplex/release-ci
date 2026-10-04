@@ -13,14 +13,11 @@ script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release.py"
 # An empty input means "not given", not "the empty prefix":
 # GitHub passes a missing input as an empty string too, so the two cannot be told apart.
 # Read as "not given", a mistake fails loudly; read as "no prefix", it would pass having found no release.
-# `^none` says "no prefix": git refuses `^` in a ref name, so it can never be a real prefix.
-prefix_arguments=()
-if [[ $TAG_PREFIX == '^none' ]]; then
-  prefix_arguments=(--tag-prefix '')
-elif [[ -n $TAG_PREFIX ]]; then
-  prefix_arguments=(--tag-prefix "$TAG_PREFIX")
+# `^none` says "no prefix", and check-release.py reads it so.
+source_arguments=(--version-source "$VERSION_SOURCE")
+if [[ -n $TAG_PREFIX ]]; then
+  source_arguments+=(--tag-prefix "$TAG_PREFIX")
 fi
-source_arguments=(--version-source "$VERSION_SOURCE" "${prefix_arguments[@]}")
 
 # Split at spaces and newlines, without glob expansion.
 # `*` is then a name that is no check, not the files in the workspace.

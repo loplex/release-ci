@@ -514,6 +514,12 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.assertEqual(prefix_from("gradle.properties", "release-"), "release-")
         self.assertEqual(prefix_from("gradle.properties", None), "v")
 
+    def test_none_with_a_caret_is_no_prefix(self):
+        """`^none` is how the actions say "no prefix", and they pass it on as given."""
+        self.repository_with(declaring="version = 1.0.0-SNAPSHOT\ntagPrefix = v\n")
+        self.assertEqual(prefix_from("gradle.properties", "^none"), "")
+        self.assertEqual(prefix_from("tags", "^none"), "")
+
     def test_a_declared_prefix_holding_a_lone_surrogate_is_refused(self):
         """The reader keeps an unpaired `\\uD83D`, as Java keeps it.
         Taken as a prefix, it made `prefix` end in a traceback while printing it.

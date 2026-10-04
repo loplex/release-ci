@@ -98,10 +98,17 @@ def prefix_from(source: str, given: str | None) -> str:
     The exception is `version` under `tags` with no version given: it fails, finding no release to count from.
     A caller that wants a default declares it where its own readers can see it.
 
+    `^none` given says the tags have no prefix, as `''` does.
+    It is the spelling the actions' `tag-prefix` input takes, where an empty value means "not given":
+    GitHub passes a missing input as an empty string too, so the two cannot be told apart there.
+    `^none` can never be a real prefix, because git refuses `^` in a tag name.
+
     A declared prefix that is not text (see as_text) is refused here, as main() refuses one on the command line.
     No tag name can be spelled with it, so `prefix` would end in a traceback printing it,
     and every other check would pass having found no release.
     """
+    if given == "^none":
+        return ""
     if given is not None:
         return given
     adapter = SOURCES[source]
@@ -316,7 +323,7 @@ def main() -> int:
                                 help="where the version of the next release comes from")
     tag_prefix = argparse.ArgumentParser(add_help=False)
     tag_prefix.add_argument("--tag-prefix", help="what release tags carry in front of the version, for a source "
-                                                 "that declares no prefix of its own")
+                                                 "that declares no prefix of its own; '' or ^none for no prefix")
     both = [version_source, tag_prefix]
 
     version_parser = commands.add_parser("version", parents=both,

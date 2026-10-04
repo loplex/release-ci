@@ -312,7 +312,7 @@ So a caller can tell "nothing to write to" from a failed write.
   or `tagPrefix =` where the tags have no prefix.\
   `--tag-prefix`, where given, overrides the file.
 - Under `tags`, nothing declares it, so it has to be given.\
-  `--tag-prefix ''` says the tags have no prefix.
+  `--tag-prefix ''` says the tags have no prefix, and so does `--tag-prefix '^none'`.
 - Every action that takes `version-source` takes the prefix as its `tag-prefix` input, with
   `^none` for no prefix, as [above](#tag-prefix-is-left-out-where-the-source-declares-it).
 

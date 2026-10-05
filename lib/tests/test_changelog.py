@@ -1,6 +1,6 @@
 """Tests for rules/changelog.py: reading CHANGELOG.md's sections, closing `[Unreleased]`, and the links at its foot.
 
-Run with `python3 -m unittest discover -s check-release` from the repository root.
+Run with `python3 -m unittest discover -s lib` from the repository root.
 """
 
 import unittest
@@ -60,7 +60,7 @@ class ReleasedSections(unittest.TestCase):
 
     def test_a_tag_older_than_its_section_is_listed_as_uncompared(self):
         """uncompared() names every version whose tag holds no text of its section, and only those.
-        What the report does with that list is tested in TheChangelogCommand, in test_check_release.py."""
+        What the report does with that list is tested in TheChangelogCommand, in test_main.py."""
         before = "# Changelog\n\n## [Unreleased]\n"
         later = self.AT_TAG.replace("[0.1.0]", "[0.2.0]")
         self.assertEqual(uncompared({"0.1.0": before, "0.2.0": later}), ["0.1.0"])

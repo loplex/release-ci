@@ -28,7 +28,7 @@ temp="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 # The channel is read off the version, by the same rule the draft was marked with, rather than passed in.
 # Two places spelling it out could come to disagree.
 # And once a release is published, there is no `version` check left to answer it.
-channel=$("$PYTHON" "${here}/../../check-release/check-release.py" channel "$VERSION") || exit 1
+channel=$("$PYTHON" "${here}/../../lib/main.py" channel "$VERSION") || exit 1
 
 # A final release sends no channel field.
 # The Marketplace takes an empty channel as its default one

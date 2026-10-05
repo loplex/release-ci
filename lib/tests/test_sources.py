@@ -2,9 +2,9 @@
 what every adapter has to answer, and what the Gradle one does to its file.
 
 All of it runs over text, because the adapters are plain objects over text.
-Reading and writing the file an adapter names is check-release.py's job, and test_check_release.py tests that.
+Reading and writing the file an adapter names is main.py's job, and test_main.py tests that.
 
-Run with `python3 -m unittest discover -s check-release` from the repository root.
+Run with `python3 -m unittest discover -s lib` from the repository root.
 """
 
 import unittest
@@ -22,7 +22,7 @@ FILES_TO_TRY_ON = {
 
 
 class WhatEverySourceAnswers(unittest.TestCase):
-    """The contract check-release.py relies on, asked of every adapter in SOURCES."""
+    """The contract main.py relies on, asked of every adapter in SOURCES."""
 
     def test_every_source_is_filed_under_the_name_it_answers_to(self):
         for name, adapter in sources.SOURCES.items():
@@ -47,7 +47,7 @@ class WhatEverySourceAnswers(unittest.TestCase):
                     self.assertEqual(adapter.marker, "")
 
     def test_a_source_declaring_a_version_names_its_file_and_what_it_is_looked_in_for(self):
-        """check-release.py reads the file, and refuses a missing one by saying what it was read for.
+        """main.py reads the file, and refuses a missing one by saying what it was read for.
         An adapter without `file` or `holds` would end in a traceback on its first run instead."""
         for adapter in sources.SOURCES.values():
             if adapter.declares_a_version:
@@ -56,7 +56,7 @@ class WhatEverySourceAnswers(unittest.TestCase):
                     self.assertTrue(getattr(adapter, "holds", None))
 
     def test_a_source_declaring_a_version_says_how_its_file_is_read_and_written(self):
-        """check-release.py opens the file in the adapter's encoding, to read it and to write it back.
+        """main.py opens the file in the adapter's encoding, to read it and to write it back.
 
         So the name has to be a text encoding.
         open() refuses a codec that Python has but that does not turn bytes into text, such as `base64`.

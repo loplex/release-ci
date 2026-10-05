@@ -141,7 +141,7 @@ def overlong(name, text, sections):
     - In Markdown, a table row is as wide as its widest cell, and is let through too.
     - A block of code in Markdown, fenced or indented, is held to the limit of `[*]`, not to that of prose.
     - Every line of CHANGELOG.md from the first released section on is let through.
-      Those sections are closed by releases, and `check-release changelog` refuses any edit to one once it is tagged.
+      Those sections are closed by releases, and the `changelog` check refuses any edit to one once it is tagged.
       The link definitions at the end of the file are let through anyway.
 
     A line ends at a line feed, as in cmark-gfm, not also at a form feed and the like, as with `str.splitlines`.

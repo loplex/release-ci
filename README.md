@@ -25,7 +25,9 @@ So nothing in the directories that are not tied to an ecosystem may assume one e
 | [`check-release`](check-release/README.md) | the checks a release has to pass, asked of a repository                                                    |
 | [`release-flow`](release-flow/README.md)   | how a GitHub release is cut, drafted before it is tagged, carried back, and flagged where a publish failed |
 | [`intellij`](intellij/README.md)           | how a JetBrains plugin is built, signed and published to the Marketplace                                   |
+| [`lib`](lib/README.md)                     | `main.py`, the command line behind the actions above, and the release rules it applies                     |
 
+- `lib` is not an action: a workflow calls the actions, and the actions run it.
 - Each action's `action.yml` lists all its inputs and outputs, and what each does.
 - The README in each directory shows how its actions fit together.
 

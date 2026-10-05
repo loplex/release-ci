@@ -2,15 +2,15 @@
 
 Notable changes to this project, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) - which is also the format
-`check-release changelog` reads. A section that has been released is compared against the tag that
+`lib/main.py changelog` reads. A section that has been released is compared against the tag that
 released it, so once a version has a section here, that section may not be edited again.
 
 ## [Unreleased]
 
 ### Added
 
-- `--tag-prefix '^none'` of `check-release.py` says the tags have no prefix, as the actions'
-  `tag-prefix` input does.
+- `--tag-prefix '^none'` of `lib/main.py` says the tags have no prefix, as the actions' `tag-prefix`
+  input does.
 
 ### Changed
 
@@ -26,10 +26,11 @@ released it, so once a version has a section here, that section may not be edite
 - **BREAKING** The `source` input of `check-release`, `release-flow/prepare` and
   `release-flow/merge-back` is now `version-source`.\
   [UPGRADING.md](UPGRADING.md#the-source-input-is-now-version-source) shows the change.
-- **BREAKING** `check-release.py`: `--source` is now `--version-source`.\
+- **BREAKING** `check-release/check-release.py` is now `lib/main.py`, beside the rules it runs.\
+  Its `--source` is now `--version-source`.\
   It and `--tag-prefix` go after the command, and a command refuses the ones it never reads.\
   `channel` takes the version without the tag prefix.\
-  [UPGRADING.md](UPGRADING.md#from-02) shows the new calls.
+  [UPGRADING.md](UPGRADING.md#check-releasecheck-releasepy-is-now-libmainpy) shows the new calls.
 - **BREAKING** `check-release version` holds the version to what `[Unreleased]` asks for:
   - `### Added`, `### Changed` or `### Deprecated` asks for at least a minor.
   - `### Removed`, or an entry that starts with `**BREAKING**`, asks for a major, or a minor below

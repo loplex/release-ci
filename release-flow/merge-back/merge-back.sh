@@ -16,7 +16,7 @@ if [[ -z $CHECK_WORKFLOW ]]; then
   exit 1
 fi
 
-script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
+script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../lib" && pwd)/main.py"
 
 check_release=("$PYTHON" "$script")
 source_arguments=(--version-source "$VERSION_SOURCE")

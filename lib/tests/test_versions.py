@@ -1,7 +1,7 @@
 """Tests for rules/versions.py: which text is a version, how versions are ordered, which may follow which,
 and the channel a version goes to.
 
-Run with `python3 -m unittest discover -s check-release` from the repository root.
+Run with `python3 -m unittest discover -s lib` from the repository root.
 """
 
 import unittest
@@ -23,7 +23,7 @@ class Precedence(unittest.TestCase):
 
     def test_build_metadata_does_not_figure_into_precedence(self):
         """SemVer says two versions that differ only in build metadata have the same precedence.
-        The README of check-release quotes that rule.
+        lib/README.md quotes that rule.
         Ranking by metadata would order releases by a field the spec says orders nothing."""
         self.assertEqual(precedence("1.0.0+a"), precedence("1.0.0+b"))
         self.assertEqual(precedence("1.0.0"), precedence("1.0.0+dfsg1"))

@@ -20,7 +20,7 @@ def repository_root() -> Path:
     """
     rev_parse = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
     if rev_parse.returncode != 0:
-        raise SystemExit("check-release.py has to be run inside the repository it is checking")
+        raise SystemExit("lib/main.py has to be run inside the repository it is checking")
     return Path(rev_parse.stdout.strip())
 
 

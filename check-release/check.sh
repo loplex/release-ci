@@ -7,13 +7,13 @@
 # Writes: version, channel  (to GITHUB_OUTPUT, where `version` ran and said yes)
 set -uo pipefail
 
-script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release.py"
+script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/main.py"
 
 # The prefix is passed on only where the caller gave one, so that a source declaring its own prefix answers.
 # An empty input means "not given", not "the empty prefix":
 # GitHub passes a missing input as an empty string too, so the two cannot be told apart.
 # Read as "not given", a mistake fails loudly; read as "no prefix", it would pass having found no release.
-# `^none` says "no prefix", and check-release.py reads it so.
+# `^none` says "no prefix", and lib/main.py reads it so.
 source_arguments=(--version-source "$VERSION_SOURCE")
 if [[ -n $TAG_PREFIX ]]; then
   source_arguments+=(--tag-prefix "$TAG_PREFIX")

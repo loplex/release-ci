@@ -44,7 +44,7 @@ passed or not.
   A plugin is released with `version-source: gradle.properties`, and `release-flow/prepare` rewrites
   that `version` line.\
   A version from a property of the plugin's own would leave the archive at the old version.\
-  [Where the version comes from](../check-release/README.md#where-the-version-comes-from) describes
+  [Where the version comes from](../lib/README.md#where-the-version-comes-from) describes
   the file.
 
 ### Gradle is cached by the open-source provider
@@ -207,8 +207,8 @@ jobs:
 ### The channel is read off the version
 
 The channel is not an input.\
-`intellij/publish` reads it off the version with `check-release channel`, by the rule under
-[The channel a version goes to](../check-release/README.md#the-channel-a-version-goes-to).\
+`intellij/publish` reads it off the version with `lib/main.py channel`, by the rule under
+[The channel a version goes to](../lib/README.md#the-channel-a-version-goes-to).\
 `release-flow/draft` marks a pre-release by the same rule, so the two cannot come to disagree.
 
 ### A pre-release reaches only those who add its channel

@@ -30,11 +30,12 @@ After:
 A workflow that still passes `source` fails.
 GitHub only warns about the unknown input, and the action then refuses the empty `version-source`.
 
-### `check-release.py` takes its options after the command
+### `check-release/check-release.py` is now `lib/main.py`
 
-This matters only to a workflow that runs `check-release.py` itself.
+This matters only to a workflow that runs the script itself.
 The actions call it the new way already.
 
+- The script moved to [`lib/main.py`](lib/README.md), beside the rules it runs.
 - `--source` is now `--version-source`.
 - `--version-source` and `--tag-prefix` go after the command, not before it.
 - A command refuses the options it never reads.
@@ -52,15 +53,15 @@ by `close-changelog` only with `--repository-url`.
 Before:
 
 ```sh
-python3 check-release.py --source tags --tag-prefix v changelog
-python3 check-release.py --source tags --tag-prefix v channel v0.3.0-beta.1
+python3 check-release/check-release.py --source tags --tag-prefix v changelog
+python3 check-release/check-release.py --source tags --tag-prefix v channel v0.3.0-beta.1
 ```
 
 After:
 
 ```sh
-python3 check-release.py changelog --version-source tags --tag-prefix v
-python3 check-release.py channel 0.3.0-beta.1
+python3 lib/main.py changelog --version-source tags --tag-prefix v
+python3 lib/main.py channel 0.3.0-beta.1
 ```
 
 `channel` takes the version without the tag prefix.
@@ -74,11 +75,11 @@ GitHub only warns about an input the action does not have, so the run does not f
 
 ### `version` holds the version to what `[Unreleased]` asks for
 
-`check-release version`, which `release-flow/prepare` runs too, refuses a version that moves less
+The `version` check, which `release-flow/prepare` runs too, refuses a version that moves less
 past the last final release than the entries under `[Unreleased]` ask for.\
 `### Added`, `### Changed` and `### Deprecated` ask for a minor.\
 `### Removed`, and an entry starting with `**BREAKING**`, ask for a major, or a minor below 1.0.\
-[What `[Unreleased]` asks of the version](check-release/README.md#what-unreleased-asks-of-the-version)
+[What `[Unreleased]` asks of the version](lib/README.md#what-unreleased-asks-of-the-version)
 has the whole rule.
 
 - Release the version the refusal names, or a later one.

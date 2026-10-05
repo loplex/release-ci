@@ -38,13 +38,13 @@ What each action needs of the runner is under
 1. It asks the rules `changelog`, `ancestry` and `version`, all three.\
    Where one says no, it writes nothing.\
    It also writes nothing where `[Unreleased]` has nothing to release, as
-   [The changelog](../check-release/README.md#the-changelog) says.
+   [The changelog](../lib/README.md#the-changelog) says.
 2. It closes `[Unreleased]` into a section for the version being released.
 3. It writes that version back where the source declares one.
 4. It makes one commit on `release/<version>`, and leaves the workspace on that branch.
 
 The version comes from the source, or from the `version` input.\
-[Where the version comes from](../check-release/README.md#where-the-version-comes-from) says how,
+[Where the version comes from](../lib/README.md#where-the-version-comes-from) says how,
 for each source.
 
 Given a `repository-url`, `prepare` also rewrites the link definitions of the changelog's versions,
@@ -110,8 +110,8 @@ jobs:
   A pattern is a bash glob, in which `**` goes no deeper than `*`.\
   With `files` left empty, nothing is attached.
 - A version with a pre-release suffix is marked as a pre-release.\
-  `check-release channel` decides that, by the rule in
-  [The channel a version goes to](../check-release/README.md#the-channel-a-version-goes-to).
+  `lib/main.py channel` decides that, by the rule in
+  [The channel a version goes to](../lib/README.md#the-channel-a-version-goes-to).
 
 The job needs `contents: write` for the push and the draft.\
 [The release job](#the-release-job) runs `draft` after the build, and hands it the `version`, `tag`
@@ -371,7 +371,7 @@ nothing.
 ### The warning is the one thing the notes say that the changelog does not
 
 A release's notes are its released section of `CHANGELOG.md`.\
-`release-flow/draft` writes them with `check-release notes`, so that the two cannot come to say
+`release-flow/draft` writes them with `lib/main.py notes`, so that the two cannot come to say
 different things.
 
 The warning is the exception.\

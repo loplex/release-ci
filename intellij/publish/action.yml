@@ -30,7 +30,7 @@ inputs:
   version:
     description: |
       The version being published, without the tag prefix, as release-flow/merge-back gives it.
-      The channel it goes to is read off its pre-release suffix by `check-release.py channel`:
+      The channel it goes to is read off its pre-release suffix by `lib/main.py channel`:
       - `0.2.0-beta.1` goes to the channel `beta`.
       - A final release, such as `0.2.0`, names no channel, and goes where the Marketplace serves it by default.
     required: true

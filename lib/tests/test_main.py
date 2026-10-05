@@ -1,12 +1,11 @@
-"""Tests for check-release.py, the command line: its subcommands over repositories built for the purpose,
+"""Tests for main.py, the command line: its subcommands over repositories built for the purpose,
 and the arguments it refuses.
 
-Run with `python3 -m unittest discover -s check-release` from the repository root.
+Run with `python3 -m unittest discover -s lib` from the repository root.
 """
 
 import argparse
 import contextlib
-import importlib.util
 import io
 import subprocess
 import sys
@@ -15,19 +14,17 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
+import main
 from rules.steps import Asked, MAJOR, MINOR, next_candidate
 from rules import repository
 from rules.repository import released_versions
 
 from .fixtures import TwoReleasesOneOffMain
 
-SCRIPT = Path(__file__).resolve().parent.parent / "check-release.py"
-specification = importlib.util.spec_from_file_location("check_release", SCRIPT)
-check_release = importlib.util.module_from_spec(specification)
-specification.loader.exec_module(check_release)
+SCRIPT = Path(__file__).resolve().parent.parent / "main.py"
 
-version_command = check_release.version_command
-prefix_from = check_release.prefix_from
+version_command = main.version_command
+prefix_from = main.prefix_from
 
 
 class TheReleaseNotes(unittest.TestCase):
@@ -44,7 +41,7 @@ class TheReleaseNotes(unittest.TestCase):
         self.addCleanup(setattr, repository, "REPO", original)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            problems = check_release.notes_command(argparse.Namespace(version=version))
+            problems = main.notes_command(argparse.Namespace(version=version))
         return out.getvalue(), problems
 
     TEXT = ("# Log\n\n## [Unreleased]\n\n## [0.2.0] - 2026-09-21\n\n### Added\n\n- A\n\n"
@@ -86,7 +83,7 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
 
     def test_a_section_off_this_history_is_not_called_deleted(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            problems = check_release.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
         self.assertEqual(len(problems), 1)
         self.assertIn("not on this history", problems[0])
 
@@ -99,7 +96,7 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.1] - 2025-12-01\n\n- Z\n")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = check_release.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
         self.assertIn("Not compared: 0.0.1 ", printed.getvalue())
@@ -114,7 +111,7 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.1] - 2025-12-01\n\n- Z\n")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = check_release.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
         self.assertIn("Not compared: 0.0.1 ", printed.getvalue())
@@ -133,7 +130,7 @@ class WritingTheVersionBack(unittest.TestCase):
 
     def set_version(self, version: str) -> list[str]:
         with contextlib.redirect_stdout(io.StringIO()):
-            return check_release.set_version_command(
+            return main.set_version_command(
                 argparse.Namespace(version=version, version_source="gradle.properties", tag_prefix=None))
 
     def test_a_crlf_file_stays_crlf(self):
@@ -148,7 +145,7 @@ class WritingTheVersionBack(unittest.TestCase):
         silently.
         A writer that changes nothing stands in for that here."""
         self.properties_file_holding("version = 0.1.1-SNAPSHOT\n")
-        with unittest.mock.patch.object(check_release.SOURCES["gradle.properties"], "with_version",
+        with unittest.mock.patch.object(main.SOURCES["gradle.properties"], "with_version",
                                         lambda text, version: text):
             problems = self.set_version("0.1.1")
         self.assertTrue(problems)
@@ -163,7 +160,7 @@ class WritingTheVersionBack(unittest.TestCase):
         def dropping_writes(file, mode="r", *arguments, **keywords):
             return io.StringIO() if "w" in mode else real_open(file, mode, *arguments, **keywords)
 
-        with unittest.mock.patch.object(check_release, "open", dropping_writes, create=True):
+        with unittest.mock.patch.object(main, "open", dropping_writes, create=True):
             problems = self.set_version("0.1.1")
         self.assertTrue(problems)
         self.assertIn("still does not name 0.1.1", problems[0])
@@ -212,7 +209,7 @@ class ReadingTheFile(unittest.TestCase):
         original = repository.REPO
         repository.REPO = here
         self.addCleanup(setattr, repository, "REPO", original)
-        self.assertEqual(check_release.prefix_from("gradle.properties", None), "".join(map(chr, range(0x80, 0x100))))
+        self.assertEqual(main.prefix_from("gradle.properties", None), "".join(map(chr, range(0x80, 0x100))))
 
 
 class WritingTheChangelogBack(unittest.TestCase):
@@ -231,7 +228,7 @@ class WritingTheChangelogBack(unittest.TestCase):
         a release commit should change one section of the file, not every line of it."""
         path = self.changelog_file_holding("# Log\r\n\r\n## [Unreleased]\r\n\r\n### Added\r\n\r\n- A\r\n")
         with contextlib.redirect_stdout(io.StringIO()):
-            problems = check_release.close_changelog_command(argparse.Namespace(
+            problems = main.close_changelog_command(argparse.Namespace(
                 version="0.1.0", date="2026-09-21", repository_url=None, version_source="tags", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertEqual(path.read_bytes(),
@@ -242,7 +239,7 @@ class WritingTheChangelogBack(unittest.TestCase):
         back as LF."""
         path = self.changelog_file_holding("# Log\r\r## [Unreleased]\r\r### Added\r\r- A\r")
         with contextlib.redirect_stdout(io.StringIO()):
-            problems = check_release.close_changelog_command(argparse.Namespace(
+            problems = main.close_changelog_command(argparse.Namespace(
                 version="0.1.0", date="2026-09-21", repository_url=None, version_source="tags", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertEqual(path.read_bytes(),
@@ -253,7 +250,7 @@ class WritingTheChangelogBack(unittest.TestCase):
         text = "# Log\n\n## [Unreleased]\n\n## [0.1.0] - 2026-09-01\n\n- A\n"
         path = self.changelog_file_holding(text)
         with self.assertRaises(SystemExit):
-            check_release.close_changelog_command(argparse.Namespace(
+            main.close_changelog_command(argparse.Namespace(
                 version="0.2.0", date="2026-09-21", repository_url=None, version_source="tags", tag_prefix="v"))
         self.assertEqual(path.read_bytes(), text.encode("utf-8"))
 
@@ -452,7 +449,7 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         It has to be accepted, not refused as a version nobody would release."""
         self.repository_with("v0.1.0", declaring="version = 0.2.0\n")
         printed = io.StringIO()
-        with unittest.mock.patch.object(check_release, "marker_of", lambda source: ""), \
+        with unittest.mock.patch.object(main, "marker_of", lambda source: ""), \
                 contextlib.redirect_stdout(printed):
             problems = version_command(argparse.Namespace(version=None,
                                                           version_source="gradle.properties", tag_prefix="v"))
@@ -496,10 +493,10 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.repository_with("v0.1.0")
         said = io.StringIO()
         with contextlib.redirect_stderr(said), self.assertRaises(SystemExit) as raised:
-            check_release.set_version_command(argparse.Namespace(version="0.2.0",
+            main.set_version_command(argparse.Namespace(version="0.2.0",
                                                                  version_source="tags", tag_prefix="v"))
-        self.assertEqual(raised.exception.code, check_release.NOTHING_TO_WRITE)
-        self.assertNotIn(check_release.NOTHING_TO_WRITE, (1, 2), "the status of every other refusal, and argparse's")
+        self.assertEqual(raised.exception.code, main.NOTHING_TO_WRITE)
+        self.assertNotIn(main.NOTHING_TO_WRITE, (1, 2), "the status of every other refusal, and argparse's")
         self.assertIn("declares no version", said.getvalue())
 
     def test_a_tag_source_declares_no_prefix_either(self):
@@ -576,7 +573,7 @@ class TheNextCommand(unittest.TestCase):
     def next_after(self, released, source):
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = check_release.next_command(argparse.Namespace(released=released, version_source=source,
+            problems = main.next_command(argparse.Namespace(released=released, version_source=source,
                                                                      tag_prefix="v"))
         return problems, printed.getvalue().strip()
 
@@ -590,7 +587,7 @@ class TheChannelCommand(unittest.TestCase):
             with self.subTest(version=version):
                 printed = io.StringIO()
                 with contextlib.redirect_stdout(printed):
-                    problems = check_release.channel_command(argparse.Namespace(version=version))
+                    problems = main.channel_command(argparse.Namespace(version=version))
                 self.assertEqual((problems, printed.getvalue()), answer)
 
 

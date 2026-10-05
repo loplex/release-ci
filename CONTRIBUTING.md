@@ -4,6 +4,7 @@
 
 ```
 python3 -m pip install -r .github/requirements.txt
+python3 -m unittest discover -s lib
 python3 -m unittest discover -s check-release
 python3 -m unittest discover -s release-flow
 python3 -m unittest discover -s intellij
@@ -12,28 +13,31 @@ python3 -m unittest discover -s .github
 
 The first line installs what the `.github` suite needs.
 
-All four suites run on every push and pull request, in
+All five suites run on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml).\
 They run on the Python that [`.python-version`](.python-version) names.\
 The actions install that same Python for themselves, so the tests and the actions run on one
 version.
 
-### The `check-release` suite
+### The `lib` suite
 
-The tests sit in [`check-release/tests`](check-release/tests):
+The tests sit in [`lib/tests`](lib/tests):
 
-- [`test_versions.py`](check-release/tests/test_versions.py),
-  [`test_changelog.py`](check-release/tests/test_changelog.py) and
-  [`test_steps.py`](check-release/tests/test_steps.py) test the rules.\
+- [`test_versions.py`](lib/tests/test_versions.py),
+  [`test_changelog.py`](lib/tests/test_changelog.py) and
+  [`test_steps.py`](lib/tests/test_steps.py) test the rules.\
   They are plain functions over text, so they need no repository to release.
-- [`test_sources.py`](check-release/tests/test_sources.py) does the same for the adapters that say
-  where the version comes from.
-- [`test_repository.py`](check-release/tests/test_repository.py) tests what reads the repository,
-  and [`test_check_release.py`](check-release/tests/test_check_release.py) the command line.\
+- [`test_sources.py`](lib/tests/test_sources.py) does the same for the adapters that say where the
+  version comes from.
+- [`test_repository.py`](lib/tests/test_repository.py) tests what reads the repository, and
+  [`test_main.py`](lib/tests/test_main.py) the command line.\
   Both get repositories built for the purpose, but for `check_ancestry`, a rule tested over plain
   booleans.
-- [`test_check.py`](check-release/tests/test_check.py) runs the action's script,
-  [`check.sh`](check-release/check.sh), against such a repository.
+
+### The `check-release` suite
+
+[`check-release/tests/test_check.py`](check-release/tests/test_check.py) runs the action's script,
+[`check.sh`](check-release/check.sh), against a repository built for the purpose.
 
 ### The `release-flow` suite
 
@@ -92,14 +96,14 @@ The entry goes in the group Keep a Changelog gives its kind: `### Added`, `### C
 A change that breaks something a caller relied on:
 
 - has an entry that starts with `**BREAKING**`, as
-  [What `[Unreleased]` asks of the version](check-release/README.md#what-unreleased-asks-of-the-version)
+  [What `[Unreleased]` asks of the version](lib/README.md#what-unreleased-asks-of-the-version)
   says;
 - gets a section in [`UPGRADING.md`](UPGRADING.md), under the version it breaks, that shows what a
   caller has to change.
 
 A release with nothing under `[Unreleased]` is refused.\
 The exception is a final release that takes in the entries of the pre-releases since the final
-release before it, as [The changelog](check-release/README.md#the-changelog) says.
+release before it, as [The changelog](lib/README.md#the-changelog) says.
 
 ## Releasing this repository
 

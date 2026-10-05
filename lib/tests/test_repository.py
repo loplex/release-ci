@@ -2,7 +2,7 @@
 Most run against repositories built for the purpose; check_ancestry, the rule over what git answered, runs over
 plain booleans.
 
-Run with `python3 -m unittest discover -s check-release` from the repository root.
+Run with `python3 -m unittest discover -s lib` from the repository root.
 """
 
 import contextlib
@@ -18,7 +18,7 @@ from rules.repository import check_ancestry, holder, released_versions, reposito
 
 from .fixtures import TwoReleasesOneOffMain
 
-SCRIPT = Path(__file__).resolve().parent.parent / "check-release.py"
+SCRIPT = Path(__file__).resolve().parent.parent / "main.py"
 
 
 class ReachableTags(unittest.TestCase):

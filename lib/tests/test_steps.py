@@ -1,6 +1,6 @@
 """Tests for rules/steps.py: how far `[Unreleased]` and an open pre-release train ask the next version to move.
 
-Run with `python3 -m unittest discover -s check-release` from the repository root.
+Run with `python3 -m unittest discover -s lib` from the repository root.
 """
 
 import unittest

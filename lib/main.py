@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks a repository before and after a release.
+"""Checks a repository before and after a release, and writes what a release changes in it.
 
 - `version`: whether the candidate version may be released next,
   given the releases already tagged and what waits under `[Unreleased]`.
@@ -43,7 +43,7 @@ def read_declared(adapter, newline: str | None = None) -> str:
 
 # Where the version of a release comes from is the one thing here that depends on the kind of project.
 # rules/sources.py decides it, with one adapter per kind of repository.
-# check-release.py asks an adapter four things, through the functions below:
+# main.py asks an adapter four things, through the functions below:
 # whether it declares a version, its marker for a version being worked on, the version it names, the tag prefix.
 # set_version_command also hands it the text to rewrite.
 # The file an adapter names is read and written here, in the adapter's `encoding`.

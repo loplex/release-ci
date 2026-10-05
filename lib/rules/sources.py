@@ -1,9 +1,9 @@
 """Where the version of the next release comes from: one adapter per kind of repository.
 
-The rules know no source by name; check-release.py asks the adapter for them.
+The rules know no source by name; main.py asks the adapter for them.
 
 An adapter is a plain object over text.
-check-release.py reads and writes the file an adapter names, and the adapter says what that text declares
+main.py reads and writes the file an adapter names, and the adapter says what that text declares
 and what it becomes.
 So each adapter can be tested without a repository,
 and finding the file, or refusing a missing one, is written once instead of once per format.
@@ -29,13 +29,13 @@ An adapter that declares a version also answers:
 - `version()` and `tag_prefix()` over the file's text, and `with_version()`, the text with a new version in it.
 
 The tag prefix comes from the file.
-check-release.py asks tag_prefix() of every source that names a file, unless `--tag-prefix` is given.
+main.py asks tag_prefix() of every source that names a file, unless `--tag-prefix` is given.
 A source that names no file is given its prefix.
 
 Adding a source, such as package.json, pyproject.toml or Cargo.toml:
 - It is another adapter here, its file carrying the tag prefix beside the version,
   filed in SOURCES under its `--version-source` name.
-- Nothing in check-release.py or the other modules of rules/ changes, unless the source marks a version being
+- Nothing in main.py or the other modules of rules/ changes, unless the source marks a version being
   worked on other than with a `-SNAPSHOT` suffix, the only marker being_worked_on in versions.py knows.
 - test_sources.py holds it to what every adapter has to answer, and fails if the rules do not refuse its marker.
 - A plain VERSION file has no room for a tag prefix, so it needs more than an adapter.
@@ -146,7 +146,7 @@ class GradleProperties:
 
     `-SNAPSHOT` is how Gradle and Maven mark a version being worked on.
     It is never released to any channel:
-    check-release refuses a candidate that still carries it, and does not count a tag that carries it as a release.
+    `version` refuses a candidate that still carries it, and no tag that carries it counts as a release.
     """
 
     name = "gradle.properties"

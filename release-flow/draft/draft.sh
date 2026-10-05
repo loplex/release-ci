@@ -12,7 +12,7 @@
 # Reads:  PYTHON VERSION TAG BRANCH FILES GH_TOKEN
 set -uo pipefail
 
-script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../check-release" && pwd)/check-release.py"
+script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../lib" && pwd)/main.py"
 check_release=("$PYTHON" "$script")
 
 # The notes, the files and the channel are checked here, before anything is pushed.

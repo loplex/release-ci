@@ -1,4 +1,4 @@
-"""The rules check-release.py runs, and what they read.
+"""The rules main.py runs, and what they read.
 
 - versions.py, changelog.py and steps.py: the rules, as plain functions over text.
 - repository.py: git, the repository's files, and its release tags,

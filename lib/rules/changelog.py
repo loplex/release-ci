@@ -37,6 +37,15 @@ def structure(changelog: str) -> list[Line]:
         raise SystemExit(f"CHANGELOG.md {unread}") from None
 
 
+class UnreadCopy(SystemExit):
+    """through()'s refusal of a copy at a tag, telling whether the section of the label began above the line refused.
+    Where it did, the tag holds that section; where it did not, nothing says whether the tag holds one at all."""
+
+    def __init__(self, message: str, began: bool):
+        super().__init__(message)
+        self.began = began
+
+
 def through(changelog: str, label: str) -> str:
     """The changelog down to the end of the section of `label`, read no further, or a refusal naming a line above it.
 
@@ -53,7 +62,7 @@ def through(changelog: str, label: str) -> str:
                 return "\n".join(lines[:index])
             inside = inside or bool(heading and heading.group(1) == label)
     except Unread as unread:
-        raise SystemExit(f"CHANGELOG.md {unread.found}") from None
+        raise UnreadCopy(f"CHANGELOG.md {unread.found}", inside) from None
     return changelog
 
 
@@ -120,17 +129,19 @@ def check_changelog(in_tree: str, at_tag: dict[str, str], off_history: set[str] 
         if was is None:
             continue  # Tagged before the section existed; there is nothing to have changed.
         if version not in current:
-            if version in off_history:
-                problems.append(
-                    f"[{version}] is released but its section is not on this history, and neither is the tag that "
-                    f"released it: the release has yet to reach here"
-                )
-            else:
-                problems.append(f"[{version}] is released but its section is gone")
+            problems.append(missing(version, off_history))
         elif current[version] != was:
             problems.append(f"[{version}] is released but its section no longer reads as the tag has it")
 
     return problems
+
+
+def missing(version: str, off_history: set[str]) -> str:
+    """The problem with a released section the tree does not have, told apart as check_changelog says."""
+    if version in off_history:
+        return (f"[{version}] is released but its section is not on this history, and neither is the tag that "
+                f"released it: the release has yet to reach here")
+    return f"[{version}] is released but its section is gone"
 
 
 def uncompared(at_tag: dict[str, str]) -> list[str]:

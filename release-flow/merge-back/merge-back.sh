@@ -3,7 +3,7 @@
 # Inputs come from the environment, because that is how a composite action hands them over.
 # The script lives outside action.yml so that a test can run it against a repository, not only GitHub.
 #
-# Reads:  PYTHON VERSION_SOURCE TAG TAG_PREFIX DEFAULT_BRANCH CHECK_WORKFLOW GITHUB_OUTPUT
+# Reads:  PYTHON VERSION_SOURCE TAG TAG_PREFIX DEFAULT_BRANCH CHECK_WORKFLOW SKIP_UNREADABLE_RELEASES GITHUB_OUTPUT
 #         GH_TOKEN, read by `gh`, not by this script
 # Writes: version, next, landed  (to GITHUB_OUTPUT)
 set -uo pipefail
@@ -23,6 +23,16 @@ source_arguments=(--version-source "$VERSION_SOURCE")
 if [[ -n $TAG_PREFIX ]]; then
   source_arguments+=(--tag-prefix "$TAG_PREFIX")
 fi
+
+# `true` passes over a release whose tag holds a CHANGELOG.md line lib/main.py does not read: a tag cannot be edited.
+# Empty is `false`, because a dispatch input arrives empty on every other event.
+case ${SKIP_UNREADABLE_RELEASES:-false} in
+  true) changelog_arguments=(--skip-unreadable-releases) ;;
+  false) changelog_arguments=() ;;
+  *)
+    echo "::error::skip-unreadable-releases is '$SKIP_UNREADABLE_RELEASES', which is neither true nor false"
+    exit 1 ;;
+esac
 
 prefix=$("${check_release[@]}" prefix "${source_arguments[@]}"); rc=$?
 if (( rc != 0 )); then
@@ -130,7 +140,11 @@ if ! git merge --no-edit "origin/${DEFAULT_BRANCH}"; then
   echo "::warning::origin/${DEFAULT_BRANCH} did not merge into ${branch}; it is left to a pull request"
 else
   for check in changelog ancestry; do
-    if ! "${check_release[@]}" "$check" "${source_arguments[@]}"; then
+    arguments=("${source_arguments[@]}")
+    if [[ $check == changelog ]]; then
+      arguments+=("${changelog_arguments[@]}")
+    fi
+    if ! "${check_release[@]}" "$check" "${arguments[@]}"; then
       git reset -q --hard "$before"
       landable=false
       echo "::warning::origin/${DEFAULT_BRANCH} merged into ${branch}, but ${check} refused the result;" \

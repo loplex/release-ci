@@ -51,13 +51,15 @@ class Staged(unittest.TestCase):
     def setUp(self):
         self.stage()
 
-    def prepare(self, source="gradle.properties", tag_prefix="", version="", repository_url=""):
+    def prepare(self, source="gradle.properties", tag_prefix="", version="", repository_url="",
+                skip_unreadable_releases="false"):
         written = Path(self.enterContext(tempfile.TemporaryDirectory())) / "output.txt"
         written.write_text("", encoding="utf-8")
         done = subprocess.run(
             ["bash", str(PREPARE)], cwd=self.work, capture_output=True, text=True,
             env={**os.environ, "PYTHON": sys.executable, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix,
-                 "VERSION": version, "REPOSITORY_URL": repository_url, "GITHUB_OUTPUT": str(written)},
+                 "VERSION": version, "REPOSITORY_URL": repository_url,
+                 "SKIP_UNREADABLE_RELEASES": skip_unreadable_releases, "GITHUB_OUTPUT": str(written)},
         )
         outputs = dict(
             line.split("=", 1) for line in written.read_text(encoding="utf-8").splitlines() if "=" in line
@@ -72,6 +74,28 @@ class Staged(unittest.TestCase):
 
 
 class Prepare(Staged):
+    def test_a_tag_holding_a_line_not_read_stops_the_release_unless_skipped(self):
+        """The copy of CHANGELOG.md at v0.1.0 holds a block quote in its section, and a tag cannot be edited."""
+        git("tag", "-d", "v0.1.0", cwd=self.work)
+        (self.work / "CHANGELOG.md").write_text(PENDING.replace("- old", "> old"), encoding="utf-8")
+        git("commit", "-qam", "quoted", cwd=self.work)
+        git("tag", "v0.1.0", cwd=self.work)
+        (self.work / "CHANGELOG.md").write_text(PENDING, encoding="utf-8")
+        git("commit", "-qam", "listed", cwd=self.work)
+        _, done = self.prepare()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("holds a block quote", done.stderr)
+        self.assertEqual(self.release_branches(), [])
+        outputs, done = self.prepare(skip_unreadable_releases="true")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(outputs.get("version"), "0.1.1")
+
+    def test_skip_unreadable_releases_is_true_or_false(self):
+        _, done = self.prepare(skip_unreadable_releases="yes")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("skip-unreadable-releases is 'yes', which is neither true nor false", done.stdout)
+        self.assertEqual(self.release_branches(), [])
+
     def test_the_release_commit_is_cut_onto_a_branch_of_its_own(self):
         outputs, done = self.prepare()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)

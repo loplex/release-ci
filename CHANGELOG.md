@@ -11,6 +11,11 @@ released it, so once a version has a section here, that section may not be edite
 
 - `--tag-prefix '^none'` of `lib/main.py` says the tags have no prefix, as the actions' `tag-prefix`
   input does.
+- `skip-unreadable-releases` on `check-release`, `release-flow/prepare` and
+  `release-flow/merge-back`, and `lib/main.py changelog --skip-unreadable-releases`: the `changelog`
+  check names as not compared a release whose tag holds a line of `CHANGELOG.md` it does not read,
+  instead of failing.\
+  Where that line stands inside the release's own section, a tree without that section still fails.
 
 ### Changed
 

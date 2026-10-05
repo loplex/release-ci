@@ -83,7 +83,8 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
 
     def test_a_section_off_this_history_is_not_called_deleted(self):
         with contextlib.redirect_stdout(io.StringIO()):
-            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
+                                                                   skip_unreadable_releases=False))
         self.assertEqual(len(problems), 1)
         self.assertIn("not on this history", problems[0])
 
@@ -96,7 +97,8 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.1] - 2025-12-01\n\n- Z\n")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
+                                                                   skip_unreadable_releases=False))
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
         self.assertIn("Not compared: 0.0.1 ", printed.getvalue())
@@ -111,15 +113,17 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.1] - 2025-12-01\n\n- Z\n")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
+                                                                   skip_unreadable_releases=False))
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
         self.assertIn("Not compared: 0.0.1 ", printed.getvalue())
 
-    def run_changelog(self) -> tuple[list[str], str]:
+    def run_changelog(self, skip_unreadable_releases: bool) -> tuple[list[str], str]:
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
+                                                                 skip_unreadable_releases=skip_unreadable_releases))
         return problems, printed.getvalue()
 
     def test_a_line_below_the_tagged_section_is_not_read(self):
@@ -128,21 +132,65 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.9] - 2025-01-01\n\n> quoted\n")
         self.git("tag", "v0.1.0")
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.9] - 2025-01-01\n\n- quoted\n")
-        problems, printed = self.run_changelog()
+        problems, printed = self.run_changelog(skip_unreadable_releases=False)
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed)
 
-    def test_a_line_not_read_in_the_tagged_section_fails(self):
-        """A tag cannot be edited, so the refusal stands for good."""
+    def test_a_line_not_read_in_the_tagged_section_fails_unless_skipped(self):
+        """A tag cannot be edited, so the refusal stands for good; --skip-unreadable-releases names the release as not
+        compared instead."""
         self.git("tag", "-d", "v0.1.0", "v0.2.0")
         self.commit("## [0.1.0] - 2026-01-01\n\n> A\n")
         self.git("tag", "v0.1.0")
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n")
-        problems, _ = self.run_changelog()
+        problems, _ = self.run_changelog(skip_unreadable_releases=False)
         self.assertEqual(len(problems), 1)
-        for said in ("line 5 holds a block quote", "as tagged v0.1.0", "[0.1.0] cannot be compared"):
+        for said in ("line 5 holds a block quote", "as tagged v0.1.0", "[0.1.0] cannot be compared",
+                     "--skip-unreadable-releases"):
             self.assertIn(said, problems[0])
         self.assertNotIn(": write", problems[0])  # The tag cannot be edited.
+        problems, printed = self.run_changelog(skip_unreadable_releases=True)
+        self.assertEqual(problems, [])
+        self.assertIn("Compared 0 released section(s)", printed)
+        self.assertIn("Not compared: 0.1.0 - CHANGELOG.md line 5 holds a block quote", printed)
+        self.assertNotIn(": write", printed)
+
+    def test_a_skipped_tag_read_into_its_section_still_needs_it_in_the_tree(self):
+        """The copy at v0.1.0 is read past `## [0.1.0]` before the line it refuses, so the tag holds that section.
+        Skipped or not, a tree without it has lost it."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n> A\n")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.2.0] - 2026-02-01\n\n- B\n")
+        problems, printed = self.run_changelog(skip_unreadable_releases=True)
+        self.assertEqual(problems, ["[0.1.0] is released but its section is gone"])
+        self.assertNotIn("Not compared: 0.1.0", printed)
+        problems, _ = self.run_changelog(skip_unreadable_releases=False)
+        self.assertTrue(problems[0].endswith("names it as not compared instead, but its section is not in this tree, "
+                                             "which fails either way"), problems[0])
+
+    def test_a_skipped_tag_refused_above_its_section_is_not_called_deleted(self):
+        """Refused above `## [0.1.0]`, the copy may be older than that section, so a tree without it proves nothing.
+        The release is named as not compared, with what is not known."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        self.commit("> intro\n\n## [0.1.0] - 2026-01-01\n\n- A\n")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.2.0] - 2026-02-01\n\n- B\n")
+        problems, printed = self.run_changelog(skip_unreadable_releases=True)
+        self.assertEqual(problems, [])
+        self.assertIn("Not compared: 0.1.0 - CHANGELOG.md line 3 holds a block quote", printed)
+        self.assertIn("the tree has no section for it, and the tag may never have had one", printed)
+
+    def test_a_skipped_tag_is_named_even_when_the_check_fails(self):
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n> A\n")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.2.0] - 2026-02-01\n\n- B\n\n## [0.1.0] - 2026-01-01\n\n- A\n")
+        self.git("tag", "v0.2.0")
+        self.commit("## [0.2.0] - 2026-02-01\n\n- B, reworded\n\n## [0.1.0] - 2026-01-01\n\n- A\n")
+        problems, printed = self.run_changelog(skip_unreadable_releases=True)
+        self.assertEqual(problems, ["[0.2.0] is released but its section no longer reads as the tag has it"])
+        self.assertIn("Not compared: 0.1.0 - CHANGELOG.md line 5 holds a block quote", printed)
 
 
 class WritingTheVersionBack(unittest.TestCase):
@@ -305,7 +353,8 @@ class AChangelogWithALineNotRead(unittest.TestCase):
             with self.subTest(command.__name__):
                 with (contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()),
                       self.assertRaises(SystemExit) as raised):
-                    command(argparse.Namespace(version_source="tags", tag_prefix="v", **arguments))
+                    command(argparse.Namespace(version_source="tags", tag_prefix="v", skip_unreadable_releases=False,
+                                               **arguments))
                 self.assertIn("line 7 holds a block quote", str(raised.exception))
 
 

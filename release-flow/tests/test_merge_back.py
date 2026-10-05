@@ -81,7 +81,8 @@ class Staged(unittest.TestCase):
             cwd=theirs)
         git("push", "-q", "origin", "main", cwd=theirs)
 
-    def carry_back(self, source="gradle.properties", tag_prefix="", fetch=True, check_workflow="ci.yml"):
+    def carry_back(self, source="gradle.properties", tag_prefix="", fetch=True, check_workflow="ci.yml",
+                   skip_unreadable_releases="false"):
         # Not fetching is how the race is staged.
         # The checkout knows the default branch as it was when the checkout was made, as a run does while someone
         # else pushes.
@@ -93,7 +94,7 @@ class Staged(unittest.TestCase):
             ["bash", str(MERGE_BACK)], cwd=self.work, capture_output=True, text=True,
             env={**os.environ, "PYTHON": sys.executable, "PATH": f"{self.stubs}:{os.environ['PATH']}",
                  "VERSION_SOURCE": source, "TAG": self.tag, "TAG_PREFIX": tag_prefix, "DEFAULT_BRANCH": "main",
-                 "CHECK_WORKFLOW": check_workflow,
+                 "CHECK_WORKFLOW": check_workflow, "SKIP_UNREADABLE_RELEASES": skip_unreadable_releases,
                  "GITHUB_OUTPUT": str(written), "GH_TOKEN": "stub"},
         )
         outputs = dict(
@@ -121,6 +122,31 @@ class MergeBack(Staged):
         self.assertEqual(outputs.get("version"), "0.1.0")
         self.assertEqual(outputs.get("next"), "0.1.1-SNAPSHOT")
         self.assertTrue(self.on_default_branch(self.tag), "the tag has to be reachable from the branch")
+
+    def test_a_tag_holding_a_line_not_read_leaves_the_merge_to_a_pull_request_unless_skipped(self):
+        """v0.0.9's copy of CHANGELOG.md holds a block quote, and a tag cannot be edited.
+        It stands above the section, so the section's absence from the tree, skipped, is no deletion.
+        The option goes to `changelog` alone: `ancestry` would refuse it, and the release would not land."""
+        git("switch", "-q", "main", cwd=self.work)
+        tagged = AT_START + "\n> q\n\n## [0.0.9] - 2026-01-01\n\n- q\n"
+        (self.work / "CHANGELOG.md").write_text(tagged, encoding="utf-8")
+        git("commit", "-qam", "0.0.9", cwd=self.work)
+        git("tag", "v0.0.9", cwd=self.work)
+        (self.work / "CHANGELOG.md").write_text(AT_START, encoding="utf-8")
+        git("commit", "-qam", "back", cwd=self.work)
+        git("push", "-q", "origin", "main", "v0.0.9", cwd=self.work)
+        git("switch", "-q", "release/0.1.0", cwd=self.work)
+        outputs, done = self.carry_back()
+        self.assertEqual(outputs.get("landed"), "false", done.stdout + done.stderr)
+        self.assertIn("holds a block quote", done.stderr)
+        outputs, done = self.carry_back(skip_unreadable_releases="true")
+        self.assertEqual(outputs.get("landed"), "true", done.stdout + done.stderr)
+
+    def test_skip_unreadable_releases_is_true_or_false(self):
+        outputs, done = self.carry_back(skip_unreadable_releases="yes")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("skip-unreadable-releases is 'yes', which is neither true nor false", done.stdout)
+        self.assertEqual(outputs, {})
 
     def test_the_next_version_is_opened_on_the_way(self):
         self.carry_back()

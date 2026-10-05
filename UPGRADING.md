@@ -106,7 +106,10 @@ python3 <clone>/lib/main.py changelog --version-source <source> [--tag-prefix <p
   Under `[Unreleased]`, write that.
 - The `changelog` check reads the copy at each release tag down to the end of that release's
   section, or whole where it has no such section, and a tag cannot be edited.\
-  A refused line in what it reads fails the check on every run.
+  A refused line in what it reads fails the check on every run.\
+  Rewrite the line in the tree, and give `skip-unreadable-releases: true` to `check-release`,
+  `release-flow/prepare` and `release-flow/merge-back`.
+  The check then names that release as not compared, with the line, instead of failing.
 
 ### Actions that run Python install their own
 

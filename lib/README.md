@@ -45,6 +45,7 @@ The options go after the subcommand name, and a subcommand refuses an option it 
   `close-changelog`.\
   `close-changelog` reads them only with `--repository-url`, and takes them either way.
 - `--version-source` alone: `set-version`.
+- `--skip-unreadable-releases`: `changelog` alone, as [The changelog](#the-changelog) says.
 - Neither: `notes` and `channel`.
 
 ## Versions
@@ -140,7 +141,10 @@ The `changelog` check compares every released section with the copy in its relea
   A copy without that section is read whole.
 - A line in the copy that `main.py` does not
   [read](#what-mainpy-reads-in-changelogmd), in the part that is read, fails the check.\
-  A tag cannot be edited, so it fails on every run.
+  A tag cannot be edited, so it fails on every run.\
+  With `--skip-unreadable-releases`, the release is listed as not compared instead, with that line.\
+  Where that line stands inside the release's own section, the tag holds the section, so a tree
+  without it still fails.
 
 ### What `main.py` reads in `CHANGELOG.md`
 
@@ -193,7 +197,8 @@ Refused, with what to write instead:
 | a line of a fence or a comment in a list item, left of its text | the indentation of the item's text |
 
 A released section cannot be edited while its tag's copy is compared.\
-A refused line in one fails the `changelog` check on every run: its tag holds the line.
+A refused line in one is rewritten in the tree, and `--skip-unreadable-releases` then lists the
+release as not compared: its tag still holds the line.
 
 ### What `[Unreleased]` asks of the version
 

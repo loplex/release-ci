@@ -31,8 +31,9 @@ import subprocess
 import sys
 
 from rules import sources
-from rules.versions import SEMVER, channel_of, check_version, version_after
-from rules.changelog import bodies, check_changelog, closed, structure, through, uncompared
+from rules.versions import SEMVER, channel_of, check_version, precedence, version_after
+from rules.changelog import (UnreadCopy, bodies, check_changelog, closed, missing, sections, structure, through,
+                             uncompared)
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
 from rules.repository import check_ancestry, git, holder, read_file, released_versions, repository, unreachable
 
@@ -203,22 +204,42 @@ def changelog_command(arguments) -> list[str]:
     # A copy at a tag is read by the same rules, down to the end of its own section: nothing below it is read.
     # A copy without that section is read whole.
     # One they do not read is told apart from the file in the tree, and a tag cannot be edited to fix it.
-    unread = {}
+    unread, began = {}, set()
     for version, text in list(at_tag.items()):
         try:
             at_tag[version] = through(text, version)
-        except SystemExit as refusal:
+        except UnreadCopy as refusal:
             unread[version] = f"{refusal} - as tagged {prefix}{version}"
+            if refusal.began:
+                began.add(version)
             del at_tag[version]
 
-    problems = [f"{why}, which cannot be edited, so [{version}] cannot be compared" for version, why in unread.items()]
-    problems += check_changelog(in_tree, at_tag, off_history=unreachable(prefix, at_tag))
+    off_history, present = unreachable(prefix, [*at_tag, *began]), sections(in_tree)
+    problems = [] if arguments.skip_unreadable_releases else [
+        f"{why}, which cannot be edited, so [{version}] cannot be compared: the skip-unreadable-releases input, "
+        f"--skip-unreadable-releases here, names it as not compared instead"
+        + ("" if version not in began or version in present else ", but its section is not in this tree, which fails "
+           "either way") for version, why in unread.items()]
+    problems += check_changelog(in_tree, at_tag, off_history=off_history)
+    # A skipped copy read past the heading of its own section holds that section, so the tree has to hold it too.
+    # One refused above that heading may be older than the section, so its absence from the tree proves nothing.
+    gone = [] if not arguments.skip_unreadable_releases else sorted(
+        (version for version in began if version not in present), key=precedence)
+    problems += [missing(version, off_history) for version in gone]
     if not problems:
         not_compared = uncompared(at_tag)
         print(f"Compared {len(at_tag) - len(not_compared)} released section(s) against the tag that released them.")
         if not_compared:
             print(f"Not compared: {', '.join(not_compared)} - tagged before the section existed, so the tag holds "
                   f"no text to compare against.")
+    # Named whatever else fails: the release was passed over on purpose, and the run says so.
+    if arguments.skip_unreadable_releases:
+        for version, why in unread.items():
+            if version in gone:
+                continue
+            unknown = ("" if version in present
+                       else "; the tree has no section for it, and the tag may never have had one")
+            print(f"Not compared: {version} - {why}{unknown}")
     return problems
 
 
@@ -362,6 +383,11 @@ def main() -> int:
 
     changelog_parser = commands.add_parser("changelog", parents=both,
                                            help="whether released sections still read as released")
+    changelog_parser.add_argument("--skip-unreadable-releases", action="store_true",
+                                  help="leave out, as not compared, a release whose tag holds a CHANGELOG.md line "
+                                       "this program does not read, in its section or above it, or anywhere in a "
+                                       "copy without that section; one with that line in its own section still "
+                                       "fails where the tree does not hold the section")
     changelog_parser.set_defaults(run=changelog_command)
 
     set_version_parser = commands.add_parser("set-version", parents=[version_source],

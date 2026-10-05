@@ -75,6 +75,12 @@ inputs:
       The token `gh` uses to open the pull request and to start `check-workflow`.
       The pushes are made with the credentials actions/checkout left, not with this token.
     default: ${{ github.token }}
+  skip-unreadable-releases:
+    description: |
+      `true` names as not compared a release whose tag holds a line of CHANGELOG.md the `changelog` check
+      does not read, instead of failing.
+      check-release's action describes it in full.
+    default: 'false'
 
 outputs:
   version:
@@ -121,6 +127,7 @@ runs:
         DEFAULT_BRANCH: ${{ inputs.default-branch }}
         CHECK_WORKFLOW: ${{ inputs.check-workflow }}
         GH_TOKEN: ${{ inputs.token }}
+        SKIP_UNREADABLE_RELEASES: ${{ inputs.skip-unreadable-releases }}
       # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
       # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
       run: |

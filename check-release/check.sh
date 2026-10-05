@@ -3,7 +3,7 @@
 # It reads environment variables, not arguments, because that is how a composite action passes its inputs.
 # It is a file of its own, not part of action.yml, so that a test can run it against a repository.
 #
-# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX CHECKS VERSION GITHUB_OUTPUT
+# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX CHECKS VERSION SKIP_UNREADABLE_RELEASES GITHUB_OUTPUT
 # Writes: version, channel  (to GITHUB_OUTPUT, where `version` ran and said yes)
 set -uo pipefail
 
@@ -39,10 +39,23 @@ for check in "${check_names[@]}"; do
   esac
 done
 
+# `true` passes over a release whose tag holds a CHANGELOG.md line lib/main.py does not read: a tag cannot be edited.
+# Empty is `false`, because a dispatch input arrives empty on every other event.
+case ${SKIP_UNREADABLE_RELEASES:-false} in
+  true) changelog_arguments=(--skip-unreadable-releases) ;;
+  false) changelog_arguments=() ;;
+  *)
+    echo "::error::skip-unreadable-releases is '$SKIP_UNREADABLE_RELEASES', which is neither true nor false"
+    exit 1 ;;
+esac
+
 failed=0
 for check in "${check_names[@]}"; do
   if [[ $check == version && -n $VERSION ]]; then
     out=$("$PYTHON" "$script" version "${source_arguments[@]}" --version "$VERSION" 2>&1)
+    rc=$?
+  elif [[ $check == changelog ]]; then
+    out=$("$PYTHON" "$script" changelog "${source_arguments[@]}" "${changelog_arguments[@]}" 2>&1)
     rc=$?
   else
     out=$("$PYTHON" "$script" "$check" "${source_arguments[@]}" 2>&1)

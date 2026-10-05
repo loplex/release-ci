@@ -54,6 +54,12 @@ inputs:
         Any other link definition in the changelog stays as it is.
       - Left empty: the changelog's link definitions are left alone.
     default: ''
+  skip-unreadable-releases:
+    description: |
+      `true` names as not compared a release whose tag holds a line of CHANGELOG.md the `changelog` check
+      does not read, instead of failing.
+      check-release's action describes it in full.
+    default: 'false'
 
 outputs:
   version:
@@ -88,6 +94,7 @@ runs:
         TAG_PREFIX: ${{ inputs.tag-prefix }}
         VERSION: ${{ inputs.version }}
         REPOSITORY_URL: ${{ inputs.repository-url }}
+        SKIP_UNREADABLE_RELEASES: ${{ inputs.skip-unreadable-releases }}
       # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
       # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
       run: |

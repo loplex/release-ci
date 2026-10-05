@@ -36,13 +36,14 @@ class TheAction(unittest.TestCase):
     def setUp(self):
         self.stage()
 
-    def check(self, checks, tag_prefix="v", version="", source="tags"):
+    def check(self, checks, tag_prefix="v", version="", source="tags", skip_unreadable_releases=None):
         written = Path(self.enterContext(tempfile.TemporaryDirectory())) / "output.txt"
         written.write_text("", encoding="utf-8")
+        skip = {} if skip_unreadable_releases is None else {"SKIP_UNREADABLE_RELEASES": skip_unreadable_releases}
         done = subprocess.run(
             ["bash", str(CHECK_SH)], cwd=self.work, capture_output=True, text=True,
             env={**os.environ, "PYTHON": sys.executable, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix,
-                 "CHECKS": checks, "VERSION": version, "GITHUB_OUTPUT": str(written)},
+                 "CHECKS": checks, "VERSION": version, "GITHUB_OUTPUT": str(written), **skip},
         )
         outputs = dict(
             line.split("=", 1) for line in written.read_text(encoding="utf-8").splitlines() if "=" in line
@@ -60,6 +61,29 @@ class TheAction(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertIn("::error::check-release version said no", done.stdout)
         self.assertEqual(outputs, {})
+
+    def test_a_tag_holding_a_line_not_read_fails_changelog_unless_skipped(self):
+        """The tag cannot be edited, so only skip-unreadable-releases gets the check past it; empty is false."""
+        git("tag", "-d", "v0.1.0", cwd=self.work)
+        (self.work / "CHANGELOG.md").write_text("# Changelog\n\n## [0.1.0] - 2026-09-01\n\n> A\n", encoding="utf-8")
+        git("commit", "-qam", "quoted", cwd=self.work)
+        git("tag", "v0.1.0", cwd=self.work)
+        (self.work / "CHANGELOG.md").write_text("# Changelog\n\n## [0.1.0] - 2026-09-01\n\n- A\n", encoding="utf-8")
+        git("commit", "-qam", "listed", cwd=self.work)
+        for skip in (None, "false", ""):
+            with self.subTest(skip=skip):
+                _, done = self.check("changelog", skip_unreadable_releases=skip)
+                self.assertEqual(done.returncode, 1)
+                self.assertIn("line 5 holds a block quote", done.stdout)
+        _, done = self.check("changelog ancestry", skip_unreadable_releases="true")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("Not compared: 0.1.0 - CHANGELOG.md line 5 holds a block quote", done.stdout)
+
+    def test_skip_unreadable_releases_is_true_or_false(self):
+        _, done = self.check("changelog", skip_unreadable_releases="yes")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("skip-unreadable-releases is 'yes', which is neither true nor false", done.stdout)
+        self.assertNotIn("Compared", done.stdout)
 
     def test_a_name_that_is_no_check_fails_before_anything_runs(self):
         """A typo that was skipped would be a check that did not run, and nobody would notice."""

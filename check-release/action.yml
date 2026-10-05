@@ -57,6 +57,18 @@ inputs:
       - Under `tags`: `0.2.0`.
         Left empty, the version after the highest release is checked, as described under `version-source`.
     default: ''
+  skip-unreadable-releases:
+    description: |
+      What `changelog` does with a release whose tag holds a line of CHANGELOG.md it does not read,
+      in the release's section or above it, or anywhere in a copy without that section:
+      - `false`, the default: it fails.
+        A tag cannot be edited, so it fails on every run.
+      - `true`: it names the release as not compared instead.
+        Where that line stands inside the release's own section, the tag holds the section,
+        so a tree without it still fails, as for any other release.
+
+      Empty is `false`, so a `workflow_dispatch` input passed on here is `false` on every other event.
+    default: 'false'
 
 outputs:
   version:
@@ -96,6 +108,7 @@ runs:
         TAG_PREFIX: ${{ inputs.tag-prefix }}
         CHECKS: ${{ inputs.checks }}
         VERSION: ${{ inputs.version }}
+        SKIP_UNREADABLE_RELEASES: ${{ inputs.skip-unreadable-releases }}
       # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
       # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
       run: |

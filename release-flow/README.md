@@ -51,6 +51,13 @@ Given a `repository-url`, `prepare` also rewrites the link definitions of the ch
 pointing into the repository.\
 Any other link definition stays as it is.
 
+Given `skip-unreadable-releases: true`, the `changelog` check names as not compared a release whose
+tag holds a line of `CHANGELOG.md` it does not read, instead of failing.\
+[The changelog](../lib/README.md#the-changelog) says which lines count.\
+The release job below passes it on from a checkbox of the dispatch.\
+`merge-back` and `check-release` take the same input.\
+Their events have no checkbox, so it is written in their workflows.
+
 ### Nothing leaves the workspace
 
 `prepare` pushes nothing.\
@@ -70,6 +77,12 @@ on:
           The version to release, 0.2.0 or 0.2.0-SNAPSHOT; left empty, the one
           gradle.properties declares
         default: ''
+      skip-unreadable-releases:
+        description: >-
+          Pass over a release whose tag holds a CHANGELOG.md line the checks do
+          not read
+        type: boolean
+        default: false
 # One at a time: two runs would race for the same release branch and the same draft.
 concurrency:
   group: release
@@ -92,6 +105,7 @@ jobs:
           version-source: gradle.properties
           version: ${{ inputs.version }}
           repository-url: ${{ github.server_url }}/${{ github.repository }}
+          skip-unreadable-releases: ${{ inputs.skip-unreadable-releases }}
       # Build from the commit now checked out, then:
       - uses: loplex/release-ci/release-flow/draft@<tag>
         with:

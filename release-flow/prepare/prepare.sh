@@ -11,7 +11,7 @@
 # Inputs come from the environment, because that is how a composite action hands them over.
 # The script lives outside action.yml so that a test can run it against a repository.
 #
-# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX VERSION REPOSITORY_URL GITHUB_OUTPUT
+# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX VERSION REPOSITORY_URL SKIP_UNREADABLE_RELEASES GITHUB_OUTPUT
 # Writes: version, tag, branch  (to GITHUB_OUTPUT)
 set -uo pipefail
 
@@ -23,12 +23,21 @@ if [[ -n $TAG_PREFIX ]]; then
   source_arguments+=(--tag-prefix "$TAG_PREFIX")
 fi
 
+# `true` passes over a release whose tag holds a CHANGELOG.md line lib/main.py does not read: a tag cannot be edited.
+# Empty is `false`, because a dispatch input arrives empty on every other event.
+case ${SKIP_UNREADABLE_RELEASES:-false} in
+  true) changelog_arguments=(--skip-unreadable-releases) ;;
+  false) changelog_arguments=() ;;
+  *)
+    echo "::error::skip-unreadable-releases is '$SKIP_UNREADABLE_RELEASES', which is neither true nor false"
+    exit 1 ;;
+esac
+
 # All the checks run before anything is written.
 # A release that fails them was then never cut, and there is nothing to undo.
 failed=0
-for check in changelog ancestry; do
-  "${check_release[@]}" "$check" "${source_arguments[@]}" || failed=1
-done
+"${check_release[@]}" changelog "${source_arguments[@]}" "${changelog_arguments[@]}" || failed=1
+"${check_release[@]}" ancestry "${source_arguments[@]}" || failed=1
 version_arguments=()
 if [[ -n $VERSION ]]; then
   version_arguments=(--version "$VERSION")

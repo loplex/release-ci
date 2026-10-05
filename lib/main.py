@@ -32,7 +32,7 @@ import sys
 
 from rules import sources
 from rules.versions import SEMVER, channel_of, check_version, precedence, version_after
-from rules.changelog import (UnreadCopy, bodies, check_changelog, closed, missing, sections, structure, through,
+from rules.changelog import (UnreadCopy, bodies, check_changelog, closed, missing, sections, silent, structure, through,
                              uncompared)
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
 from rules.repository import check_ancestry, git, holder, read_file, released_versions, repository, unreachable
@@ -312,9 +312,10 @@ def notes_command(arguments) -> list[str]:
     It comes from the same file the changelog check holds to the tag, so the release page and the changelog
     cannot drift apart. The one difference is the warning release-flow/warn puts above the notes while
     publishing the release elsewhere has not completed.
-    An empty section is refused: nobody means to make a release whose notes are empty."""
+    An empty section, or one of nothing but comments, is refused: nobody means to make a release whose notes are
+    empty."""
     text = bodies(read_changelog("the released sections")).get(arguments.version, "")
-    if not text.strip():
+    if all(silent(text)):
         return [f"CHANGELOG.md holds nothing for {arguments.version}, so there are no notes to release it with"]
     print(text)
     return []

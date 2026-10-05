@@ -121,7 +121,21 @@ It refuses:
 
 - a file with no `[Unreleased]` section;
 - a version that already has a section;
-- an empty `[Unreleased]`, unless the release is a final one with pre-releases to take in.
+- an `[Unreleased]` that says nothing, unless the release is a final one with pre-releases to take
+  in.\
+  HTML comments say nothing: GitHub shows none of them.\
+  Nor does a line where Python's `str.isprintable()` accepts none of its characters but the space:
+  white space, a no-break space, a zero-width space or a soft hyphen alone say nothing, and
+  `U+3164`, drawn blank, says something.\
+  A link definition, such as `[//]: # (nothing removed yet)`, says nothing either: GitHub shows
+  it nowhere.\
+  In an entry or a line of text, a link counts as its text, and `*`, `_` and `~` as nothing, as the
+  marks of emphasis and strikethrough would; a character reference such as `&nbsp;` counts as its
+  character.
+
+Markdown is read only this far, not rendered, so the verdict can differ from GitHub's either way: an
+`[Unreleased]` left empty by an HTML tag with nothing in it, or by a comment that runs on over
+lines, can pass, and one of nothing but `*` is refused.
 
 A final release takes into its section the entries of every pre-release that SemVer orders below it
 and above the final release before it.\
@@ -226,11 +240,9 @@ applied to Keep a Changelog's kinds of change:
 - A group with a name Keep a Changelog does not use, such as `### Documentation`, is named in a
   note on stderr.\
   A feature filed under a misspelled `### Add` can then still be seen.
-- An empty group asks for nothing, and HTML comments are ignored.\
-  An entry or a line with no character Python's `str.isprintable()` accepts but the space counts as
-  none, comments aside, with a link read as its text, every `*`, `_` and `~` dropped and a character
-  reference such as `&nbsp;` read as its character.\
-  That is a reading of the Markdown, not a rendering of it, so it can differ from what GitHub shows.
+- An empty group asks for nothing, and HTML comments and link definitions are ignored.\
+  An entry or a line that says nothing counts as none, comments aside, by the measure that
+  [refuses](#the-changelog) an `[Unreleased]` that says nothing.
 - An entry under no group at all is refused, because nothing says what kind of change it is.
 - A repository with no `CHANGELOG.md`, or no `[Unreleased]` section in it, is asked for no more
   than a patch, and told so on stderr.

@@ -83,6 +83,14 @@ released it, so once a version has a section here, that section may not be edite
   a group.\
   A line that only began like a link definition, such as `[scope]: entry text`, was left out of the
   release notes and of what the `changelog` check compares.
+- `close-changelog` and `notes` refuse as empty an `[Unreleased]` or a section with no character
+  `str.isprintable()` accepts but the space, HTML comments aside, such as one of zero-width spaces
+  or one holding only `<!-- what changed -->`.\
+  In an entry or a line of text, a link counts as its text and every `*`, `_` and `~` as nothing; a
+  character reference such as `&nbsp;` counts as its character.\
+  `close-changelog` takes a link definition for nothing too, wherever it stands.\
+  Both took only white space and link definitions for nothing, `close-changelog` only a definition
+  at the end of `[Unreleased]`, so such a section was released with empty notes.
 - `intellij/publish`: `attempts` and `wait` have to be whole numbers, `attempts` from 1 to 9999,
   checked before the upload.\
   An `attempts` that was no number made no attempt, and the run failed as though the version was

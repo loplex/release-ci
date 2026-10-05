@@ -52,11 +52,15 @@ class WhatUnreleasedAsksFor(unittest.TestCase):
                          "and a character reference in it stands for its character")
 
     def test_an_empty_group_asks_for_nothing(self):
-        """A `### Removed` left as a reminder removes nothing, and neither does a comment in it."""
+        """A `### Removed` left as a reminder removes nothing, and neither does a comment or a link definition in it."""
         self.assertEqual(asked_by("### Removed\n\n### Fixed\n\n- F\n").step, PATCH)
         self.assertEqual(asked_by("### Removed\n\n<!-- nothing yet -->\n\n### Fixed\n\n- F\n").step, PATCH)
         self.assertEqual(asked_by("### Removed\n\n- <!-- what -->\n\n### Fixed\n\n- F\n").step, PATCH,
                          "an entry holding nothing but a comment is none")
+        self.assertEqual(asked_by("### Removed\n\n[//]: # (nothing yet)\n\n### Fixed\n\n- F\n").step, PATCH,
+                         "GitHub shows a link definition nowhere")
+        self.assertEqual(asked_by("### Removed\n\n[//]: # (see below)\n\n- Legacy API\n").step, MAJOR,
+                         "an entry beside one still asks")
 
     def test_an_entry_marked_breaking_asks_for_a_major_under_any_group(self):
         for text in ("### Changed\n\n- **BREAKING** the input is required\n",

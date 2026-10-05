@@ -3,6 +3,7 @@
 Plain functions over the file's text, with no repository behind them.
 """
 
+import html
 import re
 
 from .markdown import Line, Unread, read, reading
@@ -27,6 +28,90 @@ def says_something(text: str) -> bool:
     Which are assigned is up to the Unicode version of the Python this runs on.
     Any other character says something, even one drawn blank, such as U+3164."""
     return any(char.isprintable() and char != " " for char in text)
+
+
+# The first list marker on an item's line, and the spaces up to that item's text.
+FIRST_ITEM = re.compile(r" *(?:[-*+]|\d{1,9}[.)]) *")
+# An HTML comment closed on its line.
+COMMENT = re.compile(r"<!--.*?-->")
+# An HTML comment left open where an item's text starts, past its list markers, which hides the rest of the line.
+OPEN_COMMENT = re.compile(r"((?: *(?:[-*+]|\d{1,9}[.)]) +)* *)<!--")
+# An inline link, whose text alone is shown, and not an image: `[text](destination "title")`.
+LINK = re.compile(r"(?<!!)\[([^\]]*)\]\([^)]*\)")
+# The marks of emphasis and strikethrough.
+EMPHASIS = re.compile(r"[*_~]")
+
+
+def uncommented(lines: list[str], kinds: list[Line]) -> list[str]:
+    """The lines with each HTML comment on them blanked out by spaces where it stood, since GitHub shows none.
+
+    A comment is read on its own line only, and the lines it runs on over are read as they are written.
+    One left open hides the rest of its line where it starts an item's text, closed comments before it aside, as a
+    browser hides it; elsewhere it is text, as GitHub shows it.
+    The spaces keep each character that is left in its column."""
+    def blank(line: str, kind: Line) -> str:
+        line = COMMENT.sub(lambda comment: " " * len(comment[0]), line)
+        start = OPEN_COMMENT.match(line) if kind.kind == "item" else None
+        return line[: start.end(1)] + " " * (len(line) - start.end(1)) if start else line
+
+    return [blank(line, kind) for line, kind in zip(lines, kinds)]
+
+
+def closing(line: str) -> str:
+    """What a line of an HTML comment holds after the comment closes on it: ` gone` in `<!-- see below --> gone`, and
+    nothing where it does not close.
+    That is raw HTML, which GitHub passes on as written: its Markdown is not read, a comment in it is left out, one
+    left open hides the rest of the line, and a character reference such as `&nbsp;` stands for its character."""
+    _, end, rest = line.partition("-->")
+    return html.unescape(COMMENT.sub("", rest).partition("<!--")[0]) if end else ""
+
+
+def shown(text: str) -> str:
+    """Text whose comments uncommented() has already blanked out, read a little closer to how GitHub shows it.
+
+    A link stands for its text, every `*`, `_` and `~` goes, as the marks of emphasis and strikethrough would, and a
+    character reference such as `&nbsp;` stands for its character.
+    It is no renderer, so it can differ from GitHub either way: a code span is taken as written, an HTML tag as text,
+    and a `*`, `_` or `~` GitHub would show is dropped all the same."""
+    return html.unescape(EMPHASIS.sub("", LINK.sub(r"\1", text)))
+
+
+def item_says_something(lines: list[str], seen: list[str], kinds: list[Line], index: int) -> bool:
+    """Whether the items line `index` opens say something, on that line or in the text right below it.
+
+    `seen` holds the lines as uncommented() gives them.
+    What is read is the text after the last marker on the line, and the lines of text right below it that are indented
+    at least as far as the text of the first item: in `- - <!-- c -->`, two spaces for the outer item, four for the
+    inner one.
+    Any other line ends what is read, such as a blank line, a comment, a code block or a nested item, and so does a line
+    indented less: an item whose text stands only past it says nothing here, though GitHub may show that text."""
+    first = FIRST_ITEM.match(lines[index])
+    own = len(lines[index]) - len(kinds[index].text)
+    start = own if first is None else first.end()
+    read = [seen[index][own:]]
+    for below, look, line in zip(lines[index + 1 :], seen[index + 1 :], kinds[index + 1 :]):
+        if line.kind != "text" or len(below) - len(below.lstrip(" ")) < start:
+            break
+        read.append(look)
+    return says_something(shown("\n".join(read)))
+
+
+def silent(text: str) -> list[bool]:
+    """Which lines of a section's text say nothing, HTML comments counting as nothing (see uncommented()).
+
+    - A blank line, and a line of a comment, but for what follows the comment where it closes (see closing()).
+    - An entry holding nothing but a comment, such as `- <!-- what changed -->` left as a reminder.
+    - An entry or a line of text that says nothing else (see shown() and says_something()), such as a no-break space.
+    - A link definition, which GitHub shows nowhere, such as `[//]: # (nothing removed yet)`.
+    An entry that says something only in the text right below its line says something: see item_says_something().
+    A heading and a line of a fenced code block say something, a comment in the code included."""
+    lines, kinds = text.split("\n"), structure(text)
+    seen = uncommented(lines, kinds)
+    return [line.kind in ("blank", "definition")
+            or line.kind == "html" and not says_something(closing(lines[index]))
+            or line.kind == "item" and not item_says_something(lines, seen, kinds, index)
+            or line.kind == "text" and not says_something(shown(seen[index]))
+            for index, line in enumerate(kinds)]
 
 
 def structure(changelog: str) -> list[Line]:
@@ -258,7 +343,8 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
     - a file with no `[Unreleased]` section: there is nothing to close;
     - a version that already has a section: this has run twice, or a section was written by hand,
       and closing again would bury one of them;
-    - an empty `[Unreleased]`: a release with nothing to say, and every later check would compare against that.
+    - an `[Unreleased]` that says nothing, comments aside (see silent()): a release with nothing to say, and every
+      later check would compare against that.
 
     Link definitions at the foot of the file belong to the file, not to the section, so they stay where they are.
     Changelogs with them and without them are both in use.
@@ -310,7 +396,7 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
         ]
         if train_entries:
             entries = combined([entries, *train_entries])
-    if not entries.strip():
+    if all(silent(entries)):
         if is_final:
             span = f"between {start} and {version}" if start else f"below {version}"
             reason = (f", and nothing in the pre-releases {span} to take in" if train_entries

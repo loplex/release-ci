@@ -65,11 +65,23 @@ class TheReleaseNotes(unittest.TestCase):
         self.assertTrue(problems)
         self.assertIn("holds nothing for 0.2.0", problems[0])
 
+    def test_a_section_that_says_nothing_is_refused_too(self):
+        _, problems = self.notes_of(self.TEXT.replace("### Added\n\n- A\n", "\u200b\n"), "0.2.0")
+        self.assertTrue(problems)
+        self.assertIn("holds nothing for 0.2.0", problems[0])
+
     def test_a_section_holding_only_spaces_is_refused_too(self):
         """Blank lines are taken off a body's ends, but spaces are not; a line of spaces is still nothing to say."""
         _, problems = self.notes_of(self.TEXT.replace("### Added\n\n- A\n", "   \n"), "0.2.0")
         self.assertTrue(problems)
         self.assertIn("holds nothing for 0.2.0", problems[0])
+
+    def test_a_section_of_nothing_but_comments_is_refused_too(self):
+        """GitHub shows no comment, so the release page would be empty."""
+        for body in ("<!-- what changed -->\n", "<!--\nwhat changed\n-->\n"):
+            with self.subTest(body):
+                _, problems = self.notes_of(self.TEXT.replace("### Added\n\n- A\n", body), "0.2.0")
+                self.assertIn("holds nothing for 0.2.0", problems[0])
 
     def test_a_version_with_no_section_is_refused(self):
         _, problems = self.notes_of(self.TEXT, "0.3.0")

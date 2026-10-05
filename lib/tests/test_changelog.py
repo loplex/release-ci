@@ -94,6 +94,20 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
     FOLLOWED = "# Log\n\n## [Unreleased]\n\n### Added\n\n- X\n\n## [0.1.0] - 2026-01-01\n\n- old\n"
     LINKED = "# Log\n\n## [Unreleased]\n\n### Added\n\n- X\n\n\n\n[Unreleased]: https://example.invalid/x\n"
 
+    def test_an_unreleased_that_says_nothing_is_refused_as_empty(self):
+        """A no-break space or a zero-width space says nothing, so there is nothing to release, as `notes` would
+        say later."""
+        for space in ("\u00a0", "\u200b"):
+            with self.subTest(space=repr(space)), self.assertRaises(SystemExit):
+                closed(self.FOLLOWED.replace("### Added\n\n- X\n", f"{space}\n"), "0.2.0", "2026-10-05")
+
+    def test_an_unreleased_of_nothing_but_comments_is_refused_as_empty(self):
+        """GitHub shows no comment, so the release notes would be empty."""
+        for body in ("<!-- what changed -->\n", "<!--\n- what changed\n-->\n", "<!-- c --> &nbsp;\n"):
+            with self.subTest(body), self.assertRaises(SystemExit) as raised:
+                closed(self.FOLLOWED.replace("### Added\n\n- X\n", body), "0.2.0", "2026-10-06")
+            self.assertIn("nothing is under [Unreleased]", str(raised.exception))
+
     def test_a_last_line_of_a_no_break_space_stays_in_the_section(self):
         """It goes on the entry above it, as CommonMark reads it; only blank lines belong to the file."""
         written = closed(self.FOLLOWED.replace("- X\n", "- X\n\u00a0\n"), "0.2.0", "2026-10-05")
@@ -147,12 +161,19 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
             closed("# Log\n\n## [Unreleased]\n\n## [0.1.0] - x\n\n- old\n", "0.2.0", "2026-09-21")
 
     def test_a_link_definition_is_not_something_to_release(self):
-        """This input tells apart the two ways of deciding [Unreleased] is empty.
-        With only a link definition under it, peeling off just blank lines would make a released section of it.
-        `sections()` strips link definitions before comparing, so the mistake cannot be seen there.
+        """A link definition at the end of `[Unreleased]` belongs to the file's foot, and GitHub shows none anyway.
+        `sections()` strips link definitions before comparing, so a section released of one could not be seen there.
         It has to be caught here."""
         with self.assertRaises(SystemExit) as raised:
             closed("# Log\n\n## [Unreleased]\n\n[Unreleased]: https://example.invalid/x\n", "0.2.0", "2026-09-21")
+        self.assertIn("nothing is under [Unreleased]", str(raised.exception))
+
+    def test_a_link_definition_above_a_comment_says_nothing(self):
+        """GitHub shows a link definition nowhere, so the release notes would be empty.
+        This one stands above a comment, so it is no part of the file's foot."""
+        with self.assertRaises(SystemExit) as raised:
+            closed(self.FOLLOWED.replace("### Added\n\n- X\n", "[//]: # (what changed)\n\n<!-- c -->\n"), "0.2.0",
+                   "2026-10-08")
         self.assertIn("nothing is under [Unreleased]", str(raised.exception))
 
     def test_a_file_with_no_unreleased_section_is_refused(self):

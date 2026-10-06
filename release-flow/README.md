@@ -31,6 +31,20 @@ What pinning an action to a release tag or to another ref gets you is under
 What each action needs of the runner is under
 [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
 
+## The workflow files
+
+Three workflows carry a project through a release, and the examples here name them:
+
+| File                  | Started by                             | Runs                                                |
+|-----------------------|----------------------------------------|-----------------------------------------------------|
+| `ci.yml`              | a push, a pull request, and merge-back | `check-release`; for a plugin, `intellij/check` too |
+| `release-draft.yml`   | a dispatch, on the default branch      | [the release job](#the-release-job)                 |
+| `release-publish.yml` | the release being published            | [the merge-back job](#release-flowmerge-back)       |
+
+- Nothing requires these names; `check-workflow` names the first by its file, whatever it is.
+- One name per role makes the three easy to find in any project that uses this repository.
+- This repository's own are `test.yml`, `release.yml` and `release-publish.yml`.
+
 ## release-flow/prepare
 
 [`release-flow/prepare`](prepare/action.yml) cuts the release commit onto a branch of its own:
@@ -69,6 +83,7 @@ a draft on the remote.\
 ### The release job
 
 ```yaml
+# .github/workflows/release-draft.yml
 on:
   workflow_dispatch:
     inputs:
@@ -177,6 +192,7 @@ The release branch is `release/<version>`, named after the tag's version.\
 It holds the release commit and whatever merge-back adds above it.
 
 ```yaml
+# .github/workflows/release-publish.yml
 on:
   release:
     types: [published]
@@ -309,6 +325,8 @@ That workflow:
   warns;
 - has to be named.\
   Without it, the run stops before it carries anything back, so that no release lands unchecked.
+
+[The workflow files](#the-workflow-files) suggests a file name for it.
 
 With `token` left as `GITHUB_TOKEN`, the job needs `actions: write`.\
 Starting a workflow is a write to Actions.\

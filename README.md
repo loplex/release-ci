@@ -30,6 +30,8 @@ So nothing in the directories that are not tied to an ecosystem may assume one e
 - `lib` is not an action: a workflow calls the actions, and the actions run it.
 - Each action's `action.yml` lists all its inputs and outputs, and what each does.
 - The README in each directory shows how its actions fit together.
+- A project that releases with these actions runs them from three workflows of its own.\
+  [The workflow files](release-flow/README.md#the-workflow-files) suggests a file name for each.
 
 ### What an action needs of the runner
 

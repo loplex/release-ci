@@ -11,6 +11,8 @@ Three actions for a JetBrains plugin:
 - What a pin to a release tag or another ref gets: [Pinning](../README.md#pinning).
 - What `intellij/build` and `intellij/publish` need on the runner:
   [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
+- What to name the workflow files:
+  [The workflow files](../release-flow/README.md#the-workflow-files).
 
 ## intellij/check
 
@@ -26,7 +28,7 @@ but for signing and the version.\
 Its inputs are the JDK and `free-disk-space`, as in `intellij/build`.
 
 ```yaml
-# In the plugin's CI workflow:
+# .github/workflows/ci.yml, the plugin's CI:
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -229,6 +231,7 @@ It takes the place of the `merge-back` job under
 way:
 
 ```yaml
+# .github/workflows/release-publish.yml
 on:
   release:
     types: [published]

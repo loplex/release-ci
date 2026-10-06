@@ -16,6 +16,7 @@ What each check holds a repository to, and where the version comes from, is in
 A project uses it instead of keeping its own copy of the rules:
 
 ```yaml
+# .github/workflows/ci.yml
 on:
   push:
     branches: [main]

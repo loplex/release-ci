@@ -113,10 +113,10 @@ python3 <clone>/lib/main.py changelog --version-source <source> [--tag-prefix <p
 
 ### Actions that run Python install their own
 
-Every action now installs the Python this repository's [`.python-version`](.python-version) names
-with `actions/setup-python`.\
-The others ran on the runner's `python3`; `intellij/build` runs Python for the first time, to read
-the signed archive.\
+Every action that runs Python now installs the one this repository's
+[`.python-version`](.python-version) names, with `actions/setup-python`.\
+All but `intellij/build` ran on the runner's `python3` before; `intellij/build` runs Python for the
+first time, to read the signed archive.\
 A job without a `container:`, on a GitHub-hosted runner, has nothing to change.
 
 - A job with a `container:` runs these actions in that container, where they are not tried.\

@@ -18,6 +18,7 @@ MANIFESTS = sorted(subprocess.run(["git", "ls-files", "-z", "--", "*/action.yml"
 REQUIRED = {
     "check-release/action.yml": {"version-source"},
     "intellij/build/action.yml": {"certificate-chain", "private-key", "private-key-password"},
+    "intellij/check/action.yml": set(),
     "intellij/publish/action.yml": {"plugin-id", "version", "archive", "token"},
     "release-flow/draft/action.yml": {"version", "tag", "branch"},
     "release-flow/merge-back/action.yml": {"version-source", "tag", "default-branch", "check-workflow"},
@@ -150,7 +151,34 @@ class Manifests(unittest.TestCase):
             self.assertTrue(gradle, manifest)
             for step in gradle:
                 self.assertIn("        JAVA_HOME: ${{ steps.java.outputs.path }}\n", step, f"{manifest}: {step}")
-        self.assertEqual(sets_up_java, 1)
+        self.assertEqual(sets_up_java, 2)
+
+    def test_intellij_check_runs_the_checks_intellij_build_runs_before_it_signs(self):
+        """intellij/check writes out intellij/build's steps again, since a composite action can call another only
+        by a ref. Step for step, comments aside, they are the same, but for what only a release does:
+        the Python, the change notes and their page, signing, and the archive.
+        The inputs intellij/check has default to what they default to in intellij/build."""
+        def steps(manifest):
+            text = (ROOT / manifest).read_text(encoding="utf-8")
+            found = []
+            for step in re.split(r"^    - ", text[text.index("\n  steps:\n"):], flags=re.MULTILINE)[1:]:
+                lines = [line for line in step.splitlines() if line.strip() and not line.lstrip().startswith("#")
+                         and "CHANGE_NOTES" not in line]
+                found.append("\n".join(lines).replace("run: |\n        ./gradlew", "run: ./gradlew")
+                             .replace("$GITHUB_ACTION_PATH/../build/", "$GITHUB_ACTION_PATH/"))
+            return found
+        release_only = ("actions/setup-python@", "notes.sh", "steps.notes.outputs.preview", "signPlugin", "archive.sh",
+                        "check-archive.py")
+        build = [step for step in steps("intellij/build/action.yml") if not any(only in step for only in release_only)]
+        self.assertEqual(steps("intellij/check/action.yml"), build)
+
+        def defaults(manifest):
+            return dict(re.findall(r"^  ([\w-]+):\n(?:    .*\n|\n)*?    default: (.*)$",
+                                   (ROOT / manifest).read_text(encoding="utf-8"), re.MULTILINE))
+        check = defaults("intellij/check/action.yml")
+        self.assertEqual(sorted(check), ["free-disk-space", "java-distribution", "java-version"])
+        self.assertEqual(check, {name: default for name, default in defaults("intellij/build/action.yml").items()
+                                 if name in check})
 
     def test_intellij_build_hands_change_notes_only_where_asked(self):
         """The notes step runs only with change-notes on, and its output reaches every Gradle step under the action's

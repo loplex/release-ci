@@ -1,15 +1,46 @@
 # intellij
 
-Two actions for a JetBrains plugin:
+Three actions for a JetBrains plugin:
 
-| Action             | Where it goes in the release                                   |
-|--------------------|----------------------------------------------------------------|
-| `intellij/build`   | between `release-flow/prepare` and `release-flow/draft`        |
-| `intellij/publish` | after the draft is published, beside `release-flow/merge-back` |
+| Action             | Where it goes                                                                  |
+|--------------------|--------------------------------------------------------------------------------|
+| `intellij/check`   | in the plugin's CI, on every push and pull request                             |
+| `intellij/build`   | in the release, between `release-flow/prepare` and `release-flow/draft`        |
+| `intellij/publish` | in the release, after the draft is published, beside `release-flow/merge-back` |
 
 - What a pin to a release tag or another ref gets: [Pinning](../README.md#pinning).
 - What `intellij/build` and `intellij/publish` need on the runner:
   [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
+
+## intellij/check
+
+[`intellij/check`](check/action.yml) runs the checks `intellij/build` runs before it signs, for
+the plugin's own CI:
+
+1. `check`.
+2. `verifyPlugin`, which runs the Plugin Verifier.
+
+It needs no secrets, so a pull request from a fork runs it too.\
+The plugin's build has to do what [intellij/build](#what-the-plugins-build-has-to-do) asks of it,
+but for signing and the version.\
+Its inputs are the JDK and `free-disk-space`, as in `intellij/build`.
+
+```yaml
+# In the plugin's CI workflow:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: loplex/release-ci/intellij/check@<tag>
+```
+
+### intellij/build's checks written out again
+
+A composite action can call another only by a ref, and none names the one it runs from.\
+So `intellij/check` writes out `intellij/build`'s steps again, but those only a release needs, and a
+test holds the two to the same steps.\
+A release then runs the checks its CI ran.
 
 ## intellij/build
 

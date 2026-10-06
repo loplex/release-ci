@@ -21,6 +21,8 @@ released it, so once a version has a section here, that section may not be edite
   A build script that took its version from anywhere else passed the build and the draft, and
   failed only once the release was published, in `intellij/publish`.\
   It runs Python for that, installed as every other action now installs it, under *Changed*.
+- `intellij/check`, a plugin's CI without signing: `check` and `verifyPlugin`, as `intellij/build`
+  runs them before it signs, with the Plugin Verifier's report kept.
 - `change-notes` on `intellij/build`: the release's section of `CHANGELOG.md`, rendered as HTML,
   reaches the build in `CHANGE_NOTES`, and the signed archive's `plugin.xml` is checked to hold it.\
   A plugin's change notes then say what its release page says, without a renderer of its own.\

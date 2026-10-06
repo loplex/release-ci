@@ -24,7 +24,7 @@ So nothing in the directories that are not tied to an ecosystem may assume one e
 |--------------------------------------------|------------------------------------------------------------------------------------------------------------|
 | [`check-release`](check-release/README.md) | the checks a release has to pass, asked of a repository                                                    |
 | [`release-flow`](release-flow/README.md)   | how a GitHub release is cut, drafted before it is tagged, carried back, and flagged where a publish failed |
-| [`intellij`](intellij/README.md)           | how a JetBrains plugin is built, signed and published to the Marketplace                                   |
+| [`intellij`](intellij/README.md)           | how a JetBrains plugin is checked, built, signed and published to the Marketplace                          |
 | [`lib`](lib/README.md)                     | `main.py`, the command line behind the actions above, and the release rules it applies                     |
 
 - `lib` is not an action: a workflow calls the actions, and the actions run it.
@@ -33,7 +33,7 @@ So nothing in the directories that are not tied to an ecosystem may assume one e
 
 ### What an action needs of the runner
 
-- Every action installs the Python it runs with `actions/setup-python`, leaving the job's own
+- Every action that runs Python installs it with `actions/setup-python`, leaving the job's own
   `python3` as it was.\
   It is the version [`.python-version`](.python-version) names.\
   A self-hosted runner that does not have it downloads it, where `actions/setup-python` publishes a

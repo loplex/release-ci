@@ -1,0 +1,93 @@
+name: check
+description: |
+  Checks and verifies an IntelliJ Platform plugin from the commit the workspace is on, without signing it.
+
+  It is a plugin's ordinary CI, on a push or a pull request: the checks intellij/build runs before it signs.
+  It needs no secrets, so a pull request from a fork runs it too.
+
+  What the build script has to do:
+  - Use the IntelliJ Platform Gradle Plugin 2.x, whose `verifyPlugin` runs the Plugin Verifier.
+    Under the Gradle IntelliJ Plugin 1.x it does not, and the check stops when it finds no report.
+  - Build the plugin as the root project: the report is looked for in `build/reports/pluginVerifier`
+    under the workspace.
+
+  The Plugin Verifier's report is uploaded as the artifact `pluginVerifier-result`, whether or not it passed.
+  Gradle is cached by setup-gradle's open-source `basic` provider.
+  The default provider is a proprietary component under Gradle's own terms.
+
+inputs:
+  java-version:
+    description: |
+      The JDK Gradle runs on, as in intellij/build.
+      This action's Gradle steps get it through their own JAVA_HOME: the calling job's JAVA_HOME and java are left
+      as they were.
+      What a plugin compiles against is its own `jvmToolchain` in its build script.
+    default: '21'
+  java-distribution:
+    description: |
+      The JDK distribution setup-java is asked for.
+    default: zulu
+  free-disk-space:
+    description: |
+      `true` makes room before the Plugin Verifier runs, as in intellij/build.
+      jlumbroso/free-disk-space then removes the runner's Android, .NET and Haskell toolchains and its docker images,
+      and keeps the swap.
+      A calling job that needs any of them later leaves this off.
+
+      Off by default.
+      The free space is printed before and after `verifyPlugin`.
+    default: 'false'
+
+# The steps intellij/build runs before it signs, but those only a release needs, written out again:
+# a composite action can call another only by a ref, and none names the one this action runs from.
+# .github/test_manifests.py holds the two to the same steps.
+runs:
+  using: composite
+  steps:
+    - if: inputs.free-disk-space == 'true'
+      uses: jlumbroso/free-disk-space@v2.0.0
+      with:
+        preinstalled-runtimes: false
+        large-packages: false
+
+    # set-default: false leaves the calling job's JAVA_HOME and java as they were.
+    # The Gradle steps below get this JDK through a JAVA_HOME of their own.
+    - id: java
+      uses: actions/setup-java@v6
+      with:
+        distribution: ${{ inputs.java-distribution }}
+        java-version: ${{ inputs.java-version }}
+        set-default: false
+
+    # The open-source cache, over the GitHub Actions cache, as in intellij/build.
+    - uses: gradle/actions/setup-gradle@v6
+      with:
+        cache-provider: basic
+
+    - shell: bash
+      env:
+        JAVA_HOME: ${{ steps.java.outputs.path }}
+      run: ./gradlew check
+
+    - shell: bash
+      run: df -h "$GITHUB_WORKSPACE" "$HOME"
+
+    # The check the Marketplace runs itself before it serves a version. `check` does not include it.
+    - shell: bash
+      env:
+        JAVA_HOME: ${{ steps.java.outputs.path }}
+      run: ./gradlew verifyPlugin
+
+    - shell: bash
+      run: "$GITHUB_ACTION_PATH/../build/verifier-report.sh"
+
+    - if: always()
+      shell: bash
+      run: df -h "$GITHUB_WORKSPACE" "$HOME"
+
+    - if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: pluginVerifier-result
+        path: build/reports/pluginVerifier
+        if-no-files-found: ignore

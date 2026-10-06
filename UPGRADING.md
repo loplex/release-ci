@@ -113,9 +113,10 @@ python3 <clone>/lib/main.py changelog --version-source <source> [--tag-prefix <p
 
 ### Actions that run Python install their own
 
-Every action but `intellij/build` now installs the Python this repository's
-[`.python-version`](.python-version) names with `actions/setup-python`, instead of running on the
-runner's `python3`.\
+Every action now installs the Python this repository's [`.python-version`](.python-version) names
+with `actions/setup-python`.\
+The others ran on the runner's `python3`; `intellij/build` runs Python for the first time, to read
+the signed archive.\
 A job without a `container:`, on a GitHub-hosted runner, has nothing to change.
 
 - A job with a `container:` runs these actions in that container, where they are not tried.\
@@ -131,3 +132,12 @@ A job without a `container:`, on a GitHub-hosted runner, has nothing to change.
 A step after `intellij/build` that runs `java` or Gradle ran on the JDK `intellij/build` set up.\
 It now runs on the job's own: where it needs that JDK, set it up in the job with
 `actions/setup-java` before that step.
+
+### `intellij/build` checks the signed archive's version
+
+`intellij/build` stops where the signed archive's `plugin.xml` does not carry the version in the
+`version` line of `gradle.properties`.\
+A build script that gives `project.version` anything else has to take it from that line instead,
+which `release-flow/prepare` rewrites for the release.\
+[What the plugin's build has to do](intellij/README.md#what-the-plugins-build-has-to-do) shows the
+rest.

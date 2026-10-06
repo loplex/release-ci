@@ -16,6 +16,11 @@ released it, so once a version has a section here, that section may not be edite
   It needs the packages in `lib/requirements.txt`.\
   With `--repository-url` and `--ref` it makes every relative link absolute, read at that tag or
   commit, since away from the repository a relative link leads nowhere.
+- **BREAKING** `intellij/build` checks that the signed archive's `plugin.xml` carries the version
+  in the `version` line of `gradle.properties`, and stops where it does not.\
+  A build script that took its version from anywhere else passed the build and the draft, and
+  failed only once the release was published, in `intellij/publish`.\
+  It runs Python for that, installed as every other action now installs it, under *Changed*.
 - `skip-unreadable-releases` on `check-release`, `release-flow/prepare` and
   `release-flow/merge-back`, and `lib/main.py changelog --skip-unreadable-releases`: the `changelog`
   check names as not compared a release whose tag holds a line of `CHANGELOG.md` it does not read,

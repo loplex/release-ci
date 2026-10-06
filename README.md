@@ -33,8 +33,8 @@ So nothing in the directories that are not tied to an ecosystem may assume one e
 
 ### What an action needs of the runner
 
-- Every action but `intellij/build` installs the Python it runs on with `actions/setup-python`,
-  leaving the job's own `python3` as it was.\
+- Every action installs the Python it runs with `actions/setup-python`, leaving the job's own
+  `python3` as it was.\
   It is the version [`.python-version`](.python-version) names.\
   A self-hosted runner that does not have it downloads it, where `actions/setup-python` publishes a
   build for its system.

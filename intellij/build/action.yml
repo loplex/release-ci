@@ -9,6 +9,7 @@ description: |
   What the build script has to do:
   - Take the plugin's version from the `version` line of gradle.properties.
     The release runs with `version-source: gradle.properties`, and release-flow/prepare rewrites that line.
+    The signed archive's plugin.xml is checked against that line, and the build stops where they differ.
   - Read the signing certificate chain and private key in its `signing` block, from the environment.
     Without them there is no signed archive.
   - Use the IntelliJ Platform Gradle Plugin 2.x, whose `verifyPlugin` runs the Plugin Verifier.
@@ -19,6 +20,8 @@ description: |
   The Plugin Verifier's report is uploaded as the artifact `pluginVerifier-result`, whether or not it passed.
   Gradle is cached by setup-gradle's open-source `basic` provider.
   The default provider is a proprietary component under Gradle's own terms.
+
+  Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.
 
 inputs:
   java-version:
@@ -96,6 +99,14 @@ runs:
         java-version: ${{ inputs.java-version }}
         set-default: false
 
+    # The Python .python-version names, which reads the signed archive at the end.
+    # update-environment: false keeps it out of the calling job, whose steps go on with their own python3.
+    - id: python
+      uses: actions/setup-python@v7
+      with:
+        python-version-file: ${{ github.action_path }}/../../.python-version
+        update-environment: false
+
     # The open-source cache, over the GitHub Actions cache. The default one is a proprietary component under
     # Gradle's own terms of use, and a caller of this action would be accepting them without having been asked.
     # https://github.com/gradle/actions/blob/main/docs/setup-gradle.md
@@ -150,3 +161,14 @@ runs:
       env:
         ARCHIVE_PATTERN: ${{ inputs.archive-pattern }}
       run: "$GITHUB_ACTION_PATH/archive.sh"
+
+    # Whether the archive is the release's, read before release-flow/draft pushes anything.
+    - shell: bash
+      env:
+        PYTHON: ${{ steps.python.outputs.python-path }}
+        ARCHIVE: ${{ steps.archive.outputs.archive }}
+      # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
+      # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
+      run: |
+        export LD_LIBRARY_PATH="${PYTHON%/bin/*}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        "$PYTHON" "$GITHUB_ACTION_PATH/check-archive.py" "$ARCHIVE"

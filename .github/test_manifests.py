@@ -28,6 +28,7 @@ REQUIRED = {
 # The actions that run Python, each on the one it installs (see the test below).
 RUNS_PYTHON = {
     "check-release/action.yml",
+    "intellij/build/action.yml",
     "intellij/publish/action.yml",
     "release-flow/draft/action.yml",
     "release-flow/merge-back/action.yml",
@@ -103,9 +104,10 @@ class Manifests(unittest.TestCase):
     def test_an_action_runs_python_only_on_the_one_it_installs(self):
         """The actions run on the Python .python-version names, whatever python3 the caller's runner carries.
         - A `python3` in a script or a `run:` would take the runner's instead.
-        - A step that runs the scripts without `PYTHON` fails on the unset variable.
+        - A step that runs Python without `PYTHON` fails on the unset variable.
         - A setup-python left to update the environment changes the python3 of the calling job's later steps.
-        - Without LD_LIBRARY_PATH, that Python does not start in a job that runs in a container."""
+        - Without LD_LIBRARY_PATH, that Python does not start in a job that runs in a container.
+        The last two hold for each step that runs Python, itself or through a script; a Gradle step needs neither."""
         runs_python = set()
         for manifest in MANIFESTS:
             text = (ROOT / manifest).read_text(encoding="utf-8")
@@ -122,9 +124,13 @@ class Manifests(unittest.TestCase):
             self.assertIsNotNone(step, f"{manifest}: no setup-python step with update-environment: false")
             version_file = (here / step.group("up") / ".python-version").resolve()
             self.assertEqual(version_file, ROOT / ".python-version", manifest)
-            for env in re.findall(r"^      env:\n((?:        .*\n)+)", text, re.MULTILINE):
-                self.assertIn("        PYTHON: ${{ steps.python.outputs.python-path }}\n", env, manifest)
-            for block in run_blocks(text):
+            python_scripts = {path.name for path in here.glob("*.sh") if "$PYTHON" in path.read_text(encoding="utf-8")}
+            for step in re.split(r"^    - ", text[text.index("\n  steps:\n"):], flags=re.MULTILINE)[1:]:
+                step = "    - " + step
+                block = "\n".join(run_blocks(step))
+                if "$PYTHON" not in block and not any(f"/{name}" in block for name in python_scripts):
+                    continue
+                self.assertIn("        PYTHON: ${{ steps.python.outputs.python-path }}\n", step, manifest)
                 self.assertIn(LIBRARY_PATH, block, f"{manifest}: {block}")
         self.assertEqual(runs_python, RUNS_PYTHON)
 

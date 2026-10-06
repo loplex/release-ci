@@ -8,7 +8,7 @@ Two actions for a JetBrains plugin:
 | `intellij/publish` | after the draft is published, beside `release-flow/merge-back` |
 
 - What a pin to a release tag or another ref gets: [Pinning](../README.md#pinning).
-- What `intellij/publish` needs on the runner:
+- What `intellij/build` and `intellij/publish` need on the runner:
   [What an action needs of the runner](../README.md#what-an-action-needs-of-the-runner).
 
 ## intellij/build
@@ -22,7 +22,8 @@ Two actions for a JetBrains plugin:
    Here it runs first, on the commit that will be published.
 3. `signPlugin`.
 
-Then it says where the signed archive is, in its `archive` output.
+Then it says where the signed archive is, in its `archive` output, and checks the version in its
+`plugin.xml`.
 
 The Plugin Verifier's report is kept as the run's `pluginVerifier-result` artifact, whether it
 passed or not.
@@ -44,6 +45,8 @@ passed or not.
   A plugin is released with `version-source: gradle.properties`, and `release-flow/prepare` rewrites
   that `version` line.\
   A version from a property of the plugin's own would leave the archive at the old version.\
+  So the signed archive's `plugin.xml` is checked against that line, and the build stops where
+  they differ.\
   [Where the version comes from](../lib/README.md#where-the-version-comes-from) describes
   the file.
 

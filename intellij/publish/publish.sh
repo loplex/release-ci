@@ -80,6 +80,7 @@ fi
 # ATTEMPTS attempts in all, WAIT seconds apart.
 # An update is served as soon as it is uploaded, counter-signed.
 # This holds although JetBrains's approval guidelines say every update is reviewed before it becomes public.
+# The IDE offers an update from the default channel to its users only once it is approved; nothing here waits for it.
 # A first version is different: a person uploads it, and it is served once it is approved.
 # No bounded wait sits through that. Such a run fails, and is run again once the version is approved,
 # within the 30 days GitHub allows a run to be re-run.

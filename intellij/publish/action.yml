@@ -18,6 +18,8 @@ description: |
   This is although JetBrains's approval guidelines say every update is reviewed before it is publicly available,
   and a JetBrains blog post says that an update to a custom channel is approved without a review
   where the plugin had an update approved in the default channel within the last 120 days.
+  The IDE offers an update from the default channel to its users only once it is approved.
+  This action does not wait for that.
 
   Needs `curl`, which GitHub-hosted runners have.
   Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.

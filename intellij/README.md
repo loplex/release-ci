@@ -200,6 +200,8 @@ Upload the archive the release carries, so that the Marketplace serves what was 
   where the plugin has an update approved in the default channel within the last 120 days.
 - An update is served as soon as it is uploaded all the same, counter-signed.\
   `intellij/publish` is built on that.
+- The IDE offers an update from the default channel to its users only once it is approved.\
+  `intellij/publish` does not wait for that.
 
 [approval]: https://plugins.jetbrains.com/docs/marketplace/jetbrains-marketplace-approval-guidelines.html
 [channels]: https://blog.jetbrains.com/platform/2023/09/busy-plugin-developers-newsletter-summer-2023/

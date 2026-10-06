@@ -113,9 +113,9 @@ A change that breaks something a caller relied on:
 - gets a section in [`UPGRADING.md`](UPGRADING.md), under the version it breaks, that shows what a
   caller has to change.
 
-A release with nothing under `[Unreleased]` is refused.\
-The exception is a final release that takes in the entries of the pre-releases since the final
-release before it, as [The changelog](lib/README.md#the-changelog) says.
+A release whose `[Unreleased]` says nothing is refused.\
+The exception is a final release that takes in entries saying something from the pre-releases since
+the final release before it, as [The changelog](lib/README.md#the-changelog) says.
 
 ## Releasing this repository
 

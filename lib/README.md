@@ -132,8 +132,8 @@ It refuses:
 
 - a file with no `[Unreleased]` section;
 - a version that already has a section;
-- an `[Unreleased]` that says nothing, unless the release is a final one with pre-releases to take
-  in.\
+- an `[Unreleased]` that says nothing, unless the release is a final one whose pre-releases to take
+  in say something.\
   HTML comments say nothing: GitHub shows none of them.\
   Nor does a line where Python's `str.isprintable()` accepts none of its characters but the space:
   white space, a no-break space, a zero-width space or a soft hyphen alone say nothing, and

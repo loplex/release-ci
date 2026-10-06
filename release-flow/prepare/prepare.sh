@@ -61,8 +61,8 @@ branch="release/${version}"
 #
 # This is the first write, and also the last check.
 # An [Unreleased] with nothing to release is refused before the file is rewritten:
-# nothing under it, and for a final release no pre-release since the final release before it, in SemVer order,
-# to take in.
+# nothing under it says something, and for a final release nothing in the pre-releases since the final release before
+# it, in SemVer order, says something either.
 # Such a release then leaves no branch and no output behind.
 repository_url_arguments=()
 if [[ -n $REPOSITORY_URL ]]; then

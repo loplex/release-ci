@@ -143,10 +143,16 @@ It refuses:
   In an entry or a line of text, a link counts as its text, and `*`, `_` and `~` as nothing, as the
   marks of emphasis and strikethrough would; a character reference such as `&nbsp;` counts as its
   character.
+- an entry under `[Unreleased]` that says nothing on its line or in the lines of text right below
+  it, indented as far as its text, such as `- <!-- what changed -->` left as a reminder, by its line
+  number: released, it would be an empty bullet.\
+  Any other line ends what is read, such as a blank line, a comment or a code block, and so does a
+  line indented less: an entry whose text stands only past it is refused too, though GitHub may show
+  that text.
 
 Markdown is read only this far, not rendered, so the verdict can differ from GitHub's either way: an
-`[Unreleased]` left empty by an HTML tag with nothing in it, or by a comment that runs on over
-lines, can pass, and one of nothing but `*` is refused.
+`[Unreleased]` or an entry left empty by an HTML tag with nothing in it, or by a comment that runs
+on over lines, can pass, and an entry of nothing but `*` is refused.
 
 A final release takes into its section the entries of every pre-release that SemVer orders below it
 and above the final release before it.\

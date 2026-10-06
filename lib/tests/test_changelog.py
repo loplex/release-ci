@@ -109,6 +109,38 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
                 closed(self.FOLLOWED.replace("### Added\n\n- X\n", body), "0.2.0", "2026-10-06")
             self.assertIn("nothing is under [Unreleased]", str(raised.exception))
 
+    def test_an_entry_that_says_nothing_is_refused_by_its_line(self):
+        """Released, it would be an empty bullet, or one whose text stands past what is read.
+        Nothing is dropped from the changelog in silence: the line is named, to be filled in or taken out."""
+        for entry in ("- <!-- what changed -->", "- <!--\n  what\n  -->", "- \u00a0", "1. <!-- what -->",
+                      "- <!--\n\n  what\n\n  -->", "- &nbsp;", "- *<!-- what -->*", "- [<!-- what -->](x)",
+                      "- - <!-- what -->\n  Y",  # Y is the outer entry's: GitHub shows the inner one empty.
+                      "1. <!-- what -->\n  Y",  # Y is indented less than the text: GitHub shows it below the list.
+                      # GitHub shows Y in the entry in these, but it stands past what is read:
+                      "- \u00a0\nY",  # a lazy continuation,
+                      "- <!-- what -->\n\n  Y",  # a paragraph after a blank line,
+                      "- <!-- what -->\n  <!-- more -->\n  Y",  # text after a comment line,
+                      "- <!-- what -->\n  ```\n  Y\n  ```",  # a code block,
+                      "- <!-- what -->\n  - Y"):  # or a nested entry.
+            with self.subTest(entry), self.assertRaises(SystemExit) as raised:
+                closed(self.FOLLOWED.replace("- X\n", f"- X\n{entry}\n"), "0.2.0", "2026-10-06")
+            self.assertEqual(str(raised.exception), "CHANGELOG.md line 8 holds an entry that says nothing, comments "
+                                                    "aside: write what changed on its line, or take the entry out. "
+                                                    "Only its line and the lines of text right below it, indented as "
+                                                    "far as its text, are read")
+
+    def test_an_entry_with_a_comment_beside_what_it_says_is_released(self):
+        """The comment is GitHub's to hide, and one in a code span is shown: each entry says something, on its line or
+        on the next."""
+        for entry in ("- Y <!-- why -->", "- <!-- why --> Y", "- <!-- why -->\n  Y", "- `<!-- Y -->`",
+                      "- - <!-- why -->\n    Y",
+                      # A comment is read on its own line, so none of these hides what stands between its ends:
+                      "- Y\n  ```\n  <!-- a\n  ```\n- Z <!-- b -->", "- Y <!-- a\n\n- Z -->",
+                      "- Drop `<!--` handling\n- Drop the legacy API\n- Drop `-->` handling"):
+            with self.subTest(entry):
+                written = closed(self.FOLLOWED.replace("- X\n", f"- X\n{entry}\n"), "0.2.0", "2026-10-06")
+                self.assertIn(f"- X\n{entry}\n\n## [0.1.0]", written)
+
     def test_a_last_line_of_a_no_break_space_stays_in_the_section(self):
         """It goes on the entry above it, as CommonMark reads it; only blank lines belong to the file."""
         written = closed(self.FOLLOWED.replace("- X\n", "- X\n\u00a0\n"), "0.2.0", "2026-10-05")

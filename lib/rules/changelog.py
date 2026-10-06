@@ -77,18 +77,20 @@ def shown(text: str) -> str:
     return html.unescape(EMPHASIS.sub("", LINK.sub(r"\1", text)))
 
 
-def item_says_something(lines: list[str], seen: list[str], kinds: list[Line], index: int) -> bool:
+def item_says_something(lines: list[str], seen: list[str], kinds: list[Line], index: int,
+                        innermost: bool = False) -> bool:
     """Whether the items line `index` opens say something, on that line or in the text right below it.
 
     `seen` holds the lines as uncommented() gives them.
     What is read is the text after the last marker on the line, and the lines of text right below it that are indented
     at least as far as the text of the first item: in `- - <!-- c -->`, two spaces for the outer item, four for the
     inner one.
+    With `innermost`, only the last item on the line is asked about, and the lines below are measured from its text.
     Any other line ends what is read, such as a blank line, a comment, a code block or a nested item, and so does a line
     indented less: an item whose text stands only past it says nothing here, though GitHub may show that text."""
     first = FIRST_ITEM.match(lines[index])
     own = len(lines[index]) - len(kinds[index].text)
-    start = own if first is None else first.end()
+    start = own if innermost or first is None else first.end()
     read = [seen[index][own:]]
     for below, look, line in zip(lines[index + 1 :], seen[index + 1 :], kinds[index + 1 :]):
         if line.kind != "text" or len(below) - len(below.lstrip(" ")) < start:
@@ -393,7 +395,17 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
     - a version that already has a section: this has run twice, or a section was written by hand,
       and closing again would bury one of them;
     - an `[Unreleased]` that says nothing, comments aside (see silent()): a release with nothing to say, and every
-      later check would compare against that.
+      later check would compare against that;
+    - an entry under it that says nothing, comments aside, on its line or in the lines of text right below it, indented
+      as far as its text (see item_says_something()), such as `- <!-- what changed -->` left as a reminder: the release
+      notes would show an empty bullet.
+      Any other line ends what is read, such as a blank line, a comment, a code block or a nested entry, and so does a
+      line indented less: an entry whose text stands only past it is refused as well, though GitHub may show that text.
+      Of several entries opened on one line, as in `- - <!-- c -->`, the last is the one asked about.
+
+    Markdown is read only this far, not rendered (see shown()), so the verdict can differ from GitHub's either way: an
+    `[Unreleased]` or an entry left empty by an HTML tag with nothing in it, or by a comment that runs on over lines,
+    can pass, and an entry of nothing but `*` is refused.
 
     Link definitions at the foot of the file belong to the file, not to the section, so they stay where they are.
     Changelogs with them and without them are both in use.
@@ -429,6 +441,12 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
 
     # The lines below [Unreleased]: blank ones and link definitions at their end belong to the file, not the section.
     lines, line_kinds = all_lines[first:end], kinds[first:end]
+    seen = uncommented(lines, line_kinds)
+    for index, line in enumerate(line_kinds):
+        if line.kind == "item" and not item_says_something(lines, seen, line_kinds, index, innermost=True):
+            raise SystemExit(f"CHANGELOG.md line {first + index + 1} holds an entry that says nothing, comments aside: "
+                             f"write what changed on its line, or take the entry out. Only its line and the lines of "
+                             f"text right below it, indented as far as its text, are read")
     foot_lines = []
     while lines and (not lines[-1].strip(" \t\r") or line_kinds[len(lines) - 1].kind == "definition"):
         foot_lines.insert(0, lines.pop())

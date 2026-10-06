@@ -11,7 +11,7 @@ python3 -m unittest discover -s intellij
 python3 -m unittest discover -s .github
 ```
 
-The first line installs what the `lib` and `.github` suites need.
+The first line installs what the `lib`, `intellij` and `.github` suites need.
 
 All five suites run on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml).\
@@ -94,7 +94,7 @@ Code, tables, headings and links are then what GitHub renders.
   lacks.
 - cmarkgfm and the packages it needs are pinned, with hashes, in
   [`lib/requirements.txt`](lib/requirements.txt).\
-  The `lib` suite needs it for `notes --html`.
+  The `lib` and `intellij` suites need it, for `notes --html`.
 - regex is pinned, with hashes, in [`.github/requirements.txt`](.github/requirements.txt).
 - No other suite needs a package.
 

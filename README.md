@@ -44,7 +44,8 @@ So nothing in the directories that are not tied to an ecosystem may assume one e
   - `actions/setup-python` brings the Python built for the runner's system, not the image's.\
     It builds Python only for
     [the systems GitHub-hosted runners run](https://github.com/actions/setup-python/blob/main/docs/advanced-usage.md#using-setup-python-with-a-self-hosted-runner).\
-    In an image other than the runner's it may not start, or start without a module such as `ssl`.
+    In an image other than the runner's it may not start, or start without a module such as `ssl`,
+    which `intellij/build` with `change-notes: true` needs to download cmarkgfm.
   - `actions/checkout` marks the workspace safe for git only while it runs.\
     A later step running git as another user, as a container's `root` does, is refused the
     repository, unless a step after the checkout runs
@@ -52,6 +53,8 @@ So nothing in the directories that are not tied to an ecosystem may assume one e
 - `release-flow/draft`, `release-flow/merge-back` and `release-flow/warn` need `gh`.
 - `intellij/publish` needs `curl`.
 - GitHub-hosted runners have both.
+- `intellij/build` with `change-notes: true` downloads cmarkgfm from PyPI, and runs Gradle in the
+  `C.UTF-8` locale, which the system has to have.
 
 ## Pinning
 

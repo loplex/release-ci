@@ -50,6 +50,51 @@ passed or not.
   [Where the version comes from](../lib/README.md#where-the-version-comes-from) describes
   the file.
 
+### Change notes from `CHANGELOG.md`
+
+With `change-notes: true`, the plugin's change notes are the release's section of `CHANGELOG.md`:
+the same section `release-flow/draft` puts on the release page.
+They need the release's tag, too:
+
+```yaml
+- uses: loplex/release-ci/intellij/build@<tag>
+  with:
+    # The signing inputs, as in the release job below, and:
+    change-notes: true
+    tag: ${{ steps.cut.outputs.tag }}
+```
+
+- The section is rendered to HTML by `lib/main.py notes --html`, as
+  [Subcommands](../lib/README.md#subcommands) says, with raw HTML left out.
+- A relative link in it is made absolute, read at the release's tag, as GitHub reads it on the
+  published release's page; an anchor alone leads into `CHANGELOG.md` instead.\
+  [Relative links in the HTML](../lib/README.md#relative-links-in-the-html) says where each one
+  leads.
+- The same notes, their relative links read at the release commit, are uploaded as the artifact
+  `change-notes.html`.\
+  A browser opens it from the run's page, to see the notes before the draft is published.\
+  Until then the tag does not exist, so the links in the plugin's own notes lead nowhere yet.
+- Every Gradle step gets it in the environment variable `CHANGE_NOTES`, with `LC_ALL=C.UTF-8`, since
+  the JVM reads the environment in the locale's encoding.\
+  The build script reads it:
+
+  ```kotlin
+  intellijPlatform {
+      pluginConfiguration {
+          changeNotes = providers.environmentVariable("CHANGE_NOTES")
+      }
+  }
+  ```
+
+- The signed archive's `plugin.xml` is checked to carry exactly those notes, and the build stops
+  where it does not.
+- cmarkgfm, which renders them, is installed from PyPI for that step, with the hashes
+  [`lib/requirements.txt`](../lib/requirements.txt) pins.
+
+Off, which is the default, the action sets no `CHANGE_NOTES`, and the plugin's `<change-notes>` are
+left to its build script.\
+A build run by hand has no `CHANGE_NOTES` either, and writes no `<change-notes>`.
+
 ### Gradle is cached by the open-source provider
 
 The build caches Gradle with setup-gradle's open-source `basic` provider, not its default one.\

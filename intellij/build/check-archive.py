@@ -6,12 +6,17 @@ The archive gets whatever version the plugin's build script gives it, and nothin
 A plugin that took its version from anywhere else would pass the build and the draft at the old version.
 It would show only after the release was published, as a version the Marketplace never serves.
 
+Where CHANGE_NOTES is not empty, the build was handed change notes in it, and its plugin.xml has to carry exactly those.
+The IntelliJ Platform Gradle Plugin writes them into a CDATA section as given, but for the last line break,
+so white space at the ends is not compared.
+
 Run as `check-archive.py <archive>` in the root of the plugin's repository, after signPlugin.
 Where the archive is right, it says so and exits 0.
 Where it is not, it says what differs and exits 1.
 """
 
 import io
+import os
 import sys
 import xml.etree.ElementTree as ElementTree
 import zipfile
@@ -54,12 +59,23 @@ def problems(archive: str, version: str) -> list[str]:
         root = ElementTree.fromstring(text)
     except ElementTree.ParseError as error:
         return [f"{where} is not XML: {error}"]
+    wrong = []
     found = root.findtext("version")
     if found != version:
         says = "has no <version>" if found is None else f"says version {found}"
-        return [f"{where} {says}, and gradle.properties {version}: the build script has to take the plugin's "
-                "version from the `version` line of gradle.properties, which release-flow/prepare wrote"]
-    return []
+        wrong.append(f"{where} {says}, and gradle.properties {version}: the build script has to take the plugin's "
+                     "version from the `version` line of gradle.properties, which release-flow/prepare wrote")
+    notes = os.environ.get("CHANGE_NOTES", "")
+    held = root.findtext("change-notes")
+    if notes and (held or "").strip() != notes.strip():
+        reads = 'the build script has to set changeNotes = providers.environmentVariable("CHANGE_NOTES") in ' \
+                "pluginConfiguration"
+        if held is None:
+            wrong.append(f"{where} has no <change-notes>, though the build was handed CHANGE_NOTES: {reads}")
+        else:
+            wrong.append(f"{where} holds other <change-notes> than the CHANGE_NOTES the build was handed: {reads}, "
+                         "and the system has to have the C.UTF-8 locale Gradle runs in")
+    return wrong
 
 
 def run(archive: str) -> int:
@@ -71,7 +87,8 @@ def run(archive: str) -> int:
     for problem in found:
         print(f"::error::{problem}")
     if not found:
-        print(f"{archive} is version {version}, as gradle.properties says")
+        print(f"{archive} is version {version}, as gradle.properties says"
+              + (", with the change notes it was built with" if os.environ.get("CHANGE_NOTES") else ""))
     return 1 if found else 0
 
 

@@ -152,6 +152,37 @@ class Manifests(unittest.TestCase):
                 self.assertIn("        JAVA_HOME: ${{ steps.java.outputs.path }}\n", step, f"{manifest}: {step}")
         self.assertEqual(sets_up_java, 1)
 
+    def test_intellij_build_hands_change_notes_only_where_asked(self):
+        """The notes step runs only with change-notes on, and its output reaches every Gradle step under the action's
+        own name, becoming CHANGE_NOTES, in the C.UTF-8 locale, only where it is not empty.
+        The archive check reads it as CHANGE_NOTES, so that a job's own CHANGE_NOTES is not checked.
+        Python writes and reads the notes as UTF-8 whatever the locale.
+        Their page is uploaded unzipped, so that a browser opens it, and only with change-notes on too."""
+        text = (ROOT / "intellij/build/action.yml").read_text(encoding="utf-8")
+        steps = re.split(r"^    - ", text[text.index("\n  steps:\n"):], flags=re.MULTILINE)[1:]
+        self.assertRegex(text, r"\n  change-notes:\n(?:    .*\n|\n)*?    default: 'false'\n")
+        notes = [step for step in steps if "notes.sh" in step]
+        self.assertEqual(len(notes), 1)
+        self.assertTrue(notes[0].startswith("id: notes\n      if: inputs.change-notes == 'true'\n"), notes[0])
+        self.assertIn('"$PYTHON" -X utf8 "$here/change-notes.py"',
+                      (ROOT / "intellij/build/notes.sh").read_text(encoding="utf-8"))
+        gradle = [step for step in steps if "./gradlew" in step]
+        self.assertEqual(len(gradle), 3)
+        for step in gradle:
+            self.assertIn("        RELEASE_CI_CHANGE_NOTES: ${{ steps.notes.outputs.html }}\n", step)
+            self.assertIn("        [[ -z $RELEASE_CI_CHANGE_NOTES ]] || "
+                          "export CHANGE_NOTES=$RELEASE_CI_CHANGE_NOTES LC_ALL=C.UTF-8\n", step)
+            self.assertNotRegex(step, r"\n        CHANGE_NOTES:")
+        check = [step for step in steps if "check-archive.py" in step]
+        self.assertEqual(len(check), 1)
+        self.assertIn("        CHANGE_NOTES: ${{ steps.notes.outputs.html }}\n", check[0])
+        self.assertIn('"$PYTHON" -X utf8 "$GITHUB_ACTION_PATH/check-archive.py"', check[0])
+        page = [step for step in steps if "steps.notes.outputs.preview" in step]
+        self.assertEqual(len(page), 1)
+        self.assertTrue(page[0].startswith("if: inputs.change-notes == 'true'\n      uses: actions/upload-artifact@"),
+                        page[0])
+        self.assertIn("        archive: false\n", page[0])
+
 
 if __name__ == "__main__":
     unittest.main()

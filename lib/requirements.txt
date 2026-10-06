@@ -1,5 +1,5 @@
 # What `lib/main.py notes --html` renders with: cmarkgfm, the bindings to GitHub's cmark-gfm, and what it needs.
-# The lib and .github suites need it too; .github holds lib/rules/markdown.py to cmark-gfm with it.
+# The lib, intellij and .github suites need it too; .github holds lib/rules/markdown.py to cmark-gfm with it.
 # Pinned with hashes, so that what is installed is what was pinned:
 #   python3 -m pip install --require-hashes -r lib/requirements.txt
 # Written by uv, for the Python .python-version names:

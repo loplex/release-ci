@@ -67,6 +67,31 @@ inputs:
       Off by default.
       The free space is printed before and after `verifyPlugin`, so a run's log shows how much room it took.
     default: 'false'
+  change-notes:
+    description: |
+      `true` hands the build its change notes: the release's section of CHANGELOG.md, rendered as HTML.
+      - The build gets them in the environment variable `CHANGE_NOTES`, in every Gradle step.
+        Gradle then runs with `LC_ALL=C.UTF-8`: the JVM reads the environment in the locale's encoding.
+      - The build script reads it in its `pluginConfiguration` block:
+        `changeNotes = providers.environmentVariable("CHANGE_NOTES")`.
+      - The signed archive's plugin.xml is checked to carry exactly them, and the build stops where it does not.
+      - The section is the one for the version in gradle.properties, rendered by `lib/main.py notes --html`.
+        Raw HTML in it is left out, comments included.
+      - A relative link in it is made absolute, read at the release's tag, as GitHub reads it on the release page;
+        an anchor alone leads into CHANGELOG.md instead.
+        It needs the `tag` input.
+      - The same notes, their links read at the commit checked out, are uploaded as the artifact
+        `change-notes.html`, a page a browser opens before the tag exists.
+      - cmarkgfm, which renders it, is installed from PyPI for the step, with the hashes lib/requirements.txt pins.
+
+      Off by default: the action then sets no `CHANGE_NOTES`, and leaves one the job sets as it is.
+      An empty one would give the plugin an empty `<change-notes />`.
+    default: 'false'
+  tag:
+    description: |
+      The tag the release is going to get: release-flow/prepare's `tag` output.
+      Needed with `change-notes: true`, which reads a relative link at it; not read otherwise.
+    default: ''
   archive-pattern:
     description: |
       Where the signed archive lands, as a bash glob under the workspace, in which `**` goes no deeper than `*`.
@@ -99,7 +124,7 @@ runs:
         java-version: ${{ inputs.java-version }}
         set-default: false
 
-    # The Python .python-version names, which reads the signed archive at the end.
+    # The Python .python-version names, which renders the change notes and reads the signed archive at the end.
     # update-environment: false keeps it out of the calling job, whose steps go on with their own python3.
     - id: python
       uses: actions/setup-python@v7
@@ -114,10 +139,35 @@ runs:
       with:
         cache-provider: basic
 
+    - id: notes
+      if: inputs.change-notes == 'true'
+      shell: bash
+      env:
+        PYTHON: ${{ steps.python.outputs.python-path }}
+        REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        export LD_LIBRARY_PATH="${PYTHON%/bin/*}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        "$GITHUB_ACTION_PATH/notes.sh"
+
+    # The notes as a page, uploaded whole rather than zipped, so that a browser opens it from the run.
+    - if: inputs.change-notes == 'true'
+      uses: actions/upload-artifact@v7
+      with:
+        path: ${{ steps.notes.outputs.preview }}
+        archive: false
+
+    # Every Gradle step gets the change notes, so that each builds the plugin from the same input.
+    # They come under a name of the action's own, and become CHANGE_NOTES only where there are some:
+    # an empty CHANGE_NOTES would write an empty <change-notes />, and would hide one the job sets.
+    # LC_ALL=C.UTF-8, because the JVM reads the environment in the locale's encoding, and the notes are UTF-8.
     - shell: bash
       env:
         JAVA_HOME: ${{ steps.java.outputs.path }}
-      run: ./gradlew check
+        RELEASE_CI_CHANGE_NOTES: ${{ steps.notes.outputs.html }}
+      run: |
+        [[ -z $RELEASE_CI_CHANGE_NOTES ]] || export CHANGE_NOTES=$RELEASE_CI_CHANGE_NOTES LC_ALL=C.UTF-8
+        ./gradlew check
 
     # The room the Plugin Verifier has and the room it leaves, printed so that whether free-disk-space is needed
     # is read off a run rather than guessed. The IDEs it downloads land under the Gradle user home.
@@ -132,7 +182,10 @@ runs:
     - shell: bash
       env:
         JAVA_HOME: ${{ steps.java.outputs.path }}
-      run: ./gradlew verifyPlugin
+        RELEASE_CI_CHANGE_NOTES: ${{ steps.notes.outputs.html }}
+      run: |
+        [[ -z $RELEASE_CI_CHANGE_NOTES ]] || export CHANGE_NOTES=$RELEASE_CI_CHANGE_NOTES LC_ALL=C.UTF-8
+        ./gradlew verifyPlugin
 
     - shell: bash
       run: "$GITHUB_ACTION_PATH/verifier-report.sh"
@@ -154,7 +207,10 @@ runs:
         CERTIFICATE_CHAIN: ${{ inputs.certificate-chain }}
         PRIVATE_KEY: ${{ inputs.private-key }}
         PRIVATE_KEY_PASSWORD: ${{ inputs.private-key-password }}
-      run: ./gradlew signPlugin
+        RELEASE_CI_CHANGE_NOTES: ${{ steps.notes.outputs.html }}
+      run: |
+        [[ -z $RELEASE_CI_CHANGE_NOTES ]] || export CHANGE_NOTES=$RELEASE_CI_CHANGE_NOTES LC_ALL=C.UTF-8
+        ./gradlew signPlugin
 
     - id: archive
       shell: bash
@@ -163,12 +219,15 @@ runs:
       run: "$GITHUB_ACTION_PATH/archive.sh"
 
     # Whether the archive is the release's, read before release-flow/draft pushes anything.
+    # CHANGE_NOTES is the action's own here, empty with the input off: one the job sets is not checked.
+    # -X utf8 reads it as UTF-8 whatever the locale, as LC_ALL=C.UTF-8 makes the JVM read it in the Gradle steps.
     - shell: bash
       env:
         PYTHON: ${{ steps.python.outputs.python-path }}
         ARCHIVE: ${{ steps.archive.outputs.archive }}
+        CHANGE_NOTES: ${{ steps.notes.outputs.html }}
       # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
       # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
       run: |
         export LD_LIBRARY_PATH="${PYTHON%/bin/*}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-        "$PYTHON" "$GITHUB_ACTION_PATH/check-archive.py" "$ARCHIVE"
+        "$PYTHON" -X utf8 "$GITHUB_ACTION_PATH/check-archive.py" "$ARCHIVE"

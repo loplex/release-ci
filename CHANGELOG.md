@@ -21,6 +21,12 @@ released it, so once a version has a section here, that section may not be edite
   A build script that took its version from anywhere else passed the build and the draft, and
   failed only once the release was published, in `intellij/publish`.\
   It runs Python for that, installed as every other action now installs it, under *Changed*.
+- `change-notes` on `intellij/build`: the release's section of `CHANGELOG.md`, rendered as HTML,
+  reaches the build in `CHANGE_NOTES`, and the signed archive's `plugin.xml` is checked to hold it.\
+  A plugin's change notes then say what its release page says, without a renderer of its own.\
+  Their relative links are read at the release's tag, which the new `tag` input passes.\
+  The same notes, their links read at the release commit, are uploaded as `change-notes.html`, a
+  page to open before the draft is published.
 - `skip-unreadable-releases` on `check-release`, `release-flow/prepare` and
   `release-flow/merge-back`, and `lib/main.py changelog --skip-unreadable-releases`: the `changelog`
   check names as not compared a release whose tag holds a line of `CHANGELOG.md` it does not read,

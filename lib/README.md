@@ -4,8 +4,8 @@
 
 - [`check-release`](../check-release/README.md) runs its checks;
 - [`release-flow`](../release-flow/README.md) cuts, drafts and carries back a release with it;
-- [`intellij/build`](../intellij/README.md) reads the version the signed archive has to carry with
-  it;
+- [`intellij/build`](../intellij/README.md) reads the version the signed archive has to carry, and
+  renders its change notes, with it;
 - [`intellij/publish`](../intellij/README.md) reads a version's channel with it.
 
 A workflow calls the actions, not `main.py`.

@@ -113,6 +113,12 @@ released it, so once a version has a section here, that section may not be edite
   its line or in the lines of text right below it, indented as far as its text, such as
   `- <!-- what changed -->` left as a reminder, naming its line.\
   It was released as an empty bullet.
+- `close-changelog` leaves out of the section a `###` group with nothing under it, HTML comments
+  and link definitions aside.\
+  It was released as a heading with nothing under it.\
+  A link definition in it stays where the group stood.\
+  Text in such a group that is read as saying nothing is refused by its line instead of being left
+  out with it, since GitHub may show it.
 - `close-changelog` writes empty the blank lines after the last entry under `[Unreleased]`.\
   One holding spaces was written back below the new section as a line of spaces.
 - `intellij/publish`: `attempts` and `wait` have to be whole numbers, `attempts` from 1 to 9999,

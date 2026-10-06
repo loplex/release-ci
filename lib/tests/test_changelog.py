@@ -141,6 +141,53 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
                 written = closed(self.FOLLOWED.replace("- X\n", f"- X\n{entry}\n"), "0.2.0", "2026-10-06")
                 self.assertIn(f"- X\n{entry}\n\n## [0.1.0]", written)
 
+    def test_text_read_as_saying_nothing_is_not_left_out_with_its_group(self):
+        """Only blank lines and comments go with a group, and a link definition stays where it stood; other text the
+        reading takes for nothing is refused by its line, link definitions at the foot or not, so that text it may have
+        misjudged does not leave in silence."""
+        for log in (self.FOLLOWED, self.LINKED):
+            for body, line in (("\u00a0\n", 11), ("**\n", 11), ("<!-- c -->\n\n&nbsp;\n", 13),
+                               ("<!-- c --> <!--> The v1 API is gone.\n", 11)):  # A browser shows it.
+                with self.subTest(body, foot=log is self.LINKED):
+                    with self.assertRaises(SystemExit) as raised:
+                        closed(log.replace("- X\n", f"- X\n\n### Removed\n\n{body}"), "0.2.0", "2026-10-07")
+                    self.assertTrue(str(raised.exception).startswith(f"CHANGELOG.md line {line} holds text read as"))
+        # A comment left open past a line's start is text, and what follows `-->` on a comment's line is raw HTML, shown
+        # as written.
+        for text in ("**<!--** markers stay.", "<!-- c --> **"):
+            with self.subTest(text):
+                written = closed(self.FOLLOWED.replace("- X\n", f"- X\n\n### Removed\n\n{text}\n"), "0.2.0",
+                                 "2026-10-07")
+                self.assertIn(f"### Removed\n\n{text}", written)
+
+    def test_a_group_that_says_nothing_is_left_out(self):
+        """A release page would show it as a heading with nothing under it; a comment under it goes with it."""
+        for groups in ("### Added\n\n### Fixed\n\n- F\n\n### Removed\n",
+                       "### Added\n\n<!-- later -->\n\n### Fixed\n\n- F\n\n### Removed\n\n<!--\nlater\n-->\n"):
+            with self.subTest(groups):
+                written = closed(self.FOLLOWED.replace("### Added\n\n- X\n", groups), "0.2.0", "2026-10-07")
+                self.assertIn("## [0.2.0] - 2026-10-07\n\n### Fixed\n\n- F\n\n## [0.1.0]", written)
+
+    def test_a_link_definition_stays_where_its_group_is_left_out(self):
+        """GitHub shows it nowhere, so the group says nothing, but a link elsewhere may use it.
+        It is set off by blank lines: right below an entry, it would be read as more of the entry's text."""
+        for groups, section in (
+                ("### Removed\n\n[//]: # (nothing yet)\n[x]: https://a.invalid\n\n### Fixed\n\n- F, see [x]\n",
+                 "[//]: # (nothing yet)\n[x]: https://a.invalid\n\n### Fixed\n\n- F, see [x]"),
+                ("### Fixed\n\n- F\n### Removed\n\n[//]: # (x)\n\n<!-- c -->\n\n### Security\n\n- S\n",
+                 "### Fixed\n\n- F\n\n[//]: # (x)\n\n### Security\n\n- S")):
+            with self.subTest(groups):
+                written = closed(self.FOLLOWED.replace("### Added\n\n- X\n", groups), "0.2.0", "2026-10-08")
+                self.assertIn(f"## [0.2.0] - 2026-10-08\n\n{section}\n\n## [0.1.0]", written)
+                self.assertIn("0.2.0", sections(written), "the written file is read without a refusal")
+
+    def test_an_unreleased_of_nothing_but_empty_groups_is_refused_as_empty(self):
+        """As the Gradle changelog plugin leaves it, with no entry filled in: once its groups are left out, nothing
+        is left."""
+        with self.assertRaises(SystemExit) as raised:
+            closed(self.FOLLOWED.replace("- X\n", "### Fixed\n"), "0.2.0", "2026-10-07")
+        self.assertIn("nothing is under [Unreleased]", str(raised.exception))
+
     def test_a_last_line_of_a_no_break_space_stays_in_the_section(self):
         """It goes on the entry above it, as CommonMark reads it; only blank lines belong to the file."""
         written = closed(self.FOLLOWED.replace("- X\n", "- X\n\u00a0\n"), "0.2.0", "2026-10-05")
@@ -334,6 +381,11 @@ class ClosingAPreReleaseTrain(unittest.TestCase):
                 closed(changelog, version, "2026-09-21")
             self.assertEqual(str(raised.exception),
                              f"nothing is under [Unreleased]{said}, so there is nothing to release")
+
+    def test_a_group_a_pre_release_left_empty_is_not_taken_in(self):
+        """0.3.0-beta.1 was closed with a `### Security` holding only a comment, before such groups were left out."""
+        quiet_group = self.TRAIN.replace("### Removed\n\n- R", "### Removed\n\n- R\n\n### Security\n\n<!-- none -->")
+        self.assertNotIn("Security", self.body(closed(quiet_group, "0.3.0", "2026-10-07"), "0.3.0"))
 
     def test_a_group_of_another_name_is_kept_after_the_known_kinds(self):
         """Its text was released too; dropping it because it is not one of the six kinds would lose it."""

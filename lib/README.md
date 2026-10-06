@@ -149,10 +149,23 @@ It refuses:
   Any other line ends what is read, such as a blank line, a comment or a code block, and so does a
   line indented less: an entry whose text stands only past it is refused too, though GitHub may show
   that text.
+- text that is read as saying nothing in a `###` group that holds nothing else but comments and
+  link definitions, a comment's line with something after its `-->` included, by its line number:
+  the group would be left out, and the text with it.\
+  It is refused even where the entries of a pre-release taken in would keep the group.\
+  A pre-release section closed by release-ci 0.2 or earlier was not checked for such text, nor for
+  an entry that says nothing, so a final release that takes it in can leave its group out with them,
+  or show such an entry as an empty bullet where its group says something.
 
 Markdown is read only this far, not rendered, so the verdict can differ from GitHub's either way: an
 `[Unreleased]` or an entry left empty by an HTML tag with nothing in it, or by a comment that runs
 on over lines, can pass, and an entry of nothing but `*` is refused.
+
+A `###` group with nothing under it, comments and link definitions aside, is left out of the
+section instead.\
+A link definition in it stays where the group stood, since a link elsewhere may use it.\
+An `[Unreleased]` of nothing but such groups, as the Gradle changelog plugin leaves it after a
+release, then says nothing and is refused.
 
 A final release takes into its section the entries of every pre-release that SemVer orders below it
 and above the final release before it.\
@@ -259,7 +272,14 @@ applied to Keep a Changelog's kinds of change:
   A feature filed under a misspelled `### Add` can then still be seen.
 - An empty group asks for nothing, and HTML comments and link definitions are ignored.\
   An entry or a line that says nothing counts as none, comments aside, by the measure that
-  [refuses](#the-changelog) an `[Unreleased]` that says nothing.
+  [refuses](#the-changelog) an `[Unreleased]` that says nothing.\
+  That measure is no renderer: it can take for nothing raw HTML a browser shows after a comment's
+  `-->`, such as `<!-- c --> <!--> The v1 API is gone.`, and so ask for a smaller step than that
+  text calls for.\
+  `close-changelog` refuses such a line under `[Unreleased]` in a group that holds nothing else, so
+  the release stops there rather than go out with the smaller step.\
+  A pre-release section closed by release-ci 0.2 or earlier was not checked for it, and can still
+  ask for the smaller step.
 - An entry under no group at all is refused, because nothing says what kind of change it is.
 - A repository with no `CHANGELOG.md`, or no `[Unreleased]` section in it, is asked for no more
   than a patch, and told so on stderr.

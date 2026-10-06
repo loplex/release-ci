@@ -62,7 +62,8 @@ def closing(line: str) -> str:
     """What a line of an HTML comment holds after the comment closes on it: ` gone` in `<!-- see below --> gone`, and
     nothing where it does not close.
     That is raw HTML, which GitHub passes on as written: its Markdown is not read, a comment in it is left out, one
-    left open hides the rest of the line, and a character reference such as `&nbsp;` stands for its character."""
+    left open hides the rest of the line, and a character reference such as `&nbsp;` stands for its character.
+    A browser reads more of HTML than this, so closed() refuses such text rather than leave it out with its group."""
     _, end, rest = line.partition("-->")
     return html.unescape(COMMENT.sub("", rest).partition("<!--")[0]) if end else ""
 
@@ -332,6 +333,27 @@ def combined(texts: list[str]) -> str:
     return "\n\n".join(leads + [f"### {name}\n\n" + joined(merged[name]) for name in order])
 
 
+def pruned(text: str) -> str:
+    """A section's text without the `###` groups that say nothing, comments counting as nothing (see silent()).
+
+    A release page would show such a group as a heading with nothing under it.
+    The Gradle changelog plugin leaves all six kinds in `[Unreleased]` after a release, with nothing under them.
+    A comment under it goes with it: GitHub shows none.
+    A link definition under it stays where the group stood, set off by blank lines, since a link elsewhere may use
+    it."""
+    lines, kinds, quiet, headings = text.split("\n"), structure(text), silent(text), groups(text)
+    kept, done = [], 0
+    for at, (index, _) in enumerate(headings):
+        end = headings[at + 1][0] if at + 1 < len(headings) else len(lines)
+        if all(quiet[index + 1 : end]):
+            kept += lines[done:index]
+            definitions = [lines[line] for line in range(index + 1, end) if kinds[line].kind == "definition"]
+            if definitions:
+                kept += ([""] if kept and kept[-1].strip(" \t\r") else []) + definitions + [""]
+            done = end
+    return "\n".join(kept + lines[done:]).strip("\n")
+
+
 def compared_from(version: str, below: list[str]) -> str | None:
     """The release a section's link compares from, which is the one its entries are counted from.
 
@@ -402,10 +424,17 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
       Any other line ends what is read, such as a blank line, a comment, a code block or a nested entry, and so does a
       line indented less: an entry whose text stands only past it is refused as well, though GitHub may show that text.
       Of several entries opened on one line, as in `- - <!-- c -->`, the last is the one asked about.
+    - text read as saying nothing, comments aside, in a group of `[Unreleased]` that holds nothing else but comments and
+      link definitions, a comment's line with something after its `-->` included: the group would be left out (see
+      below), and the text with it, which the reading here may have got wrong.
+      It is refused even where the entries of a pre-release taken in would keep the group.
 
     Markdown is read only this far, not rendered (see shown()), so the verdict can differ from GitHub's either way: an
     `[Unreleased]` or an entry left empty by an HTML tag with nothing in it, or by a comment that runs on over lines,
     can pass, and an entry of nothing but `*` is refused.
+
+    A group that says nothing is left out of the section instead (see pruned()): an empty heading names no change.
+    An `[Unreleased]` of nothing but such groups is then refused as saying nothing.
 
     Link definitions at the foot of the file belong to the file, not to the section, so they stay where they are.
     Changelogs with them and without them are both in use.
@@ -450,6 +479,16 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
     foot_lines = []
     while lines and (not lines[-1].strip(" \t\r") or line_kinds[len(lines) - 1].kind == "definition"):
         foot_lines.insert(0, lines.pop())
+    # Read once the foot is off: a definition there is no part of the last group, which is left out without it.
+    quiet, headings = silent("\n".join(lines)), groups("\n".join(lines))
+    for at, (index, name) in enumerate(headings):
+        end = headings[at + 1][0] if at + 1 < len(headings) else len(lines)
+        text = next((line for line in range(index + 1, end) if line_kinds[line].kind == "text"
+                     or line_kinds[line].kind == "html" and lines[line].partition("-->")[2].strip(" \t")), None)
+        if all(quiet[index + 1 : end]) and text is not None:
+            raise SystemExit(f"CHANGELOG.md line {first + text + 1} holds text read as saying nothing, comments aside, "
+                             f"in a ### {name} group that holds nothing else, so it would be left out with the group: "
+                             f"write what changed there as an entry, or take the text out")
 
     entries = "\n".join(lines).strip("\n")
     is_final = SEMVER.match(version) is not None and SEMVER.match(version).group(4) is None
@@ -463,6 +502,7 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
         ]
         if train_entries:
             entries = combined([entries, *train_entries])
+    entries = pruned(entries)
     if all(silent(entries)):
         if is_final:
             span = f"between {start} and {version}" if start else f"below {version}"

@@ -19,11 +19,11 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
+      - run: python3 -m pip install --require-hashes -r lib/requirements.txt -r .github/requirements.txt
       - run: python3 -m unittest discover -s lib
       - run: python3 -m unittest discover -s check-release
       - run: python3 -m unittest discover -s release-flow
       - run: python3 -m unittest discover -s intellij
-      - run: python3 -m pip install -r .github/requirements.txt
       - run: python3 -m unittest discover -s .github
 
   guards:

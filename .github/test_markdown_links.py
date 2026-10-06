@@ -5,7 +5,7 @@ Where it names a heading, the heading exists there.
 The Markdown is read by cmarkgfm, the Python binding of GitHub's own cmark-gfm.
 So a link, a heading or code is whatever GitHub renders as one.
 Run with `python3 -m unittest discover -s .github` from the repository's root,
-with the packages in `.github/requirements.txt` installed.
+with the packages in `lib/requirements.txt` and `.github/requirements.txt` installed.
 """
 
 import re

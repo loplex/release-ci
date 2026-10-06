@@ -46,7 +46,16 @@ The options go after the subcommand name, and a subcommand refuses an option it 
   `close-changelog` reads them only with `--repository-url`, and takes them either way.
 - `--version-source` alone: `set-version`.
 - `--skip-unreadable-releases`: `changelog` alone, as [The changelog](#the-changelog) says.
-- Neither: `notes` and `channel`.
+- `--html`: `notes` alone.\
+  It prints the section as HTML, rendered by cmark-gfm, the renderer GitHub's Markdown is built on.\
+  Raw HTML in the section is left out, comments included.\
+  It needs the packages in [`requirements.txt`](requirements.txt):
+  `python3 -m pip install --require-hashes -r lib/requirements.txt`.
+- `--repository-url` with `--ref`: `notes --html` alone.\
+  They make every relative link in the HTML absolute, read at that tag or commit of the repository.\
+  [Relative links in the HTML](#relative-links-in-the-html) says where each one then leads.\
+  `close-changelog` takes a `--repository-url` of its own, for the versions' link definitions.
+- Neither `--version-source` nor `--tag-prefix`: `notes` and `channel`.
 
 ## Versions
 
@@ -246,6 +255,28 @@ applied to Keep a Changelog's kinds of change:
 - An entry under no group at all is refused, because nothing says what kind of change it is.
 - A repository with no `CHANGELOG.md`, or no `[Unreleased]` section in it, is asked for no more
   than a patch, and told so on stderr.
+
+### Relative links in the HTML
+
+`notes --html` with `--repository-url` and `--ref` makes every relative link absolute.\
+The HTML is shown away from the repository, as a JetBrains plugin's change notes, where a relative
+link has nothing to lead to.\
+Each one is read as `CHANGELOG.md`'s own, and leads where GitHub leads it on a published release's
+page:
+
+| In the section       | Leads to                                     |
+|----------------------|----------------------------------------------|
+| `docs/guide.md`      | `<repository>/blob/<ref>/docs/guide.md`      |
+| `/docs/guide.md`     | the same: `/` is the repository's root       |
+| `![s](docs/s.png)`   | `<repository>/raw/<ref>/docs/s.png`          |
+| `./`                 | `<repository>/tree/<ref>`                    |
+| `#usage`             | `<repository>/blob/<ref>/CHANGELOG.md#usage` |
+| `https://e.invalid/` | itself, as does any link with a scheme       |
+
+- `#usage` alone is where the HTML differs from the release page.\
+  There it stays an anchor of the page, which holds no such heading.
+- A link that climbs above the repository's root, such as `../x.md`, leads nowhere, on the release
+  page too, and is refused.
 
 ## Where the version comes from
 

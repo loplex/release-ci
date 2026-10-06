@@ -32,8 +32,8 @@ import sys
 
 from rules import sources
 from rules.versions import SEMVER, channel_of, check_version, precedence, version_after
-from rules.changelog import (UnreadCopy, bodies, check_changelog, closed, missing, sections, silent, structure, through,
-                             uncompared)
+from rules.changelog import (UnreadCopy, absolute_links, bodies, check_changelog, closed, missing, sections, silent,
+                             structure, through, uncompared)
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
 from rules.repository import check_ancestry, git, holder, read_file, released_versions, repository, unreachable
 
@@ -313,12 +313,43 @@ def notes_command(arguments) -> list[str]:
     cannot drift apart. The one difference is the warning release-flow/warn puts above the notes while
     publishing the release elsewhere has not completed.
     An empty section, or one of nothing but comments, is refused: nobody means to make a release whose notes are
-    empty."""
+    empty.
+
+    With --html they are rendered to HTML by cmark-gfm, the renderer GitHub's Markdown is built on,
+    for where Markdown is not read, such as a JetBrains plugin's change notes.
+    Shown there, away from the repository, a relative link leads nowhere; given --repository-url and --ref, every one
+    is made absolute, read at that tag or commit (see absolute_links())."""
+    if (arguments.repository_url is None) != (arguments.ref is None):
+        return ["notes takes --repository-url and --ref together: a relative link is read at a ref of a repository"]
+    if arguments.repository_url is not None and not arguments.html:
+        return ["notes takes --repository-url and --ref only with --html: the release page reads relative links itself"]
     text = bodies(read_changelog("the released sections")).get(arguments.version, "")
     if all(silent(text)):
         return [f"CHANGELOG.md holds nothing for {arguments.version}, so there are no notes to release it with"]
-    print(text)
+    if not arguments.html:
+        print(text)
+        return []
+    rendered = as_html(text)
+    if arguments.repository_url is not None:
+        rendered, refused = absolute_links(rendered, arguments.repository_url, arguments.ref)
+        if refused:
+            return refused
+    print(rendered, end="")
     return []
+
+
+def as_html(markdown: str) -> str:
+    """Markdown rendered by cmark-gfm, with GitHub's extensions and cmark-gfm's default options.
+
+    Those options leave raw HTML out, comments included: each becomes an `<!-- raw HTML omitted -->`.
+    `>` is escaped wherever it lands, in text, code, a link or a title.
+    So `]]>`, which ends the CDATA a plugin.xml carries change notes in, cannot come out of it."""
+    try:
+        import cmarkgfm
+    except ImportError:
+        raise SystemExit("notes --html renders with cmarkgfm, which is not installed here: "
+                         "python3 -m pip install --require-hashes -r lib/requirements.txt") from None
+    return cmarkgfm.github_flavored_markdown_to_html(markdown)
 
 
 def channel_command(arguments) -> list[str]:
@@ -408,6 +439,12 @@ def main() -> int:
     notes_parser = commands.add_parser("notes", help="the text below one released section's heading, as "
                                                      "release notes")
     notes_parser.add_argument("version", help="the version whose notes to print")
+    notes_parser.add_argument("--html", action="store_true", help="print them as HTML, rendered by cmark-gfm as "
+                                                                  "on GitHub; needs lib/requirements.txt")
+    notes_parser.add_argument("--repository-url", help="with --html and --ref, make every relative link absolute, "
+                                                       "into this repository")
+    notes_parser.add_argument("--ref", help="with --html and --repository-url, the tag or commit a relative link is "
+                                            "read at")
     notes_parser.set_defaults(run=notes_command)
 
     prefix_parser = commands.add_parser("prefix", parents=both, help="what release tags carry in front of the version")

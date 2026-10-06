@@ -11,6 +11,11 @@ released it, so once a version has a section here, that section may not be edite
 
 - `--tag-prefix '^none'` of `lib/main.py` says the tags have no prefix, as the actions' `tag-prefix`
   input does.
+- `lib/main.py notes --html` prints a released section as HTML, rendered by cmark-gfm, for where
+  Markdown is not read, such as a JetBrains plugin's change notes.\
+  It needs the packages in `lib/requirements.txt`.\
+  With `--repository-url` and `--ref` it makes every relative link absolute, read at that tag or
+  commit, since away from the repository a relative link leads nowhere.
 - `skip-unreadable-releases` on `check-release`, `release-flow/prepare` and
   `release-flow/merge-back`, and `lib/main.py changelog --skip-unreadable-releases`: the `changelog`
   check names as not compared a release whose tag holds a line of `CHANGELOG.md` it does not read,

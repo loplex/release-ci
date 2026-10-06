@@ -3,7 +3,7 @@
 ## Running the tests
 
 ```
-python3 -m pip install -r .github/requirements.txt
+python3 -m pip install --require-hashes -r lib/requirements.txt -r .github/requirements.txt
 python3 -m unittest discover -s lib
 python3 -m unittest discover -s check-release
 python3 -m unittest discover -s release-flow
@@ -11,7 +11,7 @@ python3 -m unittest discover -s intellij
 python3 -m unittest discover -s .github
 ```
 
-The first line installs what the `.github` suite needs.
+The first line installs what the `lib` and `.github` suites need.
 
 All five suites run on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml).\
@@ -84,16 +84,19 @@ The suite reads Markdown through [cmarkgfm](https://github.com/theacodes/cmarkgf
 binding of GitHub's own cmark-gfm.\
 Code, tables, headings and links are then what GitHub renders.
 
-- `lib/main.py` reads `CHANGELOG.md` without a package, so that the actions need none; the reader
-  test is what holds it to cmark-gfm.
+- `lib/main.py` reads `CHANGELOG.md` without a package, so that an action needs none to read it;
+  the reader test is what holds it to cmark-gfm.\
+  Only `notes --html` renders through cmarkgfm.
 - The length test renders a line that opens with a link on its own.\
   So a link defined elsewhere, or written in HTML, does not count as a link there.
 - The link test reads a heading's anchor through
   [regex](https://github.com/mrabarnett/mrab-regex), for the `\p{...}` classes Python's own `re`
   lacks.
-- cmarkgfm, the packages it needs, and regex are pinned in
-  [`.github/requirements.txt`](.github/requirements.txt).\
-  No other suite needs a package.
+- cmarkgfm and the packages it needs are pinned, with hashes, in
+  [`lib/requirements.txt`](lib/requirements.txt).\
+  The `lib` suite needs it for `notes --html`.
+- regex is pinned, with hashes, in [`.github/requirements.txt`](.github/requirements.txt).
+- No other suite needs a package.
 
 ## Recording a change
 

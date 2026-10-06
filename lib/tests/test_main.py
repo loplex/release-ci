@@ -1,7 +1,8 @@
 """Tests for main.py, the command line: its subcommands over repositories built for the purpose,
 and the arguments it refuses.
 
-Run with `python3 -m unittest discover -s lib` from the repository root.
+Run with `python3 -m unittest discover -s lib` from the repository root, with the packages in
+`lib/requirements.txt` installed.
 """
 
 import argparse
@@ -33,7 +34,7 @@ class TheReleaseNotes(unittest.TestCase):
     The one exception is the warning release-flow/warn puts above the notes while publishing elsewhere has not
     completed."""
 
-    def notes_of(self, changelog, version):
+    def notes_of(self, changelog, version, html=False, repository_url=None, ref=None):
         here = Path(self.enterContext(tempfile.TemporaryDirectory()))
         (here / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
         original = repository.REPO
@@ -41,7 +42,8 @@ class TheReleaseNotes(unittest.TestCase):
         self.addCleanup(setattr, repository, "REPO", original)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            problems = main.notes_command(argparse.Namespace(version=version))
+            problems = main.notes_command(argparse.Namespace(version=version, html=html, repository_url=repository_url,
+                                                             ref=ref))
         return out.getvalue(), problems
 
     TEXT = ("# Log\n\n## [Unreleased]\n\n## [0.2.0] - 2026-09-21\n\n### Added\n\n- A\n\n"
@@ -87,6 +89,65 @@ class TheReleaseNotes(unittest.TestCase):
         _, problems = self.notes_of(self.TEXT, "0.3.0")
         self.assertTrue(problems)
         self.assertIn("holds nothing for 0.3.0", problems[0])
+
+    def test_html_is_the_section_rendered_by_cmark_gfm(self):
+        """For a JetBrains plugin's change notes, which the Marketplace shows as HTML."""
+        notes, problems = self.notes_of(self.TEXT, "0.2.0", html=True)
+        self.assertEqual(problems, [])
+        self.assertEqual(notes, "<h3>Added</h3>\n<ul>\n<li>A</li>\n</ul>\n")
+
+    def test_html_leaves_raw_html_out(self):
+        notes, _ = self.notes_of(self.TEXT.replace("- A\n", "- A <kbd>B</kbd>\n\n<!-- C -->\n"), "0.2.0", html=True)
+        self.assertNotIn("kbd", notes)
+        self.assertNotIn(" C ", notes)
+        self.assertIn("<li>A <!-- raw HTML omitted -->B<!-- raw HTML omitted --></li>", notes)
+
+    def test_html_cannot_end_the_cdata_plugin_xml_holds_it_in(self):
+        notes, _ = self.notes_of(self.TEXT.replace("- A\n", "- A ]]> `]]>` <https://e.invalid/]]>>\n"), "0.2.0",
+                                 html=True)
+        self.assertIn("A ]]&gt;", notes)
+        self.assertNotIn("]]>", notes)
+
+    def test_a_version_with_no_section_is_refused_with_html_too(self):
+        _, problems = self.notes_of(self.TEXT, "0.3.0", html=True)
+        self.assertIn("holds nothing for 0.3.0", problems[0])
+
+    def test_html_makes_relative_links_absolute_at_the_ref(self):
+        """Change notes are shown away from the repository, where a relative link has nothing to lead to.
+        A link with a scheme is left alone."""
+        section = "- [Guide](docs/guide.md), [Usage](#usage), <https://e.invalid>\n- ![shot](docs/shot.png)\n"
+        text = self.TEXT.replace("- A\n", section)
+        notes, problems = self.notes_of(text, "0.2.0", html=True, repository_url="https://github.com/o/r", ref="v0.2.0")
+        self.assertEqual(problems, [])
+        self.assertIn('<a href="https://github.com/o/r/blob/v0.2.0/docs/guide.md">Guide</a>', notes)
+        self.assertIn('<a href="https://github.com/o/r/blob/v0.2.0/CHANGELOG.md#usage">Usage</a>', notes)
+        self.assertIn('<a href="https://e.invalid">https://e.invalid</a>', notes)
+        self.assertIn('<img src="https://github.com/o/r/raw/v0.2.0/docs/shot.png" alt="shot" />', notes)
+
+    def test_html_leaves_relative_links_as_they_are_without_a_ref(self):
+        notes, problems = self.notes_of(self.TEXT.replace("- A\n", "- [Guide](docs/guide.md)\n"), "0.2.0", html=True)
+        self.assertEqual(problems, [])
+        self.assertIn('<a href="docs/guide.md">Guide</a>', notes)
+
+    def test_a_link_above_the_root_is_refused_and_nothing_printed(self):
+        notes, problems = self.notes_of(self.TEXT.replace("- A\n", "- [x](../x.md)\n"), "0.2.0", html=True,
+                                        repository_url="https://github.com/o/r", ref="v0.2.0")
+        self.assertEqual(notes, "")
+        self.assertIn("links to ../x.md, above the repository's root", problems[0])
+
+    def test_the_repository_and_the_ref_go_together_and_with_html(self):
+        for html, repository_url, ref, says in ((True, "https://github.com/o/r", None, "together"),
+                                                (True, None, "v0.2.0", "together"),
+                                                (False, "https://github.com/o/r", "v0.2.0", "only with --html")):
+            with self.subTest(html=html, repository_url=repository_url, ref=ref):
+                notes, problems = self.notes_of(self.TEXT, "0.2.0", html=html, repository_url=repository_url, ref=ref)
+                self.assertEqual(notes, "")
+                self.assertIn(says, problems[0])
+
+    def test_html_without_cmarkgfm_names_what_to_install(self):
+        with unittest.mock.patch.dict(sys.modules, {"cmarkgfm": None}), self.assertRaises(SystemExit) as refused:
+            self.notes_of(self.TEXT, "0.2.0", html=True)
+        self.assertIn("lib/requirements.txt", str(refused.exception))
 
 
 class TheChangelogCommand(TwoReleasesOneOffMain):
@@ -361,7 +422,8 @@ class AChangelogWithALineNotRead(unittest.TestCase):
                                    (main.changelog_command, {}),
                                    (main.close_changelog_command,
                                     dict(version="0.1.0", date="2026-09-21", repository_url=None)),
-                                   (main.notes_command, dict(version="0.1.0"))):
+                                   (main.notes_command,
+                                    dict(version="0.1.0", html=False, repository_url=None, ref=None))):
             with self.subTest(command.__name__):
                 with (contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()),
                       self.assertRaises(SystemExit) as raised):

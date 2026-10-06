@@ -15,7 +15,7 @@ open, and hide the blocks after it.
 It reads footnotes, as GitHub does.
 
 Run with `python3 -m unittest discover -s .github` from the repository's root, with the packages in
-`.github/requirements.txt` installed.
+`lib/requirements.txt` and `.github/requirements.txt` installed.
 """
 
 import random

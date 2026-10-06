@@ -5,6 +5,7 @@ Plain functions over the file's text, with no repository behind them.
 
 import html
 import re
+import urllib.parse
 
 from .markdown import Line, Unread, read, reading
 from .versions import SEMVER, precedence
@@ -258,6 +259,54 @@ def joined(entries: list[str]) -> str:
     for more in entries[1:]:
         text += ("\n\n" if structure(text)[-1].kind == "definition" else "\n") + more
     return text
+
+
+# A link or an image as cmark-gfm renders one: `<a href="…"` or `<img src="…"`.
+# Raw HTML is left out of what it renders, and it escapes `"` and `<` everywhere else, so every match is one it wrote.
+RENDERED_LINK = re.compile(r'<(a href|img src)="([^"]*)"')
+
+
+def absolute_links(rendered: str, repository_url: str, ref: str) -> tuple[str, list[str]]:
+    """Rendered notes with every relative link made absolute, read as CHANGELOG.md's own at `ref`, a tag or a commit.
+
+    The notes are shown away from the repository, as a JetBrains plugin's change notes, where a relative link has
+    nothing to lead to. They point where GitHub points them on a published release's page:
+    - a path to the file at `ref`, `<repository>/blob/<ref>/<path>`, and an image to `/raw/` in place of `/blob/`;
+    - one starting with `/` from the repository's root, which is CHANGELOG.md's directory anyway;
+    - one that comes to the root itself, such as `./`, to the tree at `ref`.
+    Unlike there, `#anchor` alone leads into CHANGELOG.md, where the heading it names stands; on the release page it
+    stays an anchor of the page itself.
+    A link with a scheme or a host is left as it is.
+    One that climbs above the repository's root leads nowhere, on the release page too, and is refused."""
+    base = repository_url.rstrip("/")
+    at = urllib.parse.quote(ref, safe="/+")
+    refused = []
+
+    def absolute(match: re.Match) -> str:
+        attribute, written = match.groups()
+        target = urllib.parse.urlsplit(html.unescape(written))
+        if target.scheme or target.netloc:
+            return match.group(0)
+        segments = []
+        for segment in target.path.split("/"):
+            if segment == "..":
+                if not segments:
+                    refused.append(f"CHANGELOG.md links to {html.unescape(written)}, above the repository's root: "
+                                   "the link leads nowhere, here or on the release page")
+                    return match.group(0)
+                segments.pop()
+            elif segment not in ("", "."):
+                segments.append(segment)
+        if not target.path:
+            url = f"{base}/blob/{at}/CHANGELOG.md"
+        elif not segments:
+            url = f"{base}/tree/{at}"
+        else:
+            url = f"{base}/{'raw' if attribute == 'img src' else 'blob'}/{at}/{'/'.join(segments)}"
+        url += (f"?{target.query}" if target.query else "") + (f"#{target.fragment}" if target.fragment else "")
+        return f'<{attribute}="{html.escape(url)}"'
+
+    return RENDERED_LINK.sub(absolute, rendered), refused
 
 
 def combined(texts: list[str]) -> str:

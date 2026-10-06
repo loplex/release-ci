@@ -5,7 +5,8 @@ Run with `python3 -m unittest discover -s lib` from the repository root.
 
 import unittest
 
-from rules.changelog import bodies, check_changelog, closed, linked, says_something, sections, through, uncompared
+from rules.changelog import (absolute_links, bodies, check_changelog, closed, linked, says_something, sections,
+                             through, uncompared)
 
 
 class ReleasedSections(unittest.TestCase):
@@ -442,3 +443,68 @@ class SayingSomething(unittest.TestCase):
         for text in ("a", "-", "\u3164", " \u00a0x"):
             with self.subTest(text=repr(text)):
                 self.assertTrue(says_something(text))
+
+class AbsoluteLinks(unittest.TestCase):
+    """Relative links in rendered notes, made absolute where GitHub points them on a published release's page."""
+
+    REPOSITORY = "https://github.com/o/r"
+
+    def made(self, rendered, ref="v1.0.0"):
+        return absolute_links(rendered, self.REPOSITORY + "/", ref)
+
+    def test_a_path_leads_to_the_file_at_the_ref(self):
+        for written, expected in (("docs/guide.md", "docs/guide.md"), ("./docs/guide.md", "docs/guide.md"),
+                                  ("/docs/guide.md", "docs/guide.md"), ("docs/../README.md", "README.md"),
+                                  ("docs//guide.md", "docs/guide.md")):
+            with self.subTest(written):
+                self.assertEqual(self.made(f'<a href="{written}">g</a>'),
+                                 (f'<a href="https://github.com/o/r/blob/v1.0.0/{expected}">g</a>', []))
+
+    def test_an_image_is_read_raw(self):
+        self.assertEqual(self.made('<img src="docs/shot.png" alt="s" />'),
+                         ('<img src="https://github.com/o/r/raw/v1.0.0/docs/shot.png" alt="s" />', []))
+
+    def test_an_anchor_alone_leads_into_the_changelog(self):
+        """On the release page it would stay an anchor of the page, which holds no such heading."""
+        self.assertEqual(self.made('<a href="#usage">u</a>'),
+                         ('<a href="https://github.com/o/r/blob/v1.0.0/CHANGELOG.md#usage">u</a>', []))
+
+    def test_the_root_leads_to_the_tree(self):
+        for written in ("/", "./", "docs/.."):
+            with self.subTest(written):
+                self.assertEqual(self.made(f'<a href="{written}">r</a>'),
+                                 ('<a href="https://github.com/o/r/tree/v1.0.0">r</a>', []))
+
+    def test_a_query_and_a_fragment_are_kept(self):
+        self.assertEqual(self.made('<a href="docs/a.md?plain=1#L5">a</a>'),
+                         ('<a href="https://github.com/o/r/blob/v1.0.0/docs/a.md?plain=1#L5">a</a>', []))
+
+    def test_escapes_are_read_and_written_again(self):
+        """cmark-gfm writes `&` as `&amp;` in an attribute; it stays one `&` in the link."""
+        self.assertEqual(self.made('<a href="a.md?x=1&amp;y=2">a</a>'),
+                         ('<a href="https://github.com/o/r/blob/v1.0.0/a.md?x=1&amp;y=2">a</a>', []))
+
+    def test_a_link_with_a_scheme_or_a_host_is_left_alone(self):
+        for written in ("https://e.invalid/a", "mailto:a@e.invalid", "//e.invalid/a", "HTTP://e.invalid"):
+            with self.subTest(written):
+                rendered = f'<a href="{written}">x</a>'
+                self.assertEqual(self.made(rendered), (rendered, []))
+
+    def test_a_commit_or_a_tag_with_a_slash_is_a_ref_too(self):
+        self.assertEqual(self.made('<a href="a.md">a</a>', ref="0123abc")[0],
+                         '<a href="https://github.com/o/r/blob/0123abc/a.md">a</a>')
+        self.assertEqual(self.made('<a href="a.md">a</a>', ref="plugin/v1.0.0+b")[0],
+                         '<a href="https://github.com/o/r/blob/plugin/v1.0.0+b/a.md">a</a>')
+
+    def test_a_link_above_the_root_is_refused(self):
+        """GitHub turns `../x.md` into `/<repository>/blob/x.md`, which leads nowhere either."""
+        for written in ("../x.md", "docs/../../x.md", "/../x.md"):
+            with self.subTest(written):
+                _, refused = self.made(f'<a href="{written}">x</a>')
+                self.assertEqual(len(refused), 1)
+                self.assertIn(f"links to {written}, above the repository's root", refused[0])
+
+    def test_text_that_reads_like_a_link_is_not_one(self):
+        """cmark-gfm escapes `"` and `<` in text and code, and leaves raw HTML out."""
+        rendered = '<p>&lt;a href=&quot;docs/a.md&quot;&gt; <code>&lt;img src=&quot;b.png&quot;</code></p>'
+        self.assertEqual(self.made(rendered), (rendered, []))

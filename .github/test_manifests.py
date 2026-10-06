@@ -2,7 +2,7 @@
 """What every action.yml this repository tracks has to be true of, read as text.
 
 Run with `python3 -m unittest discover -s .github` from the repository's root, with the packages in
-`.github/requirements.txt` installed.
+`lib/requirements.txt` and `.github/requirements.txt` installed.
 """
 
 import re

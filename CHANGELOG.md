@@ -109,6 +109,8 @@ released it, so once a version has a section here, that section may not be edite
   `close-changelog` takes a link definition for nothing too, wherever it stands.\
   Both took only white space and link definitions for nothing, `close-changelog` only a definition
   at the end of `[Unreleased]`, so such a section was released with empty notes.
+- `close-changelog` writes empty the blank lines after the last entry under `[Unreleased]`.\
+  One holding spaces was written back below the new section as a line of spaces.
 - `intellij/publish`: `attempts` and `wait` have to be whole numbers, `attempts` from 1 to 9999,
   checked before the upload.\
   An `attempts` that was no number made no attempt, and the run failed as though the version was

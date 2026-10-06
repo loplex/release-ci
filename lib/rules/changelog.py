@@ -458,7 +458,8 @@ def closed(changelog: str, version: str, on: str, repository_url: str | None = N
 
     # The blank line before whatever follows is written here, not inherited:
     # the blank lines between [Unreleased] and the section below were just taken off the end of the entries.
-    foot = "\n".join(foot_lines).strip("\n")
+    # A blank line of spaces is written empty, so it cannot stand as a foot of its own.
+    foot = "\n".join(line if line.strip(" \t\r") else "" for line in foot_lines).strip("\n")
     replacement = f"\n## [{version}] - {on}\n\n{entries}\n"
     if foot:
         replacement += f"\n{foot}\n"

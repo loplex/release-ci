@@ -146,6 +146,16 @@ class ClosingTheUnreleasedSection(unittest.TestCase):
         self.assertTrue(written.endswith("## [0.2.0] - 2026-09-21\n\n### Added\n\n- X\n\n"
                                          "[Unreleased]: https://example.invalid/x\n"))
 
+    def test_a_blank_line_of_spaces_is_not_written_as_a_foot(self):
+        """A line of spaces is a blank line all the same, and goes off the entries with the others.
+        It is written empty, so it does not stand below the section as a foot of its own."""
+        for changelog, kept in ((self.FOLLOWED.replace("- X\n\n", "- X\n   \n \n"), "- X\n\n## [0.1.0]"),
+                                (self.LINKED.replace("- X\n\n\n\n", "- X\n\n  \n\n"), "- X\n\n[Unreleased]: ")):
+            with self.subTest(changelog):
+                written = closed(changelog, "0.2.0", "2026-09-21")
+                self.assertIn(kept, written)
+                self.assertNotRegex(written, r"(?m)^ +$")
+
     def test_closing_twice_is_refused_rather_than_burying_one(self):
         once = closed(self.FOLLOWED, "0.2.0", "2026-09-21")
         with self.assertRaises(SystemExit) as raised:

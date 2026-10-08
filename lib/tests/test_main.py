@@ -30,8 +30,9 @@ prefix_from = main.prefix_from
 
 class TheReleaseNotes(unittest.TestCase):
     """One released section's text, printed for the release page.
-    It comes from the file the changelog check holds to the tag, so the two cannot say different things.
-    The one exception is the warning release-flow/warn puts above the notes while publishing elsewhere has not
+    It comes from the file the changelog check holds to the tag, so the two cannot say different things, link
+    definitions aside: the check compares none.
+    The one other exception is the warning release-flow/warn puts above the notes while publishing elsewhere has not
     completed."""
 
     def notes_of(self, changelog, version, html=False, repository_url=None, ref=None):
@@ -56,11 +57,26 @@ class TheReleaseNotes(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertEqual(notes, "### Added\n\n- A\n")
 
-    def test_link_definitions_are_not_notes(self):
+    def test_a_definition_the_section_does_not_name_is_not_notes(self):
         """Asked of the last section, because the definitions at the foot fall into its body.
         Any other section ends at the heading below it, so the definitions are outside it however it is read."""
         notes, _ = self.notes_of(self.TEXT, "0.1.0")
         self.assertNotIn("example.invalid", notes)
+
+    def test_the_definitions_a_section_names_follow_it(self):
+        """Without them a reference link would show as written: `[the issue][1]`.
+        A definition is found wherever it stands, matched as cmark-gfm matches a label, a no-break space being no white
+        space there; one named by nothing stays out."""
+        section = ("- A, see [the Issue][ONE] and [Two  words]\n\n[x]: https://x.invalid\n[one]: https://one.invalid\n"
+                   "[two\u00a0words]: https://nb.invalid\n")
+        text = self.TEXT.replace("- A\n", section).replace("[0.2.0]:", "[two words]: https://two.invalid\n[0.2.0]:")
+        notes, problems = self.notes_of(text, "0.2.0")
+        self.assertEqual(problems, [])
+        self.assertEqual(notes, "### Added\n\n- A, see [the Issue][ONE] and [Two  words]\n\n"
+                                "[one]: https://one.invalid\n[two words]: https://two.invalid\n")
+        html, _ = self.notes_of(text, "0.2.0", html=True)
+        self.assertIn('<a href="https://one.invalid">the Issue</a> and <a href="https://two.invalid">Two  words</a>',
+                      html)
 
     def test_a_version_with_nothing_to_say_is_refused(self):
         _, problems = self.notes_of(self.TEXT.replace("### Added\n\n- A\n\n", ""), "0.2.0")
@@ -114,13 +130,14 @@ class TheReleaseNotes(unittest.TestCase):
 
     def test_html_makes_relative_links_absolute_at_the_ref(self):
         """Change notes are shown away from the repository, where a relative link has nothing to lead to.
-        A link with a scheme is left alone."""
-        section = "- [Guide](docs/guide.md), [Usage](#usage), <https://e.invalid>\n- ![shot](docs/shot.png)\n"
-        text = self.TEXT.replace("- A\n", section)
+        A reference link's definition is followed too, and a link with a scheme is left alone."""
+        section = "- [Guide](docs/guide.md), [Usage](#usage), [ref][r], <https://e.invalid>\n- ![shot](docs/shot.png)\n"
+        text = self.TEXT.replace("- A\n", section).replace("[0.2.0]:", "[r]: /README.md\n[0.2.0]:")
         notes, problems = self.notes_of(text, "0.2.0", html=True, repository_url="https://github.com/o/r", ref="v0.2.0")
         self.assertEqual(problems, [])
         self.assertIn('<a href="https://github.com/o/r/blob/v0.2.0/docs/guide.md">Guide</a>', notes)
         self.assertIn('<a href="https://github.com/o/r/blob/v0.2.0/CHANGELOG.md#usage">Usage</a>', notes)
+        self.assertIn('<a href="https://github.com/o/r/blob/v0.2.0/README.md">ref</a>', notes)
         self.assertIn('<a href="https://e.invalid">https://e.invalid</a>', notes)
         self.assertIn('<img src="https://github.com/o/r/raw/v0.2.0/docs/shot.png" alt="shot" />', notes)
 

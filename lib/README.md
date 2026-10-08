@@ -173,9 +173,21 @@ That includes an abandoned pre-release of another version: `1.0.0` after `0.3.0-
 beta's entries in.\
 A pre-release takes in nothing but its own entries.
 
+`notes` prints a released section below its heading, without the link definitions in it.\
+It follows the section with the definitions from anywhere in the file whose label the section names
+in brackets, so a reference link such as `[the issue][1]` stays a link on the release page.\
+Any text in brackets counts, so a definition can be printed by chance, such as one for a version
+the text mentions as `[0.2.0]`: GitHub shows no definition, and only that text becomes a link.
+
 The `changelog` check compares every released section with the copy in its release tag.
 
 - `[Unreleased]` is not compared.
+- Link definitions are not compared, wherever they stand: given a repository URL, a release
+  rewrites the versions' own.\
+  `notes` prints the ones a section names as the file holds them when it runs, so one edited later
+  moves the changelog's link and not the release page's.\
+  Adding or removing one inside a released section still fails the check: its line is left blank,
+  not taken out, so the section's blank lines change.
 - A release tagged before its section existed has nothing to compare, and is listed as not
   compared.
 - A section that is missing because its tag is not on the current history is reported as such:

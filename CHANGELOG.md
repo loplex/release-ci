@@ -142,6 +142,10 @@ released it, so once a version has a section here, that section may not be edite
   `close-changelog` found no indented `## [Unreleased]`.\
   A final release that took in its train listed a pre-release's indented or closed `### Added` apart
   from its own.
+- `notes` follows the section with the link definitions it names, from wherever they stand in
+  `CHANGELOG.md`.\
+  It left them out, so a reference link such as `[the issue][1]` showed on the release page as
+  written.
 
 ## [0.2.0] - 2026-09-29
 

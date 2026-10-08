@@ -32,8 +32,8 @@ import sys
 
 from rules import sources
 from rules.versions import SEMVER, channel_of, check_version, precedence, version_after
-from rules.changelog import (UnreadCopy, absolute_links, bodies, check_changelog, closed, missing, sections, silent,
-                             structure, through, uncompared)
+from rules.changelog import (UnreadCopy, absolute_links, bodies, check_changelog, closed, missing, referenced,
+                             sections, silent, structure, through, uncompared)
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
 from rules.repository import check_ancestry, git, holder, read_file, released_versions, repository, unreachable
 
@@ -310,10 +310,13 @@ def notes_command(arguments) -> list[str]:
     """The text of one released section, below its heading: what the release notes say.
 
     It comes from the same file the changelog check holds to the tag, so the release page and the changelog
-    cannot drift apart. The one difference is the warning release-flow/warn puts above the notes while
-    publishing the release elsewhere has not completed.
+    cannot drift apart, link definitions aside: the check compares none, so one edited after the release moves the
+    changelog's link and not the page's. The one other difference is the warning release-flow/warn puts above the
+    notes while publishing the release elsewhere has not completed.
     An empty section, or one of nothing but comments, is refused: nobody means to make a release whose notes are
     empty.
+    The link definitions the section names follow it, from wherever they stand in the file (see referenced()), so a
+    reference link such as `[the issue][1]` stays a link.
 
     With --html they are rendered to HTML by cmark-gfm, the renderer GitHub's Markdown is built on,
     for where Markdown is not read, such as a JetBrains plugin's change notes.
@@ -323,9 +326,13 @@ def notes_command(arguments) -> list[str]:
         return ["notes takes --repository-url and --ref together: a relative link is read at a ref of a repository"]
     if arguments.repository_url is not None and not arguments.html:
         return ["notes takes --repository-url and --ref only with --html: the release page reads relative links itself"]
-    text = bodies(read_changelog("the released sections")).get(arguments.version, "")
+    changelog = read_changelog("the released sections")
+    text = bodies(changelog).get(arguments.version, "")
     if all(silent(text)):
         return [f"CHANGELOG.md holds nothing for {arguments.version}, so there are no notes to release it with"]
+    definitions = referenced(changelog, text)
+    if definitions:
+        text += "\n\n" + "\n".join(definitions)
     if not arguments.html:
         print(text)
         return []

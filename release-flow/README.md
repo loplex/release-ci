@@ -400,13 +400,15 @@ The action does not guess which.\
 The step runs last, after the release and everything before it are done, so failing it undoes
 nothing.
 
-### The warning is the one thing the notes say that the changelog does not
+### The warning is the one thing release-flow writes into published notes
 
 A release's notes are its released section of `CHANGELOG.md`.\
 `release-flow/draft` writes them with `lib/main.py notes`, so that the two cannot come to say
-different things.
+different things.\
+A link definition is one way they can: the `changelog` check compares none, so one edited after the
+release moves the changelog's link and not the release page's.
 
-The warning is the exception.\
+The warning is the other.\
 It is the only thing release-flow writes into the notes of a release already published, and no
 changelog carries it.\
 A released section may not be edited, and whether a publish completed is not a change to the

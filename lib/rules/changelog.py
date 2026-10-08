@@ -13,6 +13,9 @@ from .versions import SEMVER, precedence
 
 # A section's heading is a `##` heading whose text starts with its label in brackets: `## [1.0.0] - 2026-10-05`.
 LABEL = re.compile(r"\[([^\]]+)\]")
+# Text in brackets, escaped brackets in it included, as a link label stands: `[1]` and `[the issue]` in
+# `[the issue][1]`. CommonMark allows no other bracket inside a label.
+BRACKETED = re.compile(r"\[((?:\\.|[^\[\]\\])*)\]")
 
 # The kinds of change Keep a Changelog names, in its order.
 # A section merged from several is written in this order.
@@ -262,6 +265,23 @@ def joined(entries: list[str]) -> str:
     for more in entries[1:]:
         text += ("\n\n" if structure(text)[-1].kind == "definition" else "\n") + more
     return text
+
+
+def matched(label: str) -> str:
+    """A link label as cmark-gfm matches it to a definition: case folded, its runs of spaces, tabs and line ends made
+    one space, and none at its ends. A no-break space is no white space there."""
+    return re.sub(r"[ \t\r\n]+", " ", label).strip(" ").casefold()
+
+
+def referenced(changelog: str, text: str) -> list[str]:
+    """The changelog's link definitions whose label `text` names in brackets, wherever they stand, in the file's order.
+    bodies() leaves them out of a section, so the section alone would show `[the issue][1]` as written.
+    Any text in brackets counts, so a definition can be named by chance, such as `[0.2.0]` for a version the text
+    mentions; GitHub shows no definition, so one too many changes nothing but that bracket."""
+    named = {matched(found) for found in BRACKETED.findall(text)}
+    lines = changelog.split("\n")
+    return [lines[index] for index, line in enumerate(structure(changelog))
+            if line.kind == "definition" and matched(BRACKETED.match(lines[index].lstrip(" ")).group(1)) in named]
 
 
 # A link or an image as cmark-gfm renders one: `<a href="…"` or `<img src="…"`.

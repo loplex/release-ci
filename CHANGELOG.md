@@ -34,6 +34,10 @@ released it, so once a version has a section here, that section may not be edite
   check names as not compared a release whose tag holds a line of `CHANGELOG.md` it does not read,
   instead of failing.\
   Where that line stands inside the release's own section, a tree without that section still fails.
+- `release-flow/merge-back` says in a notice when the release it lands merged in commits that landed
+  on the default branch while the release was out, and how many.\
+  The run was green with nothing to tell such a landing from a plain fast-forward, though it puts a
+  merge on the default branch's history.
 
 ### Changed
 

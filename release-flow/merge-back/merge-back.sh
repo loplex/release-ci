@@ -134,6 +134,8 @@ fi
 # The attempt must not fail the run: the release is out either way.
 landable=true
 before=$(git rev-parse HEAD)
+# Counted from the tag, not from this branch: a repeated run lands the merge an earlier run made, which it finds here.
+meanwhile=$(git rev-list --count "${TAG}..origin/${DEFAULT_BRANCH}")
 if ! git merge --no-edit "origin/${DEFAULT_BRANCH}"; then
   git merge --abort 2>/dev/null || true
   landable=false
@@ -177,6 +179,14 @@ fi
 echo "landed=${landed}" >> "$GITHUB_OUTPUT"
 
 if [[ $landed == true ]]; then
+  # A merge that lands looks like a push that needed none: the run is green either way.
+  # So it is said, because the landing puts a merge commit on the default branch's history.
+  # On the first-parent line only: a merge the default branch took in by itself, a pull request's, is no landing's.
+  merges=$(git rev-list --first-parent --merges --count "${TAG}..HEAD")
+  if (( merges > 0 )); then
+    echo "::notice::${DEFAULT_BRANCH} moved while ${TAG} was out: ${meanwhile} commit(s) that landed meanwhile" \
+         "were merged in by ${merges} merge commit(s)"
+  fi
   # The release is already out and on the default branch, so neither step below fails the run: both only warn.
   # A push made with GITHUB_TOKEN starts no workflow run, so the check workflow is started by hand.
   # Starting it is a write to Actions, answered 403 without `actions: write`.

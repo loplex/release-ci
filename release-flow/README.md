@@ -233,7 +233,10 @@ differently:
 - A push moves the default branch onto the release branch as it stands.\
   The release commit stays on the first-parent line.\
   Above it are the commit that opens the next version, where the source declares one, and whatever
-  else the release branch gained, such as a merge of what landed meanwhile.
+  else the release branch gained, such as a merge of what landed meanwhile.\
+  Where a merge is there, a notice on the run that lands says so, with how many commits they took
+  in.\
+  The run is green either way, though such a merge stays on the default branch's history.
 
 ### When a pull request carries the release instead
 

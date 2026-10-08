@@ -122,6 +122,7 @@ class MergeBack(Staged):
         self.assertEqual(outputs.get("version"), "0.1.0")
         self.assertEqual(outputs.get("next"), "0.1.1-SNAPSHOT")
         self.assertTrue(self.on_default_branch(self.tag), "the tag has to be reachable from the branch")
+        self.assertNotIn("::notice::", done.stdout, "nothing was merged in, so nothing is said of it")
 
     def test_a_tag_holding_a_line_not_read_leaves_the_merge_to_a_pull_request_unless_skipped(self):
         """v0.0.9's copy of CHANGELOG.md holds a block quote, and a tag cannot be edited.
@@ -221,6 +222,60 @@ class MergeBack(Staged):
         self.assertIn("landed since the release was cut",
                       git("log", "--format=%s", "main", cwd=self.origin).stdout)
         self.assertEqual(git("show", "main:work.txt", cwd=self.origin, check=False).stdout, "landed\n")
+        self.assertIn(f"::notice::main moved while {self.tag} was out: 1 commit(s) that landed meanwhile were merged "
+                      "in by 1 merge commit(s)", done.stdout)
+
+    def test_a_merge_the_default_branch_took_in_meanwhile_is_not_counted_as_the_landing_s(self):
+        theirs = Path(self.enterContext(tempfile.TemporaryDirectory())) / "theirs"
+        subprocess.run(["git", "clone", "-q", "--branch", "main", str(self.origin), str(theirs)],
+                       check=True, capture_output=True)
+        identity = ["-c", "user.email=o", "-c", "user.name=o"]
+        git("switch", "-qc", "feature", cwd=theirs)
+        (theirs / "feature.txt").write_text("f\n", encoding="utf-8")
+        git("add", "feature.txt", cwd=theirs)
+        git(*identity, "commit", "-qm", "feature", cwd=theirs)
+        git("switch", "-q", "main", cwd=theirs)
+        git(*identity, "merge", "-q", "--no-ff", "-m", "Merge pull request #1", "feature", cwd=theirs)
+        git("push", "-q", "origin", "main", cwd=theirs)
+        outputs, done = self.carry_back()
+        self.assertEqual(outputs.get("landed"), "true", done.stdout + done.stderr)
+        self.assertIn(f"::notice::main moved while {self.tag} was out: 2 commit(s) that landed meanwhile were merged "
+                      "in by 1 merge commit(s)", done.stdout)
+
+    def test_a_repeated_run_that_lands_an_earlier_run_s_merge_says_so(self):
+        """The first run merges, and its push is refused; the second finds the merge already on the branch."""
+        self.land_elsewhere("landed since the release was cut", {"work.txt": "landed\n"})
+        hook = self.origin / "hooks" / "pre-receive"
+        hook.write_text('#!/bin/bash\ngrep -q " refs/heads/main$" && exit 1\nexit 0\n', encoding="utf-8")
+        hook.chmod(0o755)
+        outputs, first = self.carry_back()
+        self.assertEqual(outputs.get("landed"), "false", first.stdout + first.stderr)
+        self.assertNotIn("::notice::", first.stdout, "nothing landed, so no merge landed with it")
+        hook.unlink()
+        # A fresh checkout, as a repeated run makes: the tag, and the branch only as the remote has it.
+        git("switch", "-q", "--detach", self.tag, cwd=self.work)
+        git("branch", "-q", "-D", "release/0.1.0", cwd=self.work)
+        outputs, done = self.carry_back()
+        self.assertEqual(outputs.get("landed"), "true", done.stdout + done.stderr)
+        self.assertIn(f"::notice::main moved while {self.tag} was out: 1 commit(s) that landed meanwhile were merged "
+                      "in by 1 merge commit(s)", done.stdout)
+
+    def test_a_repeated_run_that_finds_more_landed_merges_again_and_counts_both(self):
+        """The earlier run's merge, and this run's of what landed since: two merges, two commits taken in."""
+        self.land_elsewhere("landed first", {"one.txt": "1\n"})
+        hook = self.origin / "hooks" / "pre-receive"
+        hook.write_text('#!/bin/bash\ngrep -q " refs/heads/main$" && exit 1\nexit 0\n', encoding="utf-8")
+        hook.chmod(0o755)
+        outputs, first = self.carry_back()
+        self.assertEqual(outputs.get("landed"), "false", first.stdout + first.stderr)
+        hook.unlink()
+        self.land_elsewhere("landed second", {"two.txt": "2\n"})
+        git("switch", "-q", "--detach", self.tag, cwd=self.work)
+        git("branch", "-q", "-D", "release/0.1.0", cwd=self.work)
+        outputs, done = self.carry_back()
+        self.assertEqual(outputs.get("landed"), "true", done.stdout + done.stderr)
+        self.assertIn(f"::notice::main moved while {self.tag} was out: 2 commit(s) that landed meanwhile were merged "
+                      "in by 2 merge commit(s)", done.stdout)
 
     def test_a_default_branch_that_moves_under_the_push_is_not_pushed_past(self):
         """The race the unforced push exists to catch.

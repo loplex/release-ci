@@ -4,6 +4,8 @@ description: |
 
   1. Where `version-source` declares a version, writes the next one and commits it: the version being worked on.
   2. Merges in whatever landed on the default branch since the release was cut.
+     Where the release lands with such a merge, this run's or an earlier run's, a notice says so: the run is green
+     either way.
   3. Fast-forwards the default branch onto the release branch.
      The release commit and its tag stay on the default branch's history.
 

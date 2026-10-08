@@ -264,6 +264,24 @@ Merge commits have to be allowed too, under Settings > General > Pull Requests.\
 A default branch whose protection requires a linear history takes neither that merge nor
 merge-back's own push, once that push carries a merge of what landed meanwhile.
 
+### Required pull requests and a linear history leave a release no way to land
+
+A default branch whose protection requires both pull requests and a linear history cannot take a
+release with its tag on the history:
+
+- every release goes to merge-back's pull request, as
+  [When a pull request carries the release instead](#when-a-pull-request-carries-the-release-instead)
+  says;
+- the protection refuses to merge that pull request with a merge commit;
+- *Squash and merge* and *Rebase and merge* take the tag off the history, as
+  [Merge merge-back's pull request with a merge commit](#merge-merge-backs-pull-request-with-a-merge-commit)
+  says.
+
+Only a push by a credential allowed to bypass the protection lands the release there.\
+A linear history alone leaves a release no way to land as well, once anything landed on the default
+branch while the release was out: merge-back's push then carries a merge, which the protection
+refuses, and its pull request meets the last two points above.
+
 ### `landed` says whether the release landed
 
 The merge-back step succeeds both when it lands the release and when it opens a pull request.\

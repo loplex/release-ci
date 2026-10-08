@@ -81,6 +81,18 @@ released it, so once a version has a section here, that section may not be edite
   A pre-release compares from the release before it, which after a hotfix is the one before it in
   its train.\
   "Before" means SemVer order, not the order in the file.
+- `check-release` warns and passes where `changelog`, `ancestry` or `version` find nothing wrong but
+  a published release yet to land: one still on `release/<version>`, which merge-back has yet to
+  carry back.\
+  They failed, so a check of the default branch, or of a pull request into it, run while a release
+  was out stayed red, and an open merge-back pull request kept the default branch red.\
+  `lib/main.py` exits with 4 for it, which `release-flow/prepare` still refuses.\
+  While it only warns, `version` sets neither of the action's outputs, though it does not fail the
+  step.\
+  A squash or a rebase merge still fails, and so does a force-push below the commit a release was
+  cut from.\
+  A force-push that takes a landed release back off only warns while `release/<version>` is still
+  there, so merge-back's pull request asks for the branch to be deleted once merged.
 
 ### Removed
 
@@ -94,8 +106,8 @@ released it, so once a version has a section here, that section may not be edite
   [UPGRADING.md](UPGRADING.md#intellijbuild-leaves-the-jobs-jdk-as-it-was) says what a later step
   that ran on it does now.
 - **BREAKING** `lib/main.py` reads `CHANGELOG.md` as CommonMark does, but only the part of Markdown
-  a changelog needs, and every command that reads the file refuses a line outside that part, with
-  its number and what to write instead.\
+  a changelog needs, and every command that reads the file, `ancestry` aside, refuses a line outside
+  that part, with its number and what to write instead.\
   [What `main.py` reads in `CHANGELOG.md`](lib/README.md#what-mainpy-reads-in-changelogmd) lists
   both.\
   `changelog` refuses such a line in the copy at a release tag too, down to the end of that

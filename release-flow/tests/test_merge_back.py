@@ -291,6 +291,8 @@ class MergeBack(Staged):
         self.assertFalse(self.on_default_branch(self.tag))
         self.assertIn("pr create", self.gh_said())
         self.assertIn("Until this is merged, `main` does not reach `v0.1.0`", self.gh_said())
+        self.assertIn("`changelog` warn of it", self.gh_said())
+        self.assertIn("Delete `release/0.1.0` once this is merged", self.gh_said())
 
     def test_a_default_branch_that_takes_no_push_is_left_to_the_pull_request(self):
         """A protected default branch refuses the push every time.
@@ -306,6 +308,24 @@ class MergeBack(Staged):
                       "from the credential the checkout left", done.stdout)
         self.assertFalse(self.on_default_branch(self.tag))
         self.assertIn("pr create --base main --head release/0.1.0 ", self.gh_said())
+
+    def test_a_merged_tree_with_another_release_yet_to_land_is_left_to_the_pull_request(self):
+        """0.0.9 is published from a branch of its own too, and has yet to land.
+        The checks of the merged tree exit with 4 for it, which merge-back takes as it takes any other refusal."""
+        git("switch", "-qc", "release/0.0.9", "origin/main", cwd=self.work)
+        (self.work / "CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n\n## [0.0.9] - 2026-09-20\n\n- Z\n",
+                                                encoding="utf-8")
+        git("commit", "-qam", "chore(release): 0.0.9", cwd=self.work)
+        git("tag", "v0.0.9", cwd=self.work)
+        git("push", "-q", "origin", "release/0.0.9", "v0.0.9", cwd=self.work)
+        git("switch", "-q", "release/0.1.0", cwd=self.work)
+        outputs, done = self.carry_back()
+        printed = done.stdout + done.stderr
+        self.assertEqual(outputs.get("landed"), "false", printed)
+        self.assertIn("refused the result", printed)
+        self.assertIn("[0.0.9] is released, and has yet to land here", printed)
+        self.assertFalse(self.on_default_branch(self.tag))
+        self.assertIn("pr create", self.gh_said())
 
     def test_a_conflict_is_left_to_the_pull_request(self):
         theirs = Path(self.enterContext(tempfile.TemporaryDirectory())) / "theirs"

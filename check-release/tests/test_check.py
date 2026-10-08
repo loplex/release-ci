@@ -56,6 +56,34 @@ class TheAction(unittest.TestCase):
         self.assertIn("Compared 1 released section(s)", done.stdout)
         self.assertIn("All 1 released tag(s) are reachable", done.stdout)
 
+    def test_a_release_yet_to_land_warns_and_passes(self):
+        """0.2.0 is published from its release branch, and main has yet to take it in, as before merge-back lands it.
+        A commit checked in that window passes with a warning; any other failure still fails the run."""
+        git("switch", "-qc", "release/0.2.0", cwd=self.work)
+        (self.work / "CHANGELOG.md").write_text("# Changelog\n\n## [0.2.0] - 2026-09-02\n\n- B\n\n"
+                                                "## [0.1.0] - 2026-09-01\n\n- A\n", encoding="utf-8")
+        git("commit", "-qam", "0.2.0", cwd=self.work)
+        git("tag", "v0.2.0", cwd=self.work)
+        git("switch", "-q", "main", cwd=self.work)
+        _, done = self.check("changelog ancestry")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        for check in ("changelog", "ancestry"):
+            self.assertIn(f"::warning::check-release {check} found a published release that has yet to land here",
+                          done.stdout)
+        self.assertNotIn("::error::", done.stdout)
+        _, done = self.check("ancestry version", version="0.4.0")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("::warning::check-release ancestry found", done.stdout)
+        self.assertIn("::error::check-release version said no", done.stdout)
+
+        # Declared as the version just released, as main does until merge-back writes the next one.
+        (self.work / "gradle.properties").write_text("version = 0.2.0-SNAPSHOT\ntagPrefix = v\n", encoding="utf-8")
+        outputs, done = self.check("version", tag_prefix="", source="gradle.properties")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("::warning::check-release version found a published release that has yet to land here",
+                      done.stdout)
+        self.assertEqual(outputs, {}, "a version that only warns has not passed, and writes no output")
+
     def test_a_check_that_says_no_fails_the_run_and_is_named(self):
         outputs, done = self.check("version", version="0.4.0")
         self.assertEqual(done.returncode, 1)

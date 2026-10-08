@@ -89,8 +89,10 @@ has the whole rule.
 
 ### Some Markdown in `CHANGELOG.md` is refused
 
-Every `lib/main.py` command that reads `CHANGELOG.md` refuses a line outside the part of Markdown it
-reads, so every action that runs one does too.\
+Every `lib/main.py` command that reads `CHANGELOG.md`, `ancestry` aside, refuses a line outside the
+part of Markdown it reads, so every action that runs one does too.\
+`ancestry` reads it only to tell a release on its way, and fails that release where it cannot read
+it.\
 [What `main.py` reads in `CHANGELOG.md`](lib/README.md#what-mainpy-reads-in-changelogmd) lists what
 is read and what is refused, such as an indented code block, a block quote or a tab in the
 indentation.\

@@ -255,6 +255,41 @@ class NothingIsCutWhereTheRulesSayNo(Staged):
         outputs, done = self.prepare()
         self.assert_nothing_was_cut(outputs, done, "no longer reads as the tag has it")
 
+    def test_a_release_yet_to_land(self):
+        """0.1.1 is published from its release branch, which merge-back has yet to carry back.
+        check-release only warns of it on the default branch; prepare refuses, so no release goes out above it.
+        Under `tags` no version is declared, so `version` passes, and changelog and ancestry alone refuse."""
+        for source, tag_prefix in (("gradle.properties", ""), ("tags", "v")):
+            with self.subTest(source):
+                self.stage()
+                git("switch", "-qc", "release/0.1.1", cwd=self.work)
+                (self.work / "CHANGELOG.md").write_text(PENDING.replace("[Unreleased]", "[0.1.1] - 2026-09-02"),
+                                                        encoding="utf-8")
+                (self.work / "gradle.properties").write_text("version = 0.1.1\ntagPrefix = v\n", encoding="utf-8")
+                git("commit", "-qam", "chore(release): 0.1.1", cwd=self.work)
+                git("tag", "v0.1.1", cwd=self.work)
+                git("push", "-q", "origin", "release/0.1.1", "v0.1.1", cwd=self.work)
+                git("switch", "-q", "main", cwd=self.work)
+                git("branch", "-qD", "release/0.1.1", cwd=self.work)
+                outputs, done = self.prepare(source=source, tag_prefix=tag_prefix)
+                self.assert_nothing_was_cut(outputs, done, "v0.1.1 is released, and has yet to land here")
+                self.assertIn("::error::the release rules said no", done.stdout)
+
+    def test_a_release_yet_to_land_whose_copy_changelog_skips_is_refused_by_ancestry(self):
+        """The copy at v0.1.1 holds a line not read above its section, which skip-unreadable-releases passes over,
+        so changelog says nothing of the release, and under `tags` version does not either: ancestry refuses."""
+        git("switch", "-qc", "release/0.1.1", cwd=self.work)
+        (self.work / "CHANGELOG.md").write_text(
+            PENDING.replace("## [Unreleased]", "> intro\n\n## [0.1.1] - 2026-09-02"), encoding="utf-8")
+        git("commit", "-qam", "chore(release): 0.1.1", cwd=self.work)
+        git("tag", "v0.1.1", cwd=self.work)
+        git("push", "-q", "origin", "release/0.1.1", "v0.1.1", cwd=self.work)
+        git("switch", "-q", "main", cwd=self.work)
+        git("branch", "-qD", "release/0.1.1", cwd=self.work)
+        outputs, done = self.prepare(source="tags", tag_prefix="v", skip_unreadable_releases="true")
+        self.assert_nothing_was_cut(outputs, done, "v0.1.1 is released, and has yet to land here")
+        self.assertIn("Not compared: 0.1.1", done.stdout + done.stderr)
+
     def test_nothing_under_unreleased(self):
         nothing_pending = PENDING.replace("### Fixed\n\n- F\n\n", "")
         self.stage(changelog=nothing_pending)

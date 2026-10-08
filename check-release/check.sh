@@ -63,7 +63,12 @@ for check in "${check_names[@]}"; do
   fi
   printf '%s\n' "$out"
 
-  if (( rc != 0 )); then
+  # 4: nothing wrong but a published release that has yet to land here, which merge-back or its pull request carries
+  # back.
+  # A commit pushed in that window cannot be changed to pass, and does not have to be.
+  if (( rc == 4 )); then
+    echo "::warning::check-release $check found a published release that has yet to land here"
+  elif (( rc != 0 )); then
     echo "::error::check-release $check said no"
     failed=1
   elif [[ $check == version ]]; then

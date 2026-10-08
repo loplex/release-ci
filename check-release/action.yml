@@ -5,6 +5,8 @@ description: |
   - `changelog`: whether the released sections of CHANGELOG.md are unchanged.
   - `ancestry`: whether every release tag is still reachable from the history.
 
+  A check that finds nothing but a published release still on its release branch, yet to land here, only warns.
+
   Runs in the calling workspace.
   Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.
   Needs a checkout with `fetch-depth: 0`.
@@ -75,7 +77,7 @@ outputs:
     description: |
       The version that may be released, as `version` answered it.
       It has no tag prefix and no `-SNAPSHOT`.
-      Empty unless `version` ran and passed.
+      Empty unless `version` ran and passed: also where it only warned, of a release yet to land.
     value: ${{ steps.check.outputs.version }}
   channel:
     description: |
@@ -83,7 +85,7 @@ outputs:
       - `default` for a final release, such as `0.2.0`.
       - Otherwise the first identifier of the pre-release suffix: `beta` for `0.2.0-beta.1`.
 
-      Empty unless `version` ran and passed.
+      Empty unless `version` ran and passed: also where it only warned, of a release yet to land.
     value: ${{ steps.check.outputs.channel }}
 
 runs:

@@ -60,7 +60,10 @@ The example adds `version`.
 
 - Every check named runs, even after one of them fails.
 - The step fails at the end if any check failed, and names each one that did.
-- The [outputs](#outputs) are written whenever `version` passed, even if another check failed.
+- A check that finds nothing but a published release
+  [yet to land](../lib/README.md#a-release-yet-to-land-exits-with-4) here warns and does not fail.
+- The [outputs](#outputs) are written whenever `version` passed, even if another check failed.\
+  A `version` that only warns has not passed, and writes neither.
 
 ### `<tag>` is a release tag
 
@@ -100,6 +103,9 @@ When `version` is among the checks and passes, the action sets two outputs:
 - `steps.<id>.outputs.channel`: the
   [channel](../lib/README.md#the-channel-a-version-goes-to) of that version.\
   `default` for a final release, otherwise the first identifier of its pre-release suffix.
+
+Both are empty where `version` only warns, of a release yet to land, though it does not fail the
+step.
 
 ### The `version` input
 

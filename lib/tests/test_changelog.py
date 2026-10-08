@@ -73,14 +73,13 @@ class ReleasedSections(unittest.TestCase):
         self.assertEqual(uncompared({"0.1.0": self.AT_TAG}), [])
 
     def test_a_section_missing_while_its_release_is_off_this_history_is_not_called_deleted(self):
-        """A release is published before its branch reaches the default branch.
-        In between, the section exists only where the tag is.
-        `ancestry` already fails for that.
+        """The section exists only where the tag is, and `ancestry` already fails for the tag.
         Saying the section is gone as well would read as a second, separate claim that somebody deleted text."""
         problems = check_changelog("# Changelog\n\n## [Unreleased]\n", {"0.1.0": self.AT_TAG}, {"0.1.0"})
         self.assertEqual(len(problems), 1)
         self.assertNotIn("is gone", problems[0])
-        self.assertIn("has yet to reach here", problems[0])
+        self.assertEqual(problems[0], "[0.1.0] is released but its section is not on this history, and neither is "
+                                      "the tag that released it")
 
     def test_a_section_missing_while_its_release_is_on_this_history_is_a_deletion(self):
         problems = check_changelog("# Changelog\n\n## [Unreleased]\n", {"0.1.0": self.AT_TAG}, set())

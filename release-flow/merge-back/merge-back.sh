@@ -232,9 +232,11 @@ which leaves the tag off the history of \`${DEFAULT_BRANCH}\`. *Rebase and merge
 fast-forward would do, because it always rewrites committer and date. The \`ancestry\` check goes red for
 every commit afterwards if that happens.
 
-Until this is merged, \`${DEFAULT_BRANCH}\` does not reach \`${TAG}\`: \`ancestry\` and \`changelog\` fail there
-and on every other pull request into it - \`version\` too, where the source declares a version, which
+Until this is merged, \`${DEFAULT_BRANCH}\` does not reach \`${TAG}\`: \`ancestry\` and \`changelog\` warn of it
+there and on every other pull request into it - \`version\` too, where the source declares a version, which
 \`${DEFAULT_BRANCH}\` still declares as the one just released - and no next release can be prepared.
+Delete \`${branch}\` once this is merged: while it is there, a force-push that takes \`${TAG}\` back off
+\`${DEFAULT_BRANCH}\` is only warned of.
 ${opened}
 The checks here may be waiting to be approved rather than running: where the Actions bot opened this pull
 request, GitHub holds its runs until someone with write access approves them, from the banner on this pull

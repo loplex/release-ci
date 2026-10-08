@@ -49,13 +49,15 @@ def check_ancestry(reachability: dict[str, bool], prefix: str, held_by: dict[str
     Forbidding the causes one by one would not: GitHub can add new ways to rewrite a branch.
 
     `held_by` names, for a tag that is not on this history, a branch that still holds it.
-    A release whose branch has not been carried back yet fails the same way as one a rewrite orphaned.
-    The message differs, because the cause and the fix differ:
-    blaming a rewrite for a merge that is only outstanding sends the reader looking for damage that is not there.
+    A release still on its way here, on `release/<version>`, is told apart before this rule (see carried_by)
+    and does not reach it.
 
-    A branch holding the tag does not tell the two apart:
-    a squash or rebase merge replays the release commit and leaves the original on the branch it came from.
-    So that message names both readings; both are settled by looking at that one branch.
+    A tag a branch holds that does reach it was most often landed with a squash or a rebase merge:
+    either replays the release commit and leaves the original on the branch it came from.
+    The other readings are a rewrite of the history the release was cut from, and a release still to be carried
+    back that carried_by could not recognize: from a branch of another name, or into a tree whose CHANGELOG.md is
+    missing or cannot be read.
+    So that message names all three, the squash first; each is settled by looking at that one branch.
     Only a tag that no branch holds is put down to a rewrite outright.
     """
     problems = []
@@ -66,9 +68,10 @@ def check_ancestry(reachability: dict[str, bool], prefix: str, held_by: dict[str
         branch = held_by.get(version)
         if branch:
             problems.append(
-                f"{prefix}{version} is released but is not on this history: {branch} still holds it. Either "
-                f"that branch has not been carried back yet, or it was landed with a squash or a rebase, "
-                f"which replays the release commit and leaves the tag on the original the copy replaced"
+                f"{prefix}{version} is released but is not on this history: {branch} still holds it. It was "
+                f"landed with a squash or a rebase, which replays the release commit and leaves the tag on the "
+                f"original the copy replaced, or the history it was cut from was rewritten, or that branch has yet "
+                f"to be carried back"
             )
         else:
             problems.append(
@@ -144,15 +147,69 @@ def unreachable(prefix: str, versions) -> set[str]:
 def holder(tag: str, version: str) -> str:
     """A branch that still holds `tag`, or the empty string if none does.
 
-    Asked only for a tag that HEAD does not reach, to choose between the two messages of check_ancestry.
+    Asked only for a tag that HEAD does not reach, to choose between the messages of check_ancestry.
     - Remote branches are asked first, and named as fetched: a release is carried back from what the remote has,
       and a local branch of the same name may hold something else.
-    - Among the branches of the first kind that holds the tag, `release/<version>` comes first,
-      because it is the one the reader has to act on.
+    - Among the branches of the first kind that holds the tag, `release/<version>` comes first, because it is the one
+      the reader has to act on.
+      With it, in name order, comes any name ending in `/release/<version>`, the remote's `origin/release/<version>` and
+      a `team/release/<version>` alike: the branch is only named in a message, while release_branch, which decides
+      whether a release is awaited, takes the release branch alone.
     """
     wanted = f"release/{version}"
-    for pattern in ("refs/remotes", "refs/heads"):
-        branches = git("for-each-ref", "--contains", tag, "--format=%(refname:short)", pattern).split()
+    _, branches = holding(tag)
+    return min(branches, key=lambda name: (name != wanted and not name.endswith("/" + wanted), name), default="")
+
+
+def release_branch(kind: str, branch: str, version: str) -> bool:
+    """Whether `branch`, of `kind`, is the release branch itself: `release/<version>` as a local branch,
+    `<remote>/release/<version>` as fetched. A branch whose name only ends so, `team/release/<version>`, is another."""
+    return (branch.split("/", 1)[1:] if kind == "refs/remotes" else [branch]) == [f"release/{version}"]
+
+
+def holding(tag: str) -> tuple[str, list[str]]:
+    """The first kind of branch any of which holds `tag`, `refs/remotes` before `refs/heads`, and those branches.
+
+    Both holder and carried_by take the branches of that kind alone, so the two cannot disagree about which kind
+    a branch was found among."""
+    for kind in ("refs/remotes", "refs/heads"):
+        branches = git("for-each-ref", "--contains", tag, "--format=%(refname:short)", kind).split()
         if branches:
-            return sorted(branches, key=lambda name: (name != wanted and not name.endswith("/" + wanted), name))[0]
-    return ""
+            return kind, branches
+    return "", []
+
+
+def carried_by(prefix: str, versions) -> dict[str, str]:
+    """Of `versions`, released but off this history, those whose release branch still holds the tag, each with it.
+
+    A release is published from `release/<version>` and reaches the default branch only when merge-back carries it
+    there, or its pull request does once merged. Until then the tag is off this history, which is no fault.
+    Two things about the history tell that apart from a rewrite that took the tag off:
+    - `release/<version>` holds the tag.
+    - Every parent of the tagged commit is on this history: the history the release was cut from is all still here.
+      A force-push below the point the release was cut from fails this.
+    A squash or a rebase merge passes both, so the caller has a third question to ask, of the tree.
+
+    A force-push that takes a landed release back off passes all three while its branch is still there.
+    merge-back deletes the branch when its own push lands the release; one its pull request carried is left to
+    whoever merged it, and until it is deleted such a force-push is taken for a release on its way.
+    """
+    found = {}
+    for version in versions:
+        tag = f"{prefix}{version}"
+        kind, branches = holding(tag)
+        named = [branch for branch in branches if release_branch(kind, branch, version)]
+        if not named:
+            continue
+        # A tagged commit with no parent was cut from no history, so nothing says it is this one.
+        parents = git("rev-list", "--parents", "-n", "1", f"{tag}^{{commit}}").split()[1:]
+        if parents and all(reaches(parent) for parent in parents):
+            found[version] = named[0]
+    return found
+
+
+def reaches(commit: str) -> bool:
+    """Whether HEAD reaches `commit`: it is HEAD or one of its ancestors."""
+    return subprocess.run(
+        ["git", "merge-base", "--is-ancestor", commit, "HEAD"], cwd=repository(), capture_output=True
+    ).returncode == 0

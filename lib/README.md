@@ -59,6 +59,52 @@ The options go after the subcommand name, and a subcommand refuses an option it 
   `close-changelog` takes a `--repository-url` of its own, for the versions' link definitions.
 - Neither `--version-source` nor `--tag-prefix`: `notes` and `channel`.
 
+## A release yet to land exits with 4
+
+A release is published from its branch, `release/<version>`.\
+It reaches the default branch only when `release-flow/merge-back` carries it there, or its pull
+request does once merged.\
+Until then the default branch does not reach its tag, and no commit made there in that window does.
+
+`changelog`, `ancestry` and `version` tell such a release apart from one a rewrite took off the
+history.\
+A release is yet to land where all three hold:
+
+- `release/<version>` holds its tag.\
+  The branch is looked for among the fetched branches, and among the local ones only where no
+  fetched branch holds the tag.
+- Every parent of the tagged commit is on the current history.\
+  A force-push below the point the release was cut from fails this.
+- `CHANGELOG.md` in the tree has no section for it.\
+  A squash or a rebase merge copies the release commit, and the section with it.\
+  A tree whose `CHANGELOG.md` is missing, is not UTF-8, or holds a line `main.py` does not
+  [read](#what-mainpy-reads-in-changelogmd), cannot tell, and its release is failed.
+
+Each check reports such a release as yet to land, naming the branch that holds it:
+
+- `changelog` does not compare its section, where it reads the copy at its tag, or, with
+  `--skip-unreadable-releases`, reads it past that section's heading.\
+  A copy it reads less of fails the check, or with `--skip-unreadable-releases` is named as not
+  compared, as for any other release.
+- `ancestry` does not blame a rewrite.
+- `version`, where the source declares a version, no version is handed in, and the version declared
+  is that release, does not refuse it as released already.\
+  The default branch declares it until merge-back writes the next one.\
+  A version handed in with `--version` is still refused.
+
+A check that finds nothing else exits with status 4, and with 1 where it finds more.
+
+- `check-release` reads 4 as a warning.
+- `release-flow/prepare` refuses, as on any other status but 0, so no release is prepared above one
+  that has yet to land.
+- `release-flow/merge-back` leaves its merged tree to a pull request, as on any other status but 0.
+
+A force-push that takes a release back off the default branch after it landed passes all three while
+`release/<version>` is still there, and is reported as yet to land.\
+merge-back deletes the branch when its own push lands the release.\
+Delete it once merge-back's pull request is merged, as
+[The release branch](../release-flow/README.md#the-release-branch) says.
+
 ## Versions
 
 A version is a semantic version: `1.0.0`, `1.0.0-rc.1`, `1.0.0-eap-2`, `1.0.0+dfsg1`.\
@@ -191,7 +237,8 @@ The `changelog` check compares every released section with the copy in its relea
 - A release tagged before its section existed has nothing to compare, and is listed as not
   compared.
 - A section that is missing because its tag is not on the current history is reported as such:
-  the release has not reached this branch yet.
+  neither the section nor the tag is here, and `ancestry` says why.\
+  A release still on its way here is [awaited](#a-release-yet-to-land-exits-with-4), not failed.
 - The copy at a tag is read down to the end of that release's section.\
   An older section below it is not read there.\
   A copy without that section is read whole.

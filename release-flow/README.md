@@ -314,6 +314,11 @@ A run repeated while merge-back's pull request is still open tries to land the r
   Where the deletion fails, because a rule over the branch forbids it, say, the run only warns.
 - Where a pull request carries the release instead, the branch is left to whoever merges it.
 - A run that cannot push the branch, or cannot open the pull request, fails.
+- Delete a branch left behind once its release has landed.\
+  GitHub's repository setting *Automatically delete head branches* does so for the branch of a
+  merged pull request.\
+  While it is there, a force-push that takes the release back off the default branch is taken for a
+  release [yet to land](../lib/README.md#a-release-yet-to-land-exits-with-4), and only warned of.
 
 ### Merge merge-back's pull request with a merge commit
 
@@ -321,17 +326,34 @@ Merge the pull request merge-back opens with a merge commit, as the pull request
 The tag then stays reachable, which is all `ancestry` asks.\
 *Squash and merge* and *Rebase and merge* take it off the history.
 
-Until the pull request is merged, the default branch does not reach the release's tag, so:
-
-- `ancestry` and `changelog` fail on the default branch and on every pull request into it;
-- `version` fails there too, where the source declares a version: the default branch still
-  declares the one just released;
-- no next release can be prepared.
-
 The workflows on merge-back's pull request may wait for approval instead of running, as its body
 says too.\
 GitHub holds the runs of a pull request opened with `GITHUB_TOKEN` until someone with write access
 approves them.
+
+### The checks warn until the release lands
+
+From the publish until the release lands, by merge-back's push or by its pull request, the default
+branch does not reach the release's tag.
+
+- On the default branch and on every pull request into it, `ancestry`, `changelog` and, where the
+  source declares a version, `version` find the release
+  [yet to land](../lib/README.md#a-release-yet-to-land-exits-with-4).\
+  `check-release` warns of it and passes.
+- That includes a commit pushed while merge-back runs, as long as its check runs before the release
+  lands.\
+  A check of it that runs later, a re-run or one that waited in a queue, fails once the release
+  branch is deleted, as merge-back deletes it when its own push lands the release: `ancestry` and
+  `changelog` read the tag as taken off the history, and `version`, where the source declares a
+  version, finds the version just released declared.\
+  While the branch is still there, such a check warns.\
+  Nothing is wrong with the commit: a run on a later one, such as the one merge-back starts, settles
+  it.
+- No next release can be prepared: `prepare` refuses.
+- A warning in a check run started after the merge-back run means the release is not on the default
+  branch: the run failed, its pull request is still open, or a force-push took the release back off,
+  as [The release branch](#the-release-branch) says.\
+  Look at that run, and [run it again](#running-it-again) where it failed.
 
 ### `check-workflow` needs `workflow_dispatch`, and `GITHUB_TOKEN` needs `actions: write`
 

@@ -55,17 +55,16 @@ class ReachableTags(unittest.TestCase):
     def test_a_repository_with_nothing_released_passes(self):
         self.assertEqual(check_ancestry({}, "v"), [])
 
-    def test_a_branch_that_still_holds_the_tag_is_named_with_both_readings(self):
-        """Every release passes through this state, between being published and reaching the default branch.
-        A squash or a rebase merge leaves the same state, and from the outside the two cannot be told apart:
+    def test_a_branch_that_still_holds_the_tag_is_named_with_every_reading_the_squash_first(self):
+        """A release on its way here is awaited before this rule (see AReleaseYetToLand in test_main.py).
+        What reaches it with a branch holding the tag was most often squashed or rebased onto this history:
         both replay the release commit, and the branch holding the original stays.
-        Failing is right either way.
-        Naming only the harmless reading would send the reader away from damage that is really there."""
+        A rewritten base, or a release on its way that could not be recognized, are named after it."""
         problems = check_ancestry({"0.2.0": False}, "v", {"0.2.0": "origin/release/0.2.0"})
         self.assertEqual(len(problems), 1)
         self.assertIn("origin/release/0.2.0", problems[0])
-        self.assertIn("carried back", problems[0])
-        self.assertIn("rebase", problems[0])
+        readings = [problems[0].index(said) for said in ("squash", "rewritten", "carried back")]
+        self.assertEqual(readings, sorted(readings), problems[0])
 
     def test_an_orphan_no_branch_holds_is_still_blamed_on_a_rewrite(self):
         """The two cases are told apart by whether any branch holds the tag.
@@ -258,3 +257,15 @@ class WhichBranchHoldsATag(TwoReleasesOneOffMain):
         So only a whole component of a branch name counts as the release branch."""
         self.git("branch", "prerelease/0.2.0", "v0.2.0")
         self.assertEqual(holder("v0.2.0", "0.2.0"), "release/0.2.0")
+
+    def test_the_remote_s_release_branch_is_named_ahead_of_another_remote_branch(self):
+        """`origin/aside` sorts first, so a holder that took only `release/0.2.0` itself would name it."""
+        self.git("update-ref", "refs/remotes/origin/aside", "v0.2.0")
+        self.git("update-ref", "refs/remotes/origin/release/0.2.0", "v0.2.0")
+        self.assertEqual(holder("v0.2.0", "0.2.0"), "origin/release/0.2.0")
+
+    def test_a_branch_whose_path_ends_in_the_release_branch_s_name_is_named_ahead_of_another(self):
+        """Only a message names it, so `team/release/0.2.0` is taken for the release branch here.
+        Whether a release is awaited is release_branch's to say, and it takes no such branch."""
+        self.git("branch", "-m", "release/0.2.0", "team/release/0.2.0")
+        self.assertEqual(holder("v0.2.0", "0.2.0"), "team/release/0.2.0")

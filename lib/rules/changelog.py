@@ -206,8 +206,9 @@ def check_changelog(in_tree: str, at_tag: dict[str, str], off_history: set[str] 
 
     `off_history` holds the versions whose tag this history does not reach (what `ancestry` checks).
     A missing section is told apart by it:
-    - Between publishing a release and its branch reaching the default branch, the section exists only where
-      the tag is. "Gone" would accuse somebody of deleting it, so the message says the release has yet to arrive.
+    - Where the tag is off this history too, the section exists only where the tag is, and "gone" would accuse
+      somebody of deleting it from here. The message says that neither is here; `ancestry` says why.
+      A release still on its way here is not handed in at all (see main.landing).
     - Otherwise the section was removed.
     Both fail.
     """
@@ -232,7 +233,7 @@ def missing(version: str, off_history: set[str]) -> str:
     """The problem with a released section the tree does not have, told apart as check_changelog says."""
     if version in off_history:
         return (f"[{version}] is released but its section is not on this history, and neither is the tag that "
-                f"released it: the release has yet to reach here")
+                f"released it")
     return f"[{version}] is released but its section is gone"
 
 

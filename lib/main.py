@@ -35,7 +35,39 @@ from rules.versions import SEMVER, channel_of, check_version, precedence, versio
 from rules.changelog import (UnreadCopy, absolute_links, bodies, check_changelog, closed, missing, referenced,
                              sections, silent, structure, through, uncompared)
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
-from rules.repository import check_ancestry, git, holder, read_file, released_versions, repository, unreachable
+from rules.repository import (carried_by, check_ancestry, git, holder, read_file, released_versions, repository,
+                               unreachable)
+
+
+# The exit status of a check that found nothing wrong but a release yet to land here.
+# A published release is carried back onto the default branch by merge-back, or by its pull request once merged, and
+# every commit checked before then is off its tag.
+# A caller reads this as it needs, and only check-release tells it from a failure: it warns.
+# prepare refuses to cut a release, and merge-back leaves its merged tree to a pull request, as on any other failure.
+AWAITING = 4
+
+
+class Awaiting(str):
+    """A problem that is only a published release not carried back onto this history yet (see carried_by)."""
+
+
+def landing(prefix: str, off_history) -> dict[str, str]:
+    """Of the released versions off this history, those still on their way here, each with the branch holding it.
+
+    carried_by() asks the history; a squash or a rebase merge passes its questions, so the tree is asked too.
+    Either copies the release commit onto the default branch, and with it the release's section of CHANGELOG.md.
+    A release yet to land has no section here.
+    A tree whose CHANGELOG.md is missing, is not UTF-8, or holds a line not read, cannot answer.
+    ancestry, and version where the file is missing, then fail its releases off this history as if none were on its way;
+    changelog, and version where the file is there, fail on the file itself."""
+    on_the_way = carried_by(prefix, sorted(off_history, key=precedence))
+    if not on_the_way:
+        return {}
+    try:
+        present = sections(read_changelog("the released sections"))
+    except (SystemExit, UnicodeDecodeError):
+        return {}
+    return {version: branch for version, branch in on_the_way.items() if version not in present}
 
 
 def read_declared(adapter, newline: str | None = None) -> str:
@@ -174,15 +206,25 @@ def version_command(arguments) -> list[str]:
             return []
         releases = released_versions(prefix)
         asked = unreleased_asks(releases)
+
+        # Until merge-back carries a published release here, the source here still names the version it released,
+        # and nothing is wrong with that: the version written back once it lands names the next one.
+        # A version handed in is still checked, as on the commit a release tags.
+        arriving = {} if arguments.version or candidate not in releases else landing(
+            prefix, unreachable(prefix, [candidate]))
     else:
         # Handed in, or the default where a dispatch left it empty. No file is read, and none will be written.
         releases = released_versions(prefix)
         asked = unreleased_asks(releases)
         candidate = arguments.version or next_candidate(releases, asked)
+        arriving = {}
 
-    problems = check_version(candidate, releases) or check_step(candidate, releases, asked)
-    problems += [f"[Unreleased] has an entry under no ### group, so nothing says what kind of change it is: {entry}"
-                 for entry in asked.loose]
+    loose = [f"[Unreleased] has an entry under no ### group, so nothing says what kind of change it is: {entry}"
+             for entry in asked.loose]
+    if candidate in arriving:
+        return [Awaiting(f"{candidate} is released, as {prefix}{candidate}, and has yet to land here: "
+                         f"{arriving[candidate]} holds it until it is carried back"), *loose]
+    problems = (check_version(candidate, releases) or check_step(candidate, releases, asked)) + loose
     if not problems:
         print(candidate)
     return problems
@@ -215,20 +257,26 @@ def changelog_command(arguments) -> list[str]:
             del at_tag[version]
 
     off_history, present = unreachable(prefix, [*at_tag, *began]), sections(in_tree)
+    # A release yet to land has no section here, and is not compared until it lands.
+    arriving = landing(prefix, off_history)
     problems = [] if arguments.skip_unreadable_releases else [
         f"{why}, which cannot be edited, so [{version}] cannot be compared: the skip-unreadable-releases input, "
         f"--skip-unreadable-releases here, names it as not compared instead"
-        + ("" if version not in began or version in present else ", but its section is not in this tree, which fails "
-           "either way") for version, why in unread.items()]
-    problems += check_changelog(in_tree, at_tag, off_history=off_history)
+        + ("" if version not in began or version in present or version in arriving
+           else ", but its section is not in this tree, which fails either way") for version, why in unread.items()]
+    compared = {version: text for version, text in at_tag.items() if version not in arriving}
+    problems += check_changelog(in_tree, compared, off_history=off_history)
     # A skipped copy read past the heading of its own section holds that section, so the tree has to hold it too.
     # One refused above that heading may be older than the section, so its absence from the tree proves nothing.
     gone = [] if not arguments.skip_unreadable_releases else sorted(
         (version for version in began if version not in present), key=precedence)
-    problems += [missing(version, off_history) for version in gone]
-    if not problems:
-        not_compared = uncompared(at_tag)
-        print(f"Compared {len(at_tag) - len(not_compared)} released section(s) against the tag that released them.")
+    problems += [missing(version, off_history) for version in gone if version not in arriving]
+    problems += [Awaiting(f"[{version}] is released, and has yet to land here: {branch} holds its section until it "
+                          f"is carried back")
+                 for version, branch in arriving.items() if version in at_tag or version in gone]
+    if all(isinstance(problem, Awaiting) for problem in problems):
+        not_compared = uncompared(compared)
+        print(f"Compared {len(compared) - len(not_compared)} released section(s) against the tag that released them.")
         if not_compared:
             print(f"Not compared: {', '.join(not_compared)} - tagged before the section existed, so the tag holds "
                   f"no text to compare against.")
@@ -382,12 +430,20 @@ def ancestry_command(arguments) -> list[str]:
     off_history = unreachable(prefix, releases)
     reachability = {version: version not in off_history for version in releases}
 
+    # A release yet to land is off this history for now, not taken off it.
+    arriving = landing(prefix, off_history)
+    for version in arriving:
+        del reachability[version]
     held_by = {
         version: holder(f"{prefix}{version}", version) for version, reached in reachability.items() if not reached
     }
     problems = check_ancestry(reachability, prefix, held_by)
+    problems += [Awaiting(f"{prefix}{version} is released, and has yet to land here: {branch} holds it until it is "
+                          f"carried back") for version, branch in arriving.items()]
     if not problems:
         print(f"All {len(releases)} released tag(s) are reachable from HEAD.")
+    elif reachability and all(isinstance(problem, Awaiting) for problem in problems):
+        print(f"The other {len(reachability)} released tag(s) are reachable from HEAD.")
     return problems
 
 
@@ -475,6 +531,10 @@ def main() -> int:
 
     for problem in problems:
         print(problem, file=sys.stderr)
+    if problems and all(isinstance(problem, Awaiting) for problem in problems):
+        print("Nothing else was found. The release lands here once merge-back carries it back, or once its pull "
+              "request is merged; no release can be prepared from here before then.", file=sys.stderr)
+        return AWAITING
     return 1 if problems else 0
 
 

@@ -248,6 +248,13 @@ The `changelog` check compares every released section with the copy in its relea
   With `--skip-unreadable-releases`, the release is listed as not compared instead, with that line.\
   Where that line stands inside the release's own section, the tag holds the section, so a tree
   without it still fails.
+- A byte that is not UTF-8, in the part of the copy that is read, is a line not read as well.\
+  It changes nothing about where a section starts, so the copy is read past it: the tag holds the
+  release's section where the part that is read has it.\
+  The first line not read is named, a byte or another.\
+  `CHANGELOG.md` in the tree that is not UTF-8 is refused, naming the line, by every command that
+  reads what it holds; `ancestry` reads it only to
+  [tell a release on its way](#a-release-yet-to-land-exits-with-4), and fails that release instead.
 
 ### What `main.py` reads in `CHANGELOG.md`
 

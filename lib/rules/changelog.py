@@ -133,9 +133,10 @@ class UnreadCopy(SystemExit):
     """through()'s refusal of a copy at a tag, telling whether the section of the label began above the line refused.
     Where it did, the tag holds that section; where it did not, nothing says whether the tag holds one at all."""
 
-    def __init__(self, message: str, began: bool):
+    def __init__(self, message: str, began: bool, line: int):
         super().__init__(message)
         self.began = began
+        self.line = line
 
 
 def through(changelog: str, label: str) -> str:
@@ -154,7 +155,7 @@ def through(changelog: str, label: str) -> str:
                 return "\n".join(lines[:index])
             inside = inside or bool(heading and heading.group(1) == label)
     except Unread as unread:
-        raise UnreadCopy(f"CHANGELOG.md {unread.found}", inside) from None
+        raise UnreadCopy(f"CHANGELOG.md {unread.found}", inside, unread.number) from None
     return changelog
 
 

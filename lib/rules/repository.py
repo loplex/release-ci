@@ -3,6 +3,7 @@
 Everything here that reads the repository goes through repository(), which a test can point elsewhere.
 """
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -85,10 +86,16 @@ def git(*arguments: str) -> str:
     return subprocess.run(["git", *arguments], cwd=repository(), capture_output=True, text=True, check=True).stdout
 
 
+def line_of(data: bytes, offset: int) -> int:
+    """The line `offset` stands on, a CRLF, a CR or an LF ending each line, as CommonMark ends them."""
+    return len(re.findall(rb"\r\n|\r|\n", data[:offset])) + 1
+
+
 def read_file(name: str, holds: str, encoding: str = "utf-8", newline: str | None = None) -> str:
     """A file of the repository, read as text.
 
-    A missing file is refused with its name and what it is read for.
+    A missing file is refused with its name and what it is read for, and so is one that does not decode,
+    with the line of its first byte that does not.
     A traceback would read as the tool breaking, not as the repository lacking a file, and would name no fix.
 
     `newline` is open()'s: left out, line endings are read as `\\n`.
@@ -98,6 +105,11 @@ def read_file(name: str, holds: str, encoding: str = "utf-8", newline: str | Non
             return stream.read()
     except FileNotFoundError:
         raise SystemExit(f"there is no {name} here, and it is where {holds} would be read from") from None
+    except UnicodeDecodeError as error:
+        # read() decodes the whole file at once, so the error counts from its first byte.
+        line = line_of(error.object, error.start)
+        raise SystemExit(f"{name} line {line} holds a byte that is not {encoding}, and {name} is where {holds} "
+                         f"would be read from") from None
 
 
 def released_versions(prefix: str) -> list[str]:

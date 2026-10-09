@@ -162,6 +162,16 @@ released it, so once a version has a section here, that section may not be edite
   `CHANGELOG.md`.\
   It left them out, so a reference link such as `[the issue][1]` showed on the release page as
   written.
+- `changelog`, `notes` and `close-changelog` refuse a `CHANGELOG.md` in the tree that is not UTF-8,
+  naming the line of its first byte that does not decode, and so does `version`, which reads the
+  file from this release on.\
+  `changelog` takes such a byte in the part of a copy at a release tag that it reads for a line it
+  does not read, which `--skip-unreadable-releases` names as not compared.\
+  Both ended in a traceback.\
+  The copy at a tag is read as UTF-8 whatever encoding Python takes from the locale: where that was
+  ASCII, as under `LC_ALL=C` with `PYTHONUTF8=0`, reading a copy that holds a character outside
+  ASCII ended in a traceback, and where it was another, such as Latin-2, the copy read as no longer
+  what the tag has.
 
 ## [0.2.0] - 2026-09-29
 

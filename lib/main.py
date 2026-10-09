@@ -59,13 +59,13 @@ def landing(prefix: str, off_history) -> dict[str, str]:
     A release yet to land has no section here.
     A tree whose CHANGELOG.md is missing, is not UTF-8, or holds a line not read, cannot answer.
     ancestry, and version where the file is missing, then fail its releases off this history as if none were on its way;
-    changelog, and version where the file is there, fail on the file itself."""
+    changelog, and version where the file is there, name the file's own fault."""
     on_the_way = carried_by(prefix, sorted(off_history, key=precedence))
     if not on_the_way:
         return {}
     try:
         present = sections(read_changelog("the released sections"))
-    except (SystemExit, UnicodeDecodeError):
+    except SystemExit:
         return {}
     return {version: branch for version, branch in on_the_way.items() if version not in present}
 
@@ -230,14 +230,24 @@ def version_command(arguments) -> list[str]:
     return problems
 
 
+def tagged_copy(tag: str) -> str:
+    """CHANGELOG.md as `tag` has it, its line endings read as `\\n` as git() reads them.
+
+    A byte that is not UTF-8 is kept as a lone surrogate (PEP 383), so the copy is still read past it,
+    and changelog_command names it where it stands in the part that is read."""
+    raw = subprocess.run(["git", "show", f"{tag}:CHANGELOG.md"], cwd=repository(), capture_output=True,
+                         check=True).stdout
+    return raw.decode("utf-8", errors="surrogateescape").replace("\r\n", "\n").replace("\r", "\n")
+
+
 def changelog_command(arguments) -> list[str]:
     in_tree = read_changelog("the released sections")
     prefix = prefix_from(arguments.version_source, arguments.tag_prefix)
 
-    at_tag = {}
+    at_tag, unread, began = {}, {}, set()
     for version in released_versions(prefix):
         try:
-            at_tag[version] = git("show", f"{prefix}{version}:CHANGELOG.md")
+            at_tag[version] = tagged_copy(f"{prefix}{version}")
         except subprocess.CalledProcessError:
             # Tagged before the file existed, so there is no section to compare.
             # It is reported below, with the tags older than their section.
@@ -246,15 +256,29 @@ def changelog_command(arguments) -> list[str]:
     # A copy at a tag is read by the same rules, down to the end of its own section: nothing below it is read.
     # A copy without that section is read whole.
     # One they do not read is told apart from the file in the tree, and a tag cannot be edited to fix it.
-    unread, began = {}, set()
+    # A byte that is not UTF-8 is a line not read too, where it stands in the part that is read.
+    # It changes nothing about where a section starts, so the copy is read past it, and the first line not read,
+    # a byte or another, is the one named.
     for version, text in list(at_tag.items()):
+        undecoded = next((at for at, character in enumerate(text) if "\udc80" <= character <= "\udcff"), None)
+        line = None if undecoded is None else text.count("\n", 0, undecoded) + 1
+        byte = f"CHANGELOG.md line {line} holds a byte that is not utf-8"
         try:
-            at_tag[version] = through(text, version)
+            kept = through(text, version)
         except UnreadCopy as refusal:
-            unread[version] = f"{refusal} - as tagged {prefix}{version}"
+            first = byte if line is not None and line < refusal.line else str(refusal)
+            unread[version] = f"{first} - as tagged {prefix}{version}"
             if refusal.began:
                 began.add(version)
             del at_tag[version]
+            continue
+        if line is None or undecoded >= len(kept):
+            at_tag[version] = kept
+            continue
+        unread[version] = f"{byte} - as tagged {prefix}{version}"
+        if version in sections(kept):
+            began.add(version)
+        del at_tag[version]
 
     off_history, present = unreachable(prefix, [*at_tag, *began]), sections(in_tree)
     # A release yet to land has no section here, and is not compared until it lands.

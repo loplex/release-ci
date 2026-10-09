@@ -8,6 +8,7 @@ Run with `python3 -m unittest discover -s lib` from the repository root, with th
 import argparse
 import contextlib
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -217,6 +218,117 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
             problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
                                                                  skip_unreadable_releases=skip_unreadable_releases))
         return problems, printed.getvalue()
+
+    def test_a_copy_that_is_not_utf_8_is_a_copy_not_read(self):
+        """A tag cannot be edited, so it is told apart as any other copy not read, and can be skipped."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        (self.here / "CHANGELOG.md").write_bytes(b"# Changelog\n\n## [0.1.0] - 2026-01-01\n\n- caf\xe9\n")
+        self.git("commit", "-q", "-am", "latin-1")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n- cafe\n")
+        problems, _ = self.run_changelog(skip_unreadable_releases=False)
+        self.assertEqual(len(problems), 1, problems)
+        for said in ("CHANGELOG.md line 5 holds a byte that is not utf-8", "as tagged v0.1.0",
+                     "--skip-unreadable-releases"):
+            self.assertIn(said, problems[0])
+        problems, printed = self.run_changelog(skip_unreadable_releases=True)
+        self.assertEqual(problems, [])
+        self.assertIn("Not compared: 0.1.0 - CHANGELOG.md line 5 holds a byte that is not utf-8", printed)
+
+    def test_a_copy_not_utf_8_in_its_own_section_still_needs_the_section_in_the_tree(self):
+        """As for any other line not read: the tag holds the section, so a tree without it has lost it."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        (self.here / "CHANGELOG.md").write_bytes(b"# Changelog\r\n\r\n## [0.1.0] - 2026-01-01\r\n\r\n- caf\xe9\r\n")
+        self.git("commit", "-q", "-am", "latin-1")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.2.0] - 2026-02-01\n\n- B\n")
+        problems, _ = self.run_changelog(skip_unreadable_releases=True)
+        self.assertEqual(problems, ["[0.1.0] is released but its section is gone"])
+
+    def test_a_copy_with_lone_cr_line_endings_is_named_by_the_line_commonmark_counts(self):
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        (self.here / "CHANGELOG.md").write_bytes(b"# Changelog\r\r## [0.1.0] - 2026-01-01\r\r- caf\xe9\r")
+        self.git("commit", "-q", "-am", "latin-1, lone CRs")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n- cafe\n")
+        problems, _ = self.run_changelog(skip_unreadable_releases=False)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("CHANGELOG.md line 5 holds a byte that is not utf-8", problems[0])
+
+    def test_a_copy_not_utf_8_above_its_section_still_holds_it(self):
+        """A byte changes nothing about where a section starts, so the copy is read past it: the tag holds [0.1.0],
+        and a tree without it has lost it, as where the byte stands inside the section."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        (self.here / "CHANGELOG.md").write_bytes(b"# Changelog caf\xe9\n\n## [0.1.0] - 2026-01-01\n\n- A\n")
+        self.git("commit", "-q", "-am", "latin-1 above")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.2.0] - 2026-02-01\n\n- B\n")
+        problems, _ = self.run_changelog(skip_unreadable_releases=True)
+        self.assertEqual(problems, ["[0.1.0] is released but its section is gone"])
+
+    def test_a_copy_not_utf_8_without_its_section_is_not_said_to_hold_it(self):
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        (self.here / "CHANGELOG.md").write_bytes(b"# Changelog caf\xe9\n\n## [0.0.9] - 2025-01-01\n\n- Z\n")
+        self.git("commit", "-q", "-am", "latin-1, before the section")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.0.9] - 2025-01-01\n\n- Z\n")
+        problems, printed = self.run_changelog(skip_unreadable_releases=True)
+        self.assertEqual(problems, [])
+        self.assertIn("Not compared: 0.1.0 - CHANGELOG.md line 1 holds a byte that is not utf-8", printed)
+        self.assertIn("the tag may never have had one", printed)
+
+    def test_the_first_line_not_read_is_named_a_byte_or_another(self):
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        for copy, named in ((b"## [0.1.0] - 2026-01-01\n\n- caf\xe9\n\n> quote\n", "line 5 holds a byte"),
+                            (b"## [0.1.0] - 2026-01-01\n\n> quote\n\n- caf\xe9\n", "line 5 holds a block quote")):
+            with self.subTest(named):
+                (self.here / "CHANGELOG.md").write_bytes(b"# Changelog\n\n" + copy)
+                self.git("commit", "-q", "-am", named)
+                self.git("tag", "-f", "v0.1.0")
+                self.commit("## [0.1.0] - 2026-01-01\n\n- cafe\n")
+                problems, _ = self.run_changelog(skip_unreadable_releases=False)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn(f"CHANGELOG.md {named}", problems[0])
+
+    def test_a_crlf_copy_at_a_tag_reads_as_the_tree_does(self):
+        """Line endings are not a change: a CRLF copy compares equal to the same text in the tree."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        (self.here / "CHANGELOG.md").write_bytes(b"# Changelog\r\n\r\n## [0.1.0] - 2026-01-01\r\n\r\n- A\r\n")
+        self.git("commit", "-q", "-am", "crlf")
+        self.git("tag", "v0.1.0")
+        problems, printed = self.run_changelog(skip_unreadable_releases=False)
+        self.assertEqual(problems, [])
+        self.assertIn("Compared 1 released section(s)", printed)
+
+    def test_a_copy_not_utf_8_ends_in_no_traceback_and_reads_alike_under_an_ascii_locale(self):
+        """Run as a command, under an ASCII locale with Python's UTF-8 mode off, so the locale's encoding is used
+        wherever nothing else is said."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        (self.here / "CHANGELOG.md").write_bytes("# Changelog\n\n## [0.1.0] - 2026-01-01\n\n- café\n".encode())
+        self.git("commit", "-q", "-am", "utf-8, outside ASCII")
+        self.git("tag", "v0.1.0")
+        (self.here / "CHANGELOG.md").write_bytes(b"# Changelog\n\n## [0.1.0] - 2026-01-01\n\n- caf\xe9\n")
+        self.git("commit", "-q", "-am", "latin-1")
+        self.git("tag", "v0.2.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n- café\n")
+        command = [sys.executable, str(SCRIPT), "changelog", "--version-source", "tags", "--tag-prefix", "v"]
+        done = subprocess.run(command, cwd=self.here, capture_output=True, text=True,
+                              env={**os.environ, "LC_ALL": "C", "PYTHONCOERCECLOCALE": "0", "PYTHONUTF8": "0"})
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertNotIn("[0.1.0]", done.stderr, "the UTF-8 copy at v0.1.0 reads as the tree does")
+        self.assertIn("CHANGELOG.md line 5 holds a byte that is not utf-8 - as tagged v0.2.0", done.stderr)
+
+    def test_a_byte_not_utf_8_below_the_tagged_section_is_not_read(self):
+        """Read down to the end of [0.1.0], as a line of another kind below it is not."""
+        self.git("tag", "-d", "v0.1.0", "v0.2.0")
+        (self.here / "CHANGELOG.md").write_bytes(b"# Changelog\n\n## [0.1.0] - 2026-01-01\n\n- A\n\n"
+                                                b"## [0.0.9] - 2025-01-01\n\n- caf\xe9\n")
+        self.git("commit", "-q", "-am", "latin-1 below")
+        self.git("tag", "v0.1.0")
+        self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.9] - 2025-01-01\n\n- cafe\n")
+        problems, printed = self.run_changelog(skip_unreadable_releases=False)
+        self.assertEqual(problems, [])
+        self.assertIn("Compared 1 released section(s)", printed)
 
     def test_a_line_below_the_tagged_section_is_not_read(self):
         """The copy at v0.1.0 is read down to the end of [0.1.0]: a block quote in an older section does not matter."""

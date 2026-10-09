@@ -222,6 +222,21 @@ class WhichRepositoryIsBeingChecked(unittest.TestCase):
                 self.assertNotIn("Traceback", done.stderr)
                 self.assertIn(f"there is no {missing} here", done.stderr)
 
+    def test_a_file_that_does_not_decode_is_told_which_and_on_which_line(self):
+        """The line is counted as CommonMark counts it, a CR alone ending one too."""
+        here = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        subprocess.run(["git", "init", "-q"], cwd=here, check=True)
+        lines = [b"# Changelog", b"", b"## [Unreleased]", b"", b"- entry", b"- caf\xe9", b""]
+        for ending in (b"\n", b"\r\n", b"\r"):
+            (here / "CHANGELOG.md").write_bytes(ending.join(lines))
+            for arguments in (["changelog", "--version-source", "tags", "--tag-prefix", "v"], ["notes", "0.1.0"]):
+                with self.subTest(ending=ending, command=arguments[0]):
+                    done = subprocess.run([sys.executable, str(SCRIPT), *arguments], cwd=here, capture_output=True,
+                                          text=True)
+                    self.assertEqual(done.returncode, 1)
+                    self.assertNotIn("Traceback", done.stderr)
+                    self.assertIn("CHANGELOG.md line 6 holds a byte that is not utf-8", done.stderr)
+
     def test_running_outside_a_repository_is_refused(self):
         nowhere = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.working_in(nowhere)

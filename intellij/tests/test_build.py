@@ -28,6 +28,14 @@ DEFAULT_PATTERN = re.search(r"^  archive-pattern:\n(?:    .*\n)*?    default: (.
                             (ARCHIVE_SH.parent / "action.yml").read_text(encoding="utf-8"), re.MULTILINE).group(1)
 
 
+def release_commit(work: Path, source: str = "gradle.properties", version: str = "1.2.0") -> None:
+    """The commit intellij/build runs on: release-flow/prepare's, recording the source it wrote `version` into."""
+    message = (f"chore(release): {version}\n\nRelease-CI-Version: {version}\nRelease-CI-Version-Source: {source}\n"
+               "Release-CI-Tag-Prefix: v\n")
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m",
+                    message], cwd=work, check=True)
+
+
 class TheSignedArchive(unittest.TestCase):
     def setUp(self):
         self.work = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -128,6 +136,7 @@ class TheArchiveCheck(unittest.TestCase):
         self.work = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         subprocess.run(["git", "init", "-q"], cwd=self.work, check=True)
         (self.work / "gradle.properties").write_text("version=1.2.0\ntagPrefix=v\n", encoding="utf-8")
+        release_commit(self.work)
         self.archive = self.work / "plugin-1.2.0-signed.zip"
 
     def made(self, entries):
@@ -161,6 +170,38 @@ class TheArchiveCheck(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertIn("::error::plugin/lib/plugin-1.2.0.jar!/META-INF/plugin.xml says version 1.1.0, and "
                       "gradle.properties 1.2.0", done.stdout)
+
+    def test_the_version_is_the_one_under_the_key_the_release_commit_records(self):
+        """`version` holds what Gradle does with it; the release's version is in `appVersion`."""
+        (self.work / "gradle.properties").write_text("version=9.9.9\nappVersion=1.2.0\ntagPrefix=v\n",
+                                                     encoding="utf-8")
+        release_commit(self.work, source="gradle.properties:appVersion")
+        self.plugin()
+        done = self.run_check()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("is version 1.2.0, as gradle.properties:appVersion says", done.stdout)
+        self.plugin("9.9.9")
+        done = self.run_check()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("says version 9.9.9, and gradle.properties:appVersion 1.2.0: the build script has to take the "
+                      "plugin's version from the `appVersion` line", done.stdout)
+
+    def test_a_commit_that_is_no_release_commit_is_refused(self):
+        """Run anywhere but between release-flow/prepare and release-flow/draft, nothing says which line to read."""
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m",
+                        "work"], cwd=self.work, check=True)
+        self.plugin()
+        done = self.run_check()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("::error::HEAD names a commit with no Release-CI-Version", done.stdout)
+
+    def test_a_release_commit_recording_a_source_without_a_version_is_refused(self):
+        """Under `tags` no file holds the release's version, so there is nothing to check the archive against."""
+        release_commit(self.work, source="tags")
+        self.plugin()
+        done = self.run_check()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("the release commit records tags, which declares no version for the build to take", done.stdout)
 
     def test_a_plugin_xml_without_a_version_is_refused(self):
         self.made({"plugin/lib/plugin.jar": jar({"META-INF/plugin.xml": "<idea-plugin><id>x</id></idea-plugin>"})})
@@ -257,8 +298,7 @@ class TheChangeNotes(unittest.TestCase):
         (self.work / "gradle.properties").write_text("version=1.2.0\n", encoding="utf-8")
         (self.work / "CHANGELOG.md").write_text("# Log\n\n## [Unreleased]\n\n## [1.2.0] - 2026-10-06\n\n### Fixed\n\n"
                                                 "- A & B\n\n## [1.1.0] - 2026-10-01\n\n- Old\n", encoding="utf-8")
-        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "r"],
-                       cwd=self.work, check=True)
+        release_commit(self.work)
         self.commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.work, check=True, capture_output=True,
                                      text=True).stdout.strip()
 
@@ -288,6 +328,14 @@ class TheChangeNotes(unittest.TestCase):
         return done, output.read_text(encoding="utf-8")
 
     def test_the_section_of_the_version_in_gradle_properties_as_html(self):
+        done = self.run_change_notes_py("https://github.com/o/r", "v1.2.0")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout, "<h3>Fixed</h3>\n<ul>\n<li>A &amp; B</li>\n</ul>\n")
+
+    def test_the_section_is_the_one_of_the_version_under_the_key_the_release_commit_records(self):
+        """`version` holds what Gradle does with it, and CHANGELOG.md has no section for that."""
+        (self.work / "gradle.properties").write_text("version=9.9.9\nappVersion=1.2.0\n", encoding="utf-8")
+        release_commit(self.work, source="gradle.properties:appVersion")
         done = self.run_change_notes_py("https://github.com/o/r", "v1.2.0")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout, "<h3>Fixed</h3>\n<ul>\n<li>A &amp; B</li>\n</ul>\n")

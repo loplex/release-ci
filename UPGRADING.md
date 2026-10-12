@@ -8,8 +8,10 @@ A version that asks for no change is not listed.\
 
 ### The `source` input is now `version-source`
 
-In `check-release`, `release-flow/prepare` and `release-flow/merge-back`.\
-The new name says what it is the source of: the version of the next release.
+In `check-release` and `release-flow/prepare`.\
+The new name says what it is the source of: the version of the next release.\
+`release-flow/merge-back` takes neither name now, as
+[it reads the release commit](#release-flowmerge-back-reads-the-release-commit-not-its-inputs).
 
 Before:
 
@@ -109,8 +111,8 @@ python3 <clone>/lib/main.py changelog --version-source <source> [--tag-prefix <p
 - The `changelog` check reads the copy at each release tag down to the end of that release's
   section, or whole where it has no such section, and a tag cannot be edited.\
   A refused line in what it reads fails the check on every run.\
-  Rewrite the line in the tree, and give `skip-unreadable-releases: true` to `check-release`,
-  `release-flow/prepare` and `release-flow/merge-back`.
+  Rewrite the line in the tree, and give `skip-unreadable-releases: true` to `check-release` and
+  `release-flow/prepare`; `release-flow/merge-back` reads it from the release commit.
   The check then names that release as not compared, with the line, instead of failing.
 
 ### Actions that run Python install their own
@@ -138,8 +140,20 @@ It now runs on the job's own: where it needs that JDK, set it up in the job with
 ### `intellij/build` checks the signed archive's version
 
 `intellij/build` stops where the signed archive's `plugin.xml` does not carry the version in the
-`version` line of `gradle.properties`.\
-A build script that gives `project.version` anything else has to take it from that line instead,
-which `release-flow/prepare` rewrites for the release.\
+line of `gradle.properties` that `release-flow/prepare` rewrites for the release: `version`, or
+`<key>` under `version-source: gradle.properties:<key>`.\
+A build script that gives `project.version` anything else has to take it from that line instead.\
 [What the plugin's build has to do](intellij/README.md#what-the-plugins-build-has-to-do) shows the
 rest.
+
+### `release-flow/merge-back` reads the release commit, not its inputs
+
+`release-flow/merge-back` has no `source` or `tag-prefix` input.\
+It reads them from the release commit, where `release-flow/prepare` now records them.\
+Take them out of the merge-back step: GitHub only warns about an input an action does not have.
+
+Move `prepare`, `intellij/build` and `merge-back` to the new version together, while no draft is
+open.\
+A release prepared by an older `prepare` records nothing, and the new `intellij/build` and
+`merge-back` refuse it.\
+Carry such a release back with the old version first.

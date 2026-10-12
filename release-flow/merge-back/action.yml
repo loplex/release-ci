@@ -2,7 +2,12 @@ name: merge-back
 description: |
   Carries a published release back onto the default branch.
 
-  1. Where `version-source` declares a version, writes the next one and commits it: the version being worked on.
+  How the release was made is read from its commit, where release-flow/prepare recorded it,
+  not given again: the version source, the tag prefix, and `skip-unreadable-releases`.
+  A tag that is not the one that commit records, such as a draft's tag renamed before publishing, fails the run
+  before anything is carried back, and so does a release prepare did not record.
+
+  1. Where the release's source declares a version, writes the next one and commits it: the version being worked on.
   2. Merges in whatever landed on the default branch since the release was cut.
      Where the release lands with such a merge, this run's or an earlier run's, a notice says so: the run is green
      either way.
@@ -38,21 +43,6 @@ description: |
   Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.
 
 inputs:
-  version-source:
-    description: |
-      Where the version of the next release comes from:
-      - `gradle.properties`: the file declares it in `version`.
-      - `gradle.properties:<key>`: the file declares it in `<key>`, such as `appVersion`.
-      - `tags`: no file declares it.
-
-      check-release's action describes each in full.
-    required: true
-  tag-prefix:
-    description: |
-      What a release tag has in front of the version: `v` for `v0.1.0`.
-      - Leave it out under `gradle.properties`: the file declares it.
-      - `^none`: the tags have no prefix at all.
-    default: ''
   tag:
     description: |
       The tag of the release that was published, as `github.event.release.tag_name` gives it.
@@ -78,18 +68,13 @@ inputs:
       The token `gh` uses to open the pull request and to start `check-workflow`.
       The pushes are made with the credentials actions/checkout left, not with this token.
     default: ${{ github.token }}
-  skip-unreadable-releases:
-    description: |
-      `true` names as not compared a release whose tag holds a line of CHANGELOG.md the `changelog` check
-      does not read, instead of failing.
-      check-release's action describes it in full.
-    default: 'false'
 
 outputs:
   version:
     description: |
       The released version, without the tag prefix.
       Written before anything is carried back, so a later step can read it even where carrying back failed.
+      Not written where the release commit is refused: a tag it does not record, or a release prepare did not record.
     value: ${{ steps.merge-back.outputs.version }}
   next:
     description: |
@@ -124,13 +109,10 @@ runs:
       shell: bash
       env:
         PYTHON: ${{ steps.python.outputs.python-path }}
-        VERSION_SOURCE: ${{ inputs.version-source }}
-        TAG_PREFIX: ${{ inputs.tag-prefix }}
         TAG: ${{ inputs.tag }}
         DEFAULT_BRANCH: ${{ inputs.default-branch }}
         CHECK_WORKFLOW: ${{ inputs.check-workflow }}
         GH_TOKEN: ${{ inputs.token }}
-        SKIP_UNREADABLE_RELEASES: ${{ inputs.skip-unreadable-releases }}
       # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
       # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
       run: |

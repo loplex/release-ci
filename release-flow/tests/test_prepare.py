@@ -16,6 +16,7 @@ import unittest
 from pathlib import Path
 
 PREPARE = Path(__file__).resolve().parent.parent / "prepare" / "prepare.sh"
+MAIN = Path(__file__).resolve().parents[2] / "lib" / "main.py"
 
 PENDING = "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- F\n\n## [0.1.0] - 2026-09-01\n\n- old\n"
 
@@ -105,6 +106,33 @@ class Prepare(Staged):
         self.assertIn("chore(release): 0.1.1", git("log", "-1", "--format=%s", cwd=self.work).stdout)
         self.assertEqual(git("branch", "--contains", "HEAD", cwd=self.work).stdout, "* release/0.1.1\n",
                          "no other branch holds the release commit")
+
+    def recorded(self, tag, name):
+        """What lib/main.py reads back from the release commit once `tag` is put on it, as publishing puts it."""
+        git("tag", "-f", tag, cwd=self.work)
+        done = subprocess.run([sys.executable, str(MAIN), "recorded", tag, name], cwd=self.work,
+                              capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout.strip()
+
+    def test_the_release_commit_records_how_the_release_was_made(self):
+        """merge-back reads these back from the commit the published tag names, instead of being given them."""
+        self.prepare()
+        self.assertEqual({name: self.recorded("v0.1.1", name) for name in
+                          ("version", "version-source", "tag-prefix", "skip-unreadable-releases")},
+                         {"version": "0.1.1", "version-source": "gradle.properties", "tag-prefix": "v",
+                          "skip-unreadable-releases": "false"})
+        self.assertNotIn("Skip-Unreadable", git("log", "-1", "--format=%B", cwd=self.work).stdout,
+                         "the skip is recorded only where it was asked for")
+
+    def test_a_key_no_prefix_and_a_skip_are_recorded_as_given(self):
+        self.stage(properties="appVersion = 0.1.1-SNAPSHOT\ntagPrefix =\n", tag="0.1.0")
+        outputs, done = self.prepare(source="gradle.properties:appVersion", skip_unreadable_releases="true")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.recorded("0.1.1", "version-source"), "gradle.properties:appVersion")
+        self.assertEqual(self.recorded("0.1.1", "tag-prefix"), "^none")
+        self.assertEqual(self.recorded("0.1.1", "skip-unreadable-releases"), "true")
+        self.assertEqual(git("log", "-1", "--format=%s", cwd=self.work).stdout, "chore(release): 0.1.1\n")
 
     def test_nothing_reaches_the_remote(self):
         """A build that fails after this should leave neither a branch nor a draft, so pushing waits for it.

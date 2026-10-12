@@ -707,6 +707,55 @@ class AReleaseLandedAfterThisCommit(TwoReleasesOneOffMain):
             self.assertIn("landed on origin/main after this commit was made", run.stderr)
 
 
+class WhatAReleaseCommitRecords(TwoReleasesOneOffMain):
+    """The settings release-flow/prepare records in a release commit as git trailers, read back for merge-back."""
+
+    RECORDED = "Release-CI-Version: 0.3.0\nRelease-CI-Version-Source: gradle.properties:appVersion\n" \
+               "Release-CI-Tag-Prefix: v\n"
+
+    def release(self, trailers: str, tag: str = "v0.3.0") -> None:
+        self.git("commit", "-q", "--allow-empty", "-m", f"chore(release): 0.3.0\n\n{trailers}")
+        self.git("tag", tag)
+
+    def test_each_setting_is_read_by_its_name(self):
+        self.release(self.RECORDED + "Release-CI-Skip-Unreadable-Releases: true\n")
+        self.assertEqual(main.settings_of("v0.3.0"),
+                         {"version": "0.3.0", "version-source": "gradle.properties:appVersion", "tag-prefix": "v",
+                          "skip-unreadable-releases": "true"})
+
+    def test_a_key_is_matched_whatever_its_case_as_git_matches_it(self):
+        self.release(self.RECORDED.lower().replace("gradle.properties:appversion", "tags"))
+        self.assertEqual(main.settings_of("v0.3.0")["version-source"], "tags")
+
+    def test_a_tag_other_than_the_recorded_one_is_refused(self):
+        """A draft's tag renamed before publishing, or another tag on the same commit."""
+        self.release(self.RECORDED, tag="v0.3.1")
+        with self.assertRaises(SystemExit) as refused:
+            main.settings_of("v0.3.1")
+        self.assertIn("v0.3.1 names the release commit of 0.3.0, which is tagged v0.3.0", str(refused.exception))
+
+    def test_no_prefix_is_recorded_as_none(self):
+        self.release(self.RECORDED.replace("Tag-Prefix: v", "Tag-Prefix: ^none"), tag="0.3.0")
+        self.assertEqual(main.settings_of("0.3.0")["tag-prefix"], "^none")
+
+    def test_a_commit_recording_nothing_one_setting_twice_or_one_short_is_refused(self):
+        for trailers, said in (("", "with no Release-CI-Version, Release-CI-Version-Source, Release-CI-Tag-Prefix"),
+                               (self.RECORDED + "Release-CI-Tag-Prefix: w\n",
+                                "records Release-CI-Tag-Prefix more than once"),
+                               (self.RECORDED.replace("Release-CI-Tag-Prefix: v\n", ""),
+                                "records no Release-CI-Tag-Prefix")):
+            with self.subTest(said):
+                self.release(trailers or "Signed-off-by: t <t@t>", tag=f"t{len(trailers)}")
+                with self.assertRaises(SystemExit) as refused:
+                    main.settings_at(f"t{len(trailers)}")
+                self.assertIn(said, str(refused.exception))
+
+    def test_a_ref_naming_no_commit_is_refused(self):
+        with self.assertRaises(SystemExit) as refused:
+            main.settings_at("v9.9.9")
+        self.assertIn("v9.9.9 names no commit here", str(refused.exception))
+
+
 class WritingTheVersionBack(unittest.TestCase):
     """`set-version` against a file on disk, where the line endings and the read-back matter."""
 

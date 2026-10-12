@@ -9,6 +9,11 @@ released it, so once a version has a section here, that section may not be edite
 
 ### Added
 
+- `release-flow/prepare` records in the release commit how it made the release, as `Release-CI-*`
+  git trailers: the version, `version-source`, the tag prefix, and `skip-unreadable-releases` where
+  it was `true`.\
+  `release-flow/merge-back` and `intellij/build` read them there, and `lib/main.py recorded` prints
+  one.
 - `version-source: gradle.properties:<key>` reads and writes the version in `<key>` instead of
   `version`, such as `appVersion`, for a build that keeps `version` for what Gradle does with it.
 - `--tag-prefix '^none'` of `lib/main.py` says the tags have no prefix, as the actions' `tag-prefix`
@@ -19,7 +24,8 @@ released it, so once a version has a section here, that section may not be edite
   With `--repository-url` and `--ref` it makes every relative link absolute, read at that tag or
   commit, since away from the repository a relative link leads nowhere.
 - **BREAKING** `intellij/build` checks that the signed archive's `plugin.xml` carries the version
-  in the `version` line of `gradle.properties`, and stops where it does not.\
+  in the line of `gradle.properties` `release-flow/prepare` wrote, and stops where it does not.\
+  The release commit says which line: `version`, or `<key>` under `gradle.properties:<key>`.\
   A build script that took its version from anywhere else passed the build and the draft, and
   failed only once the release was published, in `intellij/publish`.\
   It runs Python for that, installed as every other action now installs it, under *Changed*.
@@ -31,10 +37,10 @@ released it, so once a version has a section here, that section may not be edite
   Their relative links are read at the release's tag, which the new `tag` input passes.\
   The same notes, their links read at the release commit, are uploaded as `change-notes.html`, a
   page to open before the draft is published.
-- `skip-unreadable-releases` on `check-release`, `release-flow/prepare` and
-  `release-flow/merge-back`, and `lib/main.py changelog --skip-unreadable-releases`: the `changelog`
-  check names as not compared a release whose tag holds a line of `CHANGELOG.md` it does not read,
-  instead of failing.\
+- `skip-unreadable-releases` on `check-release` and `release-flow/prepare`, and
+  `lib/main.py changelog --skip-unreadable-releases`: the `changelog` check names as not compared a
+  release whose tag holds a line of `CHANGELOG.md` it does not read, instead of failing.\
+  `release-flow/merge-back` checks as the release was prepared.\
   Where that line stands inside the release's own section, a tree without that section still fails.
 - `release-flow/merge-back` says in a notice when the release it lands merged in commits that landed
   on the default branch while the release was out, and how many.\
@@ -60,9 +66,17 @@ released it, so once a version has a section here, that section may not be edite
   A self-hosted runner needs a system `actions/setup-python` publishes a build for.\
   [UPGRADING.md](UPGRADING.md#actions-that-run-python-install-their-own) shows what that asks of a
   job.
-- **BREAKING** The `source` input of `check-release`, `release-flow/prepare` and
-  `release-flow/merge-back` is now `version-source`.\
+- **BREAKING** The `source` input of `check-release` and `release-flow/prepare` is now
+  `version-source`.\
   [UPGRADING.md](UPGRADING.md#the-source-input-is-now-version-source) shows the change.
+- **BREAKING** `release-flow/merge-back` has no `source` or `tag-prefix` input: it reads them from
+  the release commit, where `release-flow/prepare` recorded them.\
+  A workflow could give it other values than the release was prepared with, and it then wrote the
+  next version elsewhere, or checked the merged tree otherwise.\
+  It refuses a tag the release commit does not record, such as a draft's tag renamed before it was
+  published, and a release prepared before `prepare` recorded anything.\
+  [UPGRADING.md](UPGRADING.md#release-flowmerge-back-reads-the-release-commit-not-its-inputs) shows
+  the change.
 - **BREAKING** `check-release/check-release.py` is now `lib/main.py`, beside the rules it runs.\
   Its `--source` is now `--version-source`.\
   It and `--tag-prefix` go after the command, and a command refuses the ones it never reads.\

@@ -86,6 +86,30 @@ def git(*arguments: str) -> str:
     return subprocess.run(["git", *arguments], cwd=repository(), capture_output=True, text=True, check=True).stdout
 
 
+# What release-flow/prepare records in a release commit, as git trailers `Release-CI-<name>: <value>`.
+# A commit with none of them was not cut by a prepare that records them.
+RECORDED = "Release-CI-"
+
+
+def recorded(ref: str) -> dict[str, list[str]]:
+    """The trailers `Release-CI-<name>` of the commit `ref` names, by `<name>` in lower case, each with its values.
+
+    Read by git, which also wrote them (`git interpret-trailers` in release-flow/prepare),
+    so where a trailer starts and ends is decided in one place.
+    Git matches a trailer's key whatever its case, and so does this.
+    A ref that names no commit here is refused."""
+    try:
+        text = git("log", "-1", "--format=%(trailers:only,unfold)", ref)
+    except subprocess.CalledProcessError:
+        raise SystemExit(f"{ref} names no commit here") from None
+    found = {}
+    for line in text.splitlines():
+        key, colon, value = line.partition(":")
+        if colon and key.strip().lower().startswith(RECORDED.lower()):
+            found.setdefault(key.strip()[len(RECORDED):].lower(), []).append(value.strip())
+    return found
+
+
 def line_of(data: bytes, offset: int) -> int:
     """The line `offset` stands on, a CRLF, a CR or an LF ending each line, as CommonMark ends them."""
     return len(re.findall(rb"\r\n|\r|\n", data[:offset])) + 1

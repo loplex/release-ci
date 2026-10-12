@@ -21,7 +21,7 @@ REQUIRED = {
     "intellij/check/action.yml": set(),
     "intellij/publish/action.yml": {"plugin-id", "version", "archive", "token"},
     "release-flow/draft/action.yml": {"version", "tag", "branch"},
-    "release-flow/merge-back/action.yml": {"version-source", "tag", "default-branch", "check-workflow"},
+    "release-flow/merge-back/action.yml": {"tag", "default-branch", "check-workflow"},
     "release-flow/prepare/action.yml": {"version-source"},
     "release-flow/warn/action.yml": {"tag", "outcome", "to"},
 }

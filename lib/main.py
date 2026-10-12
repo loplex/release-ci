@@ -13,6 +13,7 @@
 - `close-changelog`: move what is under `[Unreleased]` into a section of its own.
   This and `set-version` are what a release writes.
 - `notes`: the text below one released section's heading, which is what its release notes say.
+- `recorded`: what release-flow/prepare recorded in a release's commit, read for the steps that come after it.
 
 This file is the command line over the rules.
 The rules are plain functions over text, so their tests need no repository to release:
@@ -37,8 +38,8 @@ from rules.versions import SEMVER, channel_of, check_version, precedence, versio
 from rules.changelog import (UnreadCopy, absolute_links, bodies, check_changelog, closed, missing, referenced,
                              sections, silent, structure, through, uncompared)
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
-from rules.repository import (carried_by, check_ancestry, git, holder, landed_after, read_file, released_versions,
-                               repository, unreachable)
+from rules.repository import (carried_by, check_ancestry, git, holder, landed_after, read_file, recorded,
+                               released_versions, repository, unreachable)
 
 
 def in_utf8_mode() -> None:
@@ -513,6 +514,69 @@ def prefix_command(arguments) -> list[str]:
     return []
 
 
+# What release-flow/prepare records in the release commit, each as a trailer `Release-CI-<name>`.
+# The steps after it read them there instead of being given them again, so they cannot be given otherwise:
+# merge-back writes the next version where prepare read this one, and checks with the options prepare checked with.
+# - version: the version released, which the tag has to name;
+# - version-source and tag-prefix: as prepare was given them, the prefix as prepare found it, `^none` for none;
+# - skip-unreadable-releases: recorded only where it was `true`.
+SETTINGS = ("version", "version-source", "tag-prefix", "skip-unreadable-releases")
+
+
+def trailer(name: str) -> str:
+    """The trailer a setting is recorded in, spelled as release-flow/prepare writes it: `Release-CI-Version-Source`."""
+    return "Release-CI-" + "-".join(word.capitalize() for word in name.split("-"))
+
+
+def settings_at(ref: str) -> dict[str, str]:
+    """What release-flow/prepare recorded in the commit `ref` names.
+
+    Refused where it recorded nothing, where a setting it always records is missing,
+    and where one is recorded twice: none of them can then be told to be the one the release was made with."""
+    found = recorded(ref)
+    if not found:
+        raise SystemExit(f"{ref} names a commit with no {', '.join(map(trailer, SETTINGS[:3]))} trailers: "
+                         "one release-flow/prepare did not cut, or cut before it recorded them")
+    twice = sorted(name for name, values in found.items() if len(values) > 1)
+    if twice:
+        raise SystemExit(f"{ref} names a commit that records {', '.join(map(trailer, twice))} more than once")
+    missing = [name for name in SETTINGS[:3] if name not in found]
+    if missing:
+        raise SystemExit(f"{ref} names a commit that records no {', '.join(map(trailer, missing))}")
+    return {name: values[0] for name, values in found.items()}
+
+
+def settings_of(tag: str) -> dict[str, str]:
+    """What release-flow/prepare recorded in the commit `tag` names, which has to be the tag of that release.
+
+    A draft's tag can be renamed before it is published, and another tag may stand on the same commit.
+    Either would have the steps after the release read a version the tag does not name."""
+    settings = settings_at(tag)
+    prefix = "" if settings["tag-prefix"] == "^none" else settings["tag-prefix"]
+    if f"{prefix}{settings['version']}" != tag:
+        raise SystemExit(f"{tag} names the release commit of {settings['version']}, which is tagged "
+                         f"{prefix}{settings['version']}: was the draft's tag renamed before it was published?")
+    return settings
+
+
+def built_version() -> tuple[str, str]:
+    """The source the release commit checked out records, and the version it names there: what the build makes.
+
+    For intellij/build, which runs on that commit, between release-flow/prepare and release-flow/draft.
+    The source is read from the commit rather than given, so it is the one prepare wrote the version into."""
+    source = settings_at("HEAD")["version-source"]
+    if not declares_a_version(source):
+        raise SystemExit(f"the release commit records {source}, which declares no version for the build to take")
+    return source, declared_version(source)
+
+
+def recorded_command(arguments) -> list[str]:
+    """One setting release-flow/prepare recorded in the commit of a release tag, `false` for a skip it did not."""
+    value = settings_of(arguments.tag).get(arguments.name, "false")
+    print(value)
+    return []
+
+
 def ancestry_command(arguments) -> list[str]:
     prefix = prefix_from(arguments.version_source, arguments.tag_prefix)
     releases = released_versions(prefix)
@@ -611,6 +675,12 @@ def main() -> int:
     channel_parser = commands.add_parser("channel", help="the distribution channel a version is published to")
     channel_parser.add_argument("version", help="the version, without the tag prefix")
     channel_parser.set_defaults(run=channel_command)
+
+    recorded_parser = commands.add_parser("recorded", help="a setting release-flow/prepare recorded in the commit of "
+                                                           "a release tag")
+    recorded_parser.add_argument("tag", help="the release's tag, which has to be the one its commit records")
+    recorded_parser.add_argument("name", choices=SETTINGS, help="the setting to print")
+    recorded_parser.set_defaults(run=recorded_command)
 
     ancestry_parser = commands.add_parser("ancestry", parents=checking,
                                           help="whether every released tag is still reachable")

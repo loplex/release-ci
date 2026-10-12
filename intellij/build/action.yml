@@ -7,9 +7,10 @@ description: |
   The version and the changelog are settled before it runs, and the draft that carries the archive comes after.
 
   What the build script has to do:
-  - Take the plugin's version from the `version` line of gradle.properties.
-    The release runs with `version-source: gradle.properties`, and release-flow/prepare rewrites that line.
-    The signed archive's plugin.xml is checked against that line, and the build stops where they differ.
+  - Take the plugin's version from the line of gradle.properties release-flow/prepare rewrites:
+    `version` under `version-source: gradle.properties`, `<key>` under `gradle.properties:<key>`.
+    The signed archive's plugin.xml is checked against that line, in the source the release commit records,
+    and the build stops where they differ.
   - Read the signing certificate chain and private key in its `signing` block, from the environment.
     Without them there is no signed archive.
   - Use the IntelliJ Platform Gradle Plugin 2.x, whose `verifyPlugin` runs the Plugin Verifier.

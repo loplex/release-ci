@@ -2,7 +2,7 @@
 # Cut the release commit onto a branch of its own, named for the version:
 # - [Unreleased] is closed into a section for the version being released;
 # - that version is written back where the source declares one;
-# - all of it is one commit.
+# - all of it is one commit, which records how the release was made for the steps after it.
 # This is everything a release does to the repository before the build.
 # Nothing is pushed: the build runs from this commit next.
 # A failed build should leave neither a branch nor a draft behind, so the push waits for the build and goes with the
@@ -25,7 +25,8 @@ fi
 
 # `true` passes over a release whose tag holds a CHANGELOG.md line lib/main.py does not read: a tag cannot be edited.
 # Empty is `false`, because a dispatch input arrives empty on every other event.
-case ${SKIP_UNREADABLE_RELEASES:-false} in
+skip=${SKIP_UNREADABLE_RELEASES:-false}
+case $skip in
   true) changelog_arguments=(--skip-unreadable-releases) ;;
   false) changelog_arguments=() ;;
   *)
@@ -89,7 +90,20 @@ elif (( rc != 0 )); then
   exit 1
 fi
 
-git commit -qam "chore(release): ${version}" || exit 1
+# The release commit records how the release was made, as git trailers.
+# merge-back and intellij/build read them there, so a later workflow cannot be given other values than this one was.
+# The comment above SETTINGS in lib/main.py says what each one means.
+# Git writes them, and git reads them back, so where a trailer starts and ends is git's to decide.
+recorded=(
+  --trailer "Release-CI-Version: ${version}"
+  --trailer "Release-CI-Version-Source: ${VERSION_SOURCE}"
+  --trailer "Release-CI-Tag-Prefix: ${prefix:-^none}"
+)
+if [[ $skip == true ]]; then
+  recorded+=(--trailer "Release-CI-Skip-Unreadable-Releases: true")
+fi
+message=$(printf 'chore(release): %s\n' "$version" | git interpret-trailers "${recorded[@]}") || exit 1
+git commit -qa -m "$message" || exit 1
 
 # Written only once the commit is made.
 # A failed step then leaves nothing that a later step could read as a release that was cut.

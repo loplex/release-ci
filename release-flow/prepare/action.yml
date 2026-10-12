@@ -8,6 +8,8 @@ description: |
      An `[Unreleased]` with nothing to release is refused, and nothing is written either.
   3. Writes that version into the file where `version-source` declares one.
   4. Commits the result onto the branch `release/<version>` and leaves the workspace on it.
+     The commit records how the release was made, as `Release-CI-*` git trailers,
+     which release-flow/merge-back and intellij/build read instead of being given them again.
 
   Nothing is built, pushed or drafted.
   The build runs from this commit next, and a build that fails should leave nothing behind on the remote.

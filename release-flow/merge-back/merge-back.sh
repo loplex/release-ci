@@ -3,8 +3,9 @@
 # Inputs come from the environment, because that is how a composite action hands them over.
 # The script lives outside action.yml so that a test can run it against a repository, not only GitHub.
 #
-# Reads:  PYTHON VERSION_SOURCE TAG TAG_PREFIX DEFAULT_BRANCH CHECK_WORKFLOW SKIP_UNREADABLE_RELEASES GITHUB_OUTPUT
+# Reads:  PYTHON TAG DEFAULT_BRANCH CHECK_WORKFLOW GITHUB_OUTPUT
 #         GH_TOKEN, read by `gh`, not by this script
+#         and, from the commit TAG names, what release-flow/prepare recorded there
 # Writes: version, next, landed  (to GITHUB_OUTPUT)
 set -uo pipefail
 
@@ -19,20 +20,26 @@ fi
 script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../lib" && pwd)/main.py"
 
 check_release=("$PYTHON" "$script")
-source_arguments=(--version-source "$VERSION_SOURCE")
-if [[ -n $TAG_PREFIX ]]; then
-  source_arguments+=(--tag-prefix "$TAG_PREFIX")
-fi
 
-# `true` passes over a release whose tag holds a CHANGELOG.md line lib/main.py does not read: a tag cannot be edited.
-# Empty is `false`, because a dispatch input arrives empty on every other event.
-case ${SKIP_UNREADABLE_RELEASES:-false} in
-  true) changelog_arguments=(--skip-unreadable-releases) ;;
-  false) changelog_arguments=() ;;
-  *)
-    echo "::error::skip-unreadable-releases is '$SKIP_UNREADABLE_RELEASES', which is neither true nor false"
-    exit 1 ;;
-esac
+# Read from the release commit, where release-flow/prepare recorded them, not given again:
+# the next version goes where prepare read this one, and the merged tree is checked with the options prepare used.
+# Reading one also checks that TAG is the tag of the release that commit records.
+for name in version-source tag-prefix skip-unreadable-releases; do
+  if ! value=$("${check_release[@]}" recorded "$TAG" "$name"); then
+    echo "::error::${TAG} does not say how its release was made, so nothing was carried back"
+    exit 1
+  fi
+  case $name in
+    version-source) version_source=$value ;;
+    tag-prefix) tag_prefix=$value ;;
+    skip-unreadable-releases) skip=$value ;;
+  esac
+done
+source_arguments=(--version-source "$version_source" --tag-prefix "$tag_prefix")
+changelog_arguments=()
+if [[ $skip == true ]]; then
+  changelog_arguments=(--skip-unreadable-releases)
+fi
 
 prefix=$("${check_release[@]}" prefix "${source_arguments[@]}"); rc=$?
 if (( rc != 0 )); then
@@ -81,13 +88,13 @@ fi
 # The release is out either way.
 # Landing it with the released version still declared would get the next release refused: the file would name a
 # version that is no longer being worked on.
-"${check_release[@]}" set-version "${next}" --version-source "$VERSION_SOURCE" >/dev/null; rc=$?
+"${check_release[@]}" set-version "${next}" --version-source "$version_source" >/dev/null; rc=$?
 if (( rc == 0 )); then
   git diff --quiet || git commit -qam "chore: start ${next}" || exit 1
 elif (( rc == 3 )); then
-  echo "${VERSION_SOURCE} records no version after a release, so none was written"
+  echo "${version_source} records no version after a release, so none was written"
 else
-  echo "::error::${VERSION_SOURCE} could not be given ${next}, so nothing was carried back"
+  echo "::error::${version_source} could not be given ${next}, so nothing was carried back"
   exit 1
 fi
 

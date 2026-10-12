@@ -73,13 +73,14 @@ passed or not.
 - **Read the signing variables in the `signing` block.**\
   The signing inputs reach `signPlugin` as `CERTIFICATE_CHAIN`, `PRIVATE_KEY` and
   `PRIVATE_KEY_PASSWORD`.
-- **Take the version from the `version` line of `gradle.properties`**, as `project.version`.\
+- **Take the version from the line of `gradle.properties` the release writes**, as
+  `project.version`.\
   No version is handed to the build: the archive gets whatever version the build script gives it.\
   A plugin is released with `version-source: gradle.properties`, and `release-flow/prepare` rewrites
-  that `version` line.\
-  A version from a property of the plugin's own would leave the archive at the old version.\
-  So the signed archive's `plugin.xml` is checked against that line, and the build stops where
-  they differ.\
+  the `version` line, or with `gradle.properties:<key>`, and it rewrites the `<key>` line instead.\
+  A version from anywhere else would leave the archive at the old version.\
+  So the signed archive's `plugin.xml` is checked against that line, in the source the release
+  commit records, and the build stops where they differ.\
   [Where the version comes from](../lib/README.md#where-the-version-comes-from) describes
   the file.
 
@@ -255,7 +256,6 @@ jobs:
       - uses: loplex/release-ci/release-flow/merge-back@<tag>
         id: back
         with:
-          version-source: gradle.properties
           tag: ${{ github.event.release.tag_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           check-workflow: ci.yml
@@ -360,6 +360,9 @@ A release that did not get back onto the default branch is out all the same, and
 should serve it too.
 
 - Where the merge-back step failed, the job still fails, so the failure is not missed.
+- Where it refused the release commit, as a tag that commit does not record or a release an older
+  `prepare` made, it names no version.\
+  Nothing is then downloaded or uploaded, and [the warning](#the-warning) says so.
 - Where it opened a pull request instead, the step succeeds and the job does not fail over it.\
   The pull request, and `landed` as `false`, say that the release did not land.
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Whether the signed archive is the release the build was asked for.
 
-Its plugin.xml has to carry the version in the `version` line of gradle.properties, which release-flow/prepare wrote.
+Its plugin.xml has to carry the version release-flow/prepare wrote, in the source it recorded in the release commit:
+the `version` line of gradle.properties, or the line of the key `gradle.properties:<key>` names.
 The archive gets whatever version the plugin's build script gives it, and nothing else holds the script to that line.
 A plugin that took its version from anywhere else would pass the build and the draft at the old version.
 It would show only after the release was published, as a version the Marketplace never serves.
@@ -52,8 +53,8 @@ def plugin_xml(archive: str) -> tuple[str, bytes]:
     return found[0]
 
 
-def problems(archive: str, version: str) -> list[str]:
-    """What in the archive is not what the release asked for, with `version` the one gradle.properties names."""
+def problems(archive: str, version: str, source: str = "gradle.properties") -> list[str]:
+    """What in the archive is not what the release asked for, with `version` the one `source` names."""
     where, text = plugin_xml(archive)
     try:
         root = ElementTree.fromstring(text)
@@ -63,8 +64,9 @@ def problems(archive: str, version: str) -> list[str]:
     found = root.findtext("version")
     if found != version:
         says = "has no <version>" if found is None else f"says version {found}"
-        wrong.append(f"{where} {says}, and gradle.properties {version}: the build script has to take the plugin's "
-                     "version from the `version` line of gradle.properties, which release-flow/prepare wrote")
+        key = main.adapter_of(source).key
+        wrong.append(f"{where} {says}, and {source} {version}: the build script has to take the plugin's "
+                     f"version from the `{key}` line of gradle.properties, which release-flow/prepare wrote")
     notes = os.environ.get("CHANGE_NOTES", "")
     held = root.findtext("change-notes")
     if notes and (held or "").strip() != notes.strip():
@@ -80,14 +82,14 @@ def problems(archive: str, version: str) -> list[str]:
 
 def run(archive: str) -> int:
     try:
-        version = main.declared_version("gradle.properties")
-        found = problems(archive, version)
+        source, version = main.built_version()
+        found = problems(archive, version, source)
     except SystemExit as refusal:
         found = [str(refusal.code)]
     for problem in found:
         print(f"::error::{problem}")
     if not found:
-        print(f"{archive} is version {version}, as gradle.properties says"
+        print(f"{archive} is version {version}, as {source} says"
               + (", with the change notes it was built with" if os.environ.get("CHANGE_NOTES") else ""))
     return 1 if found else 0
 

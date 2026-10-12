@@ -32,9 +32,11 @@ class Staged(unittest.TestCase):
     This class holds no tests of its own.
     """
 
-    def stage(self, prefix="v", at_start=AT_START, released=RELEASED, key="version"):
+    def stage(self, prefix="v", at_start=AT_START, released=RELEASED, key="version", source=None, skip=False):
         """`key` is where gradle.properties declares the version; under another than `version`, `version` holds a
-        value of its own beside it."""
+        value of its own beside it.
+        `source` and `skip` are what release-flow/prepare recorded in the release commit, the source following `key`
+        unless given."""
         self.tag = f"{prefix}0.1.0"
         gradles = "" if key == "version" else "version = 9.9.9\n"
         root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -58,7 +60,11 @@ class Staged(unittest.TestCase):
         (self.work / "gradle.properties").write_text(
             f"{gradles}{key} = 0.1.0\ntagPrefix = {prefix}\n", encoding="utf-8")
         (self.work / "CHANGELOG.md").write_text(released, encoding="utf-8")
-        git("commit", "-qam", "chore(release): 0.1.0", cwd=self.work)
+        source = source or ("gradle.properties" if key == "version" else f"gradle.properties:{key}")
+        recorded = ("Release-CI-Version: 0.1.0", f"Release-CI-Version-Source: {source}",
+                    f"Release-CI-Tag-Prefix: {prefix or '^none'}")
+        recorded += ("Release-CI-Skip-Unreadable-Releases: true",) if skip else ()
+        git("commit", "-qam", "chore(release): 0.1.0\n\n" + "\n".join(recorded), cwd=self.work)
         git("tag", self.tag, cwd=self.work)
         git("push", "-q", "origin", "release/0.1.0", self.tag, cwd=self.work)
 
@@ -84,8 +90,7 @@ class Staged(unittest.TestCase):
             cwd=theirs)
         git("push", "-q", "origin", "main", cwd=theirs)
 
-    def carry_back(self, source="gradle.properties", tag_prefix="", fetch=True, check_workflow="ci.yml",
-                   skip_unreadable_releases="false"):
+    def carry_back(self, fetch=True, check_workflow="ci.yml"):
         # Not fetching is how the race is staged.
         # The checkout knows the default branch as it was when the checkout was made, as a run does while someone
         # else pushes.
@@ -96,8 +101,7 @@ class Staged(unittest.TestCase):
         done = subprocess.run(
             ["bash", str(MERGE_BACK)], cwd=self.work, capture_output=True, text=True,
             env={**os.environ, "PYTHON": sys.executable, "PATH": f"{self.stubs}:{os.environ['PATH']}",
-                 "VERSION_SOURCE": source, "TAG": self.tag, "TAG_PREFIX": tag_prefix, "DEFAULT_BRANCH": "main",
-                 "CHECK_WORKFLOW": check_workflow, "SKIP_UNREADABLE_RELEASES": skip_unreadable_releases,
+                 "TAG": self.tag, "DEFAULT_BRANCH": "main", "CHECK_WORKFLOW": check_workflow,
                  "GITHUB_OUTPUT": str(written), "GH_TOKEN": "stub"},
         )
         outputs = dict(
@@ -127,10 +131,9 @@ class MergeBack(Staged):
         self.assertTrue(self.on_default_branch(self.tag), "the tag has to be reachable from the branch")
         self.assertNotIn("::notice::", done.stdout, "nothing was merged in, so nothing is said of it")
 
-    def test_a_tag_holding_a_line_not_read_leaves_the_merge_to_a_pull_request_unless_skipped(self):
+    def tag_a_copy_not_read(self):
         """v0.0.9's copy of CHANGELOG.md holds a block quote, and a tag cannot be edited.
-        It stands above the section, so the section's absence from the tree, skipped, is no deletion.
-        The option goes to `changelog` alone: `ancestry` would refuse it, and the release would not land."""
+        It stands above the section, so the section's absence from the tree, skipped, is no deletion."""
         git("switch", "-q", "main", cwd=self.work)
         tagged = AT_START + "\n> q\n\n## [0.0.9] - 2026-01-01\n\n- q\n"
         (self.work / "CHANGELOG.md").write_text(tagged, encoding="utf-8")
@@ -140,16 +143,38 @@ class MergeBack(Staged):
         git("commit", "-qam", "back", cwd=self.work)
         git("push", "-q", "origin", "main", "v0.0.9", cwd=self.work)
         git("switch", "-q", "release/0.1.0", cwd=self.work)
+
+    def test_a_tag_holding_a_line_not_read_leaves_the_merge_to_a_pull_request(self):
+        self.tag_a_copy_not_read()
         outputs, done = self.carry_back()
         self.assertEqual(outputs.get("landed"), "false", done.stdout + done.stderr)
         self.assertIn("holds a block quote", done.stderr)
-        outputs, done = self.carry_back(skip_unreadable_releases="true")
+
+    def test_a_release_prepared_skipping_such_a_tag_is_checked_skipping_it(self):
+        """The skip goes to `changelog` alone: `ancestry` would refuse it, and the release would not land."""
+        self.stage(skip=True)
+        self.tag_a_copy_not_read()
+        outputs, done = self.carry_back()
         self.assertEqual(outputs.get("landed"), "true", done.stdout + done.stderr)
 
-    def test_skip_unreadable_releases_is_true_or_false(self):
-        outputs, done = self.carry_back(skip_unreadable_releases="yes")
+    def test_a_tag_other_than_the_one_its_commit_records_carries_nothing_back(self):
+        """A draft's tag renamed before publishing names a version the release commit does not."""
+        git("tag", "v0.2.0", self.tag, cwd=self.work)
+        self.tag = "v0.2.0"
+        outputs, done = self.carry_back()
         self.assertEqual(done.returncode, 1)
-        self.assertIn("skip-unreadable-releases is 'yes', which is neither true nor false", done.stdout)
+        self.assertIn("v0.2.0 names the release commit of 0.1.0, which is tagged v0.1.0", done.stderr)
+        self.assertEqual(outputs, {})
+        self.assertFalse(self.on_default_branch("v0.1.0"))
+
+    def test_a_release_commit_recording_nothing_carries_nothing_back(self):
+        """Cut by something else, or by a prepare that recorded nothing: there is nothing to say where to write."""
+        git("commit", "-q", "--amend", "-m", "chore(release): 0.1.0", cwd=self.work)
+        git("tag", "-f", self.tag, cwd=self.work)
+        outputs, done = self.carry_back()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("with no Release-CI-Version, Release-CI-Version-Source, Release-CI-Tag-Prefix trailers",
+                      done.stderr)
         self.assertEqual(outputs, {})
 
     def test_the_next_version_is_opened_on_the_way(self):
@@ -159,7 +184,7 @@ class MergeBack(Staged):
 
     def test_the_next_version_is_opened_under_the_key_the_version_is_read_under(self):
         self.stage(key="appVersion")
-        outputs, done = self.carry_back(source="gradle.properties:appVersion")
+        outputs, done = self.carry_back()
         self.assertEqual(outputs.get("landed"), "true", done.stdout + done.stderr)
         self.assertEqual(git("show", "main:gradle.properties", cwd=self.origin).stdout,
                          "version = 9.9.9\nappVersion = 0.1.1-SNAPSHOT\ntagPrefix = v\n")
@@ -366,7 +391,8 @@ class MergeBack(Staged):
 
     def test_a_source_declaring_no_version_lands_all_the_same(self):
         """A repository versioned by its tags has nothing to write back, and that is not a failed write."""
-        outputs, done = self.carry_back(source="tags", tag_prefix="v")
+        self.stage(source="tags")
+        outputs, done = self.carry_back()
         self.assertEqual(outputs.get("landed"), "true", done.stdout + done.stderr)
         self.assertTrue(self.on_default_branch(self.tag), "the tag has to be reachable from the branch")
         self.assertIn("records no version", done.stdout)
@@ -387,8 +413,9 @@ class MergeBack(Staged):
 
         A title saying the next version was started would name a commit the branch does not have.
         """
+        self.stage(source="tags")
         self.land_elsewhere("won the race")
-        self.carry_back(source="tags", tag_prefix="v", fetch=False)
+        self.carry_back(fetch=False)
         self.assertIn("--title Release 0.1.0 --body", self.gh_said())
         self.assertNotIn("This branch starts", self.gh_said())
 
@@ -525,11 +552,13 @@ class WhereAMergeRewritesTheReleasedSection(Staged):
     """
 
     PREFIX = "v"
+    SOURCE = "gradle.properties"
     # What the run writes on the release branch before it tries the merge: the commit starting the next version.
     OPENED = ["chore: start 0.1.1-SNAPSHOT"]
 
     def setUp(self):
-        self.stage(prefix=self.PREFIX, at_start="# Changelog\n\n## [Unreleased]\n\n### Added\n\n- A\n",
+        self.stage(prefix=self.PREFIX, source=self.SOURCE,
+                   at_start="# Changelog\n\n## [Unreleased]\n\n### Added\n\n- A\n",
                    released="# Changelog\n\n## [Unreleased]\n\n## [0.1.0] - 2026-09-21\n\n### Added\n\n- A\n")
         theirs = Path(self.enterContext(tempfile.TemporaryDirectory())) / "theirs"
         subprocess.run(["git", "clone", "-q", "--branch", "main", str(self.origin), str(theirs)],
@@ -568,10 +597,8 @@ class WhereTagsCarryNoPrefix(WhereAMergeRewritesTheReleasedSection):
     """
 
     PREFIX = ""
+    SOURCE = "tags"
     OPENED = []  # A source declaring no version has no next version to open.
-
-    def carry_back(self, source="tags", tag_prefix="^none", fetch=True, check_workflow="ci.yml"):
-        return super().carry_back(source=source, tag_prefix=tag_prefix, fetch=fetch, check_workflow=check_workflow)
 
 
 class WhereTagsAreNamedDifferently(Staged):

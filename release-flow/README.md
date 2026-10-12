@@ -18,7 +18,7 @@ It says on the release when that publish did not complete.
 |---------------------------|-------------------------------------------|-----------------------------------------|
 | `release-flow/prepare`    | a checkout with `fetch-depth: 0`          | yes                                     |
 | `release-flow/draft`      | the workspace `release-flow/prepare` left | no                                      |
-| `release-flow/merge-back` | a checkout with `fetch-depth: 0`          | yes                                     |
+| `release-flow/merge-back` | a checkout with `fetch-depth: 0`          | no: reads them from the release commit  |
 | `release-flow/warn`       | no checkout                               | no                                      |
 
 `version-source` and `tag-prefix` work as in
@@ -55,7 +55,10 @@ Three workflows carry a project through a release, and the examples here name th
    [The changelog](../lib/README.md#the-changelog) says.
 2. It closes `[Unreleased]` into a section for the version being released.
 3. It writes that version back where the source declares one.
-4. It makes one commit on `release/<version>`, and leaves the workspace on that branch.
+4. It makes one commit on `release/<version>`, and leaves the workspace on that branch.\
+   The commit records how the release was made, for
+   [merge-back](#merge-back-reads-how-the-release-was-made-from-the-release-commit) and
+   `intellij/build`.
 
 The version comes from the source, or from the `version` input.\
 [Where the version comes from](../lib/README.md#where-the-version-comes-from) says how,
@@ -69,8 +72,10 @@ Given `skip-unreadable-releases: true`, the `changelog` check names as not compa
 tag holds a line of `CHANGELOG.md` it does not read, instead of failing.\
 [The changelog](../lib/README.md#the-changelog) says which lines count.\
 The release job below passes it on from a checkbox of the dispatch.\
-`merge-back` and `check-release` take the same input.\
-Their events have no checkbox, so it is written in their workflows.
+`merge-back` reads it from the release commit, as
+[it reads how the release was made](#merge-back-reads-how-the-release-was-made-from-the-release-commit).\
+`check-release` takes the same input.\
+Its events have no checkbox, so it is written in its workflow.
 
 ### Nothing leaves the workspace
 
@@ -193,6 +198,24 @@ branch:
 The release branch is `release/<version>`, named after the tag's version.\
 It holds the release commit and whatever merge-back adds above it.
 
+### merge-back reads how the release was made from the release commit
+
+`release-flow/prepare` records in the release commit how it made the release, as git trailers:
+
+| Trailer                               | Holds                                                      |
+|---------------------------------------|------------------------------------------------------------|
+| `Release-CI-Version`                  | the version released                                       |
+| `Release-CI-Version-Source`           | `version-source`, as `prepare` was given it                |
+| `Release-CI-Tag-Prefix`               | the prefix `prepare` used, from its input or the file      |
+| `Release-CI-Skip-Unreadable-Releases` | `true`, recorded only where `prepare` was given it         |
+
+merge-back reads them from the commit the published tag names, so it takes no input for them.\
+It writes the next version where `prepare` read this one, and checks the merged tree as `prepare`
+checked the release.\
+A tag the commit does not record, such as a draft's tag renamed before it was published, fails the
+run before anything is carried back.\
+So does a release commit with no such trailers, cut by something else.
+
 ```yaml
 # .github/workflows/release-publish.yml
 on:
@@ -215,7 +238,6 @@ jobs:
           fetch-depth: 0
       - uses: loplex/release-ci/release-flow/merge-back@<tag>
         with:
-          version-source: gradle.properties
           tag: ${{ github.event.release.tag_name }}
           default-branch: ${{ github.event.repository.default_branch }}
           check-workflow: ci.yml

@@ -40,6 +40,7 @@ No older Python is tested.
 | `set-version`     | writes a version into the file the source declares it in                                                    |
 | `close-changelog` | moves what is under `[Unreleased]` into a dated section for the version being released                      |
 | `notes`           | prints the text of one released section, which is what its release notes say                                |
+| `recorded`        | prints a setting `release-flow/prepare` recorded in the commit of a release tag                             |
 
 The options go after the subcommand name, and a subcommand refuses an option it never reads:
 
@@ -59,7 +60,10 @@ The options go after the subcommand name, and a subcommand refuses an option it 
   They make every relative link in the HTML absolute, read at that tag or commit of the repository.\
   [Relative links in the HTML](#relative-links-in-the-html) says where each one then leads.\
   `close-changelog` takes a `--repository-url` of its own, for the versions' link definitions.
-- Neither `--version-source` nor `--tag-prefix`: `notes` and `channel`.
+- Neither `--version-source` nor `--tag-prefix`: `notes`, `channel` and `recorded`.\
+  `recorded <tag> <name>` reads the setting from the commit the tag names, as
+  [merge-back reads it](../release-flow/README.md#merge-back-reads-how-the-release-was-made-from-the-release-commit),
+  and refuses a tag that commit does not record.
 
 ## A release yet to land exits with 4
 

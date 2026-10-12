@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""The plugin's change notes: the section of CHANGELOG.md for the version gradle.properties names, as HTML.
+"""The plugin's change notes: the section of CHANGELOG.md for the version the release is made of, as HTML.
 
-It is `lib/main.py notes <version> --html`, with the version read from the line release-flow/prepare wrote.
+It is `lib/main.py notes <version> --html`, with the version read from the line release-flow/prepare wrote,
+in the source it recorded in the release commit checked out (see lib/main.py's built_version()).
 It needs the packages in lib/requirements.txt.
 Run in the root of the plugin's repository.
 
@@ -25,7 +26,7 @@ if __name__ == "__main__":
     if len(sys.argv) not in (3, 4) or sys.argv[3:] not in ([], ["--page"]):
         sys.exit("usage: change-notes.py <repository-url> <ref> [--page]")
     repository_url, ref, *page = sys.argv[1:]
-    version = main.declared_version("gradle.properties")
+    _, version = main.built_version()
     sys.argv = [sys.argv[0], "notes", version, "--html", "--repository-url", repository_url, "--ref", ref]
     if not page:
         sys.exit(main.main())

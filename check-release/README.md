@@ -61,7 +61,10 @@ The example adds `version`.
 - Every check named runs, even after one of them fails.
 - The step fails at the end if any check failed, and names each one that did.
 - A check that finds nothing but a published release
-  [yet to land](../lib/README.md#a-release-yet-to-land-exits-with-4) here warns and does not fail.
+  [yet to land](../lib/README.md#a-release-yet-to-land-exits-with-4) here warns and does not fail.\
+  So does one that finds nothing but a release
+  [landed after the commit checked](../lib/README.md#a-release-landed-after-this-commit-exits-with-4-too)
+  on the branch the `default-branch` input names, the repository's default branch unless given.
 - The [outputs](#outputs) are written whenever `version` passed, even if another check failed.\
   A `version` that only warns has not passed, and writes neither.
 

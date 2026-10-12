@@ -36,14 +36,16 @@ class TheAction(unittest.TestCase):
     def setUp(self):
         self.stage()
 
-    def check(self, checks, tag_prefix="v", version="", source="tags", skip_unreadable_releases=None):
+    def check(self, checks, tag_prefix="v", version="", source="tags", skip_unreadable_releases=None,
+              default_branch=None):
         written = Path(self.enterContext(tempfile.TemporaryDirectory())) / "output.txt"
         written.write_text("", encoding="utf-8")
         skip = {} if skip_unreadable_releases is None else {"SKIP_UNREADABLE_RELEASES": skip_unreadable_releases}
+        branch = {} if default_branch is None else {"DEFAULT_BRANCH": default_branch}
         done = subprocess.run(
             ["bash", str(CHECK_SH)], cwd=self.work, capture_output=True, text=True,
             env={**os.environ, "PYTHON": sys.executable, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix,
-                 "CHECKS": checks, "VERSION": version, "GITHUB_OUTPUT": str(written), **skip},
+                 "CHECKS": checks, "VERSION": version, "GITHUB_OUTPUT": str(written), **skip, **branch},
         )
         outputs = dict(
             line.split("=", 1) for line in written.read_text(encoding="utf-8").splitlines() if "=" in line
@@ -83,6 +85,31 @@ class TheAction(unittest.TestCase):
         self.assertIn("::warning::check-release version found a published release that has yet to land here",
                       done.stdout)
         self.assertEqual(outputs, {}, "a version that only warns has not passed, and writes no output")
+
+    def test_a_release_landed_after_the_commit_checked_warns_given_the_default_branch(self):
+        """`window` was pushed while merge-back ran, and is checked only once 0.2.0 landed on the fetched main."""
+        (self.work / "window.txt").write_text("w\n", encoding="utf-8")
+        git("add", "window.txt", cwd=self.work)
+        git("commit", "-qm", "window", cwd=self.work)
+        git("switch", "-qc", "release/0.2.0", "v0.1.0", cwd=self.work)
+        (self.work / "CHANGELOG.md").write_text("# Changelog\n\n## [0.2.0] - 2026-09-02\n\n- B\n\n"
+                                                "## [0.1.0] - 2026-09-01\n\n- A\n", encoding="utf-8")
+        git("commit", "-qam", "0.2.0", cwd=self.work)
+        git("tag", "v0.2.0", cwd=self.work)
+        git("switch", "-qc", "landed", "main", cwd=self.work)
+        git("merge", "-q", "--no-ff", "-m", "carry 0.2.0 back", "release/0.2.0", cwd=self.work)
+        git("update-ref", "refs/remotes/origin/main", "landed", cwd=self.work)
+        git("switch", "-q", "main", cwd=self.work)
+        git("branch", "-qD", "landed", "release/0.2.0", cwd=self.work)
+        _, done = self.check("changelog ancestry", default_branch="main")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        for check in ("changelog", "ancestry"):
+            self.assertIn(f"::warning::check-release {check} found a published release that has yet to land here, "
+                          f"or landed after this commit", done.stdout)
+        for left_out in (None, ""):
+            _, done = self.check("ancestry", default_branch=left_out)
+            self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+            self.assertIn("::error::check-release ancestry said no", done.stdout)
 
     def test_a_check_that_says_no_fails_the_run_and_is_named(self):
         outputs, done = self.check("version", version="0.4.0")

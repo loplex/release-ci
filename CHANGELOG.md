@@ -42,6 +42,10 @@ released it, so once a version has a section here, that section may not be edite
   branch holds, which landed after the commit checked, exits with 4, as a release yet to land does.\
   A commit pushed while merge-back ran, checked only after the release landed, failed as if a
   rewrite had taken the release off.
+- `default-branch` on `check-release`, the repository's default branch unless given: a check that
+  finds nothing but a release that landed there after the commit checked warns and passes.\
+  A re-run of a commit pushed while merge-back ran, or a run of it that waited in a queue, failed
+  once the release had landed.
 
 ### Changed
 

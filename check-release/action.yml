@@ -6,6 +6,7 @@ description: |
   - `ancestry`: whether every release tag is still reachable from the history.
 
   A check that finds nothing but a published release still on its release branch, yet to land here, only warns.
+  So does one that finds nothing but a release that landed on the default branch after the commit checked.
 
   Runs in the calling workspace.
   Installs the Python it runs on with actions/setup-python, leaving the job's own python3 as it was.
@@ -71,6 +72,16 @@ inputs:
 
       Empty is `false`, so a `workflow_dispatch` input passed on here is `false` on every other event.
     default: 'false'
+  default-branch:
+    description: |
+      The branch releases land on.
+      A release it holds, which landed after the commit checked, then only warns.
+      Such a commit was pushed while merge-back ran, and checked only after the release landed:
+      a re-run, or a run that waited in a queue.
+
+      The default is the repository's default branch, as the event that started the run names it.
+      Empty, such a release fails `ancestry` and `changelog`, and `version` refuses its version as released already.
+    default: ${{ github.event.repository.default_branch }}
 
 outputs:
   version:
@@ -111,6 +122,7 @@ runs:
         CHECKS: ${{ inputs.checks }}
         VERSION: ${{ inputs.version }}
         SKIP_UNREADABLE_RELEASES: ${{ inputs.skip-unreadable-releases }}
+        DEFAULT_BRANCH: ${{ inputs.default-branch }}
       # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,
       # where the tool cache is mounted away from the path built into it. Set here, for this step alone.
       run: |

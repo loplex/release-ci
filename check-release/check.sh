@@ -3,7 +3,7 @@
 # It reads environment variables, not arguments, because that is how a composite action passes its inputs.
 # It is a file of its own, not part of action.yml, so that a test can run it against a repository.
 #
-# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX CHECKS VERSION SKIP_UNREADABLE_RELEASES GITHUB_OUTPUT
+# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX CHECKS VERSION SKIP_UNREADABLE_RELEASES DEFAULT_BRANCH GITHUB_OUTPUT
 # Writes: version, channel  (to GITHUB_OUTPUT, where `version` ran and said yes)
 set -uo pipefail
 
@@ -17,6 +17,11 @@ script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/main.py"
 source_arguments=(--version-source "$VERSION_SOURCE")
 if [[ -n $TAG_PREFIX ]]; then
   source_arguments+=(--tag-prefix "$TAG_PREFIX")
+fi
+# The branch releases land on, so that a release landed after the commit checked only warns.
+# Empty where the event names no repository: such a release then fails, as a rewrite would.
+if [[ -n ${DEFAULT_BRANCH:-} ]]; then
+  source_arguments+=(--default-branch "$DEFAULT_BRANCH")
 fi
 
 # Split at spaces and newlines, without glob expansion.
@@ -64,10 +69,11 @@ for check in "${check_names[@]}"; do
   printf '%s\n' "$out"
 
   # 4: nothing wrong but a published release that has yet to land here, which merge-back or its pull request carries
-  # back.
+  # back, or one that landed after this commit.
   # A commit pushed in that window cannot be changed to pass, and does not have to be.
   if (( rc == 4 )); then
-    echo "::warning::check-release $check found a published release that has yet to land here"
+    echo "::warning::check-release $check found a published release that has yet to land here, or landed after this" \
+      "commit"
   elif (( rc != 0 )); then
     echo "::error::check-release $check said no"
     failed=1

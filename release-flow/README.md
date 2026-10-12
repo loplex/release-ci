@@ -342,19 +342,22 @@ branch does not reach the release's tag.
   source declares a version, `version` find the release
   [yet to land](../lib/README.md#a-release-yet-to-land-exits-with-4).\
   `check-release` warns of it and passes.
-- That includes a commit pushed while merge-back runs, as long as its check runs before the release
-  lands.\
-  A check of it that runs later, a re-run or one that waited in a queue, fails once the release
-  branch is deleted, as merge-back deletes it when its own push lands the release: `ancestry` and
-  `changelog` read the tag as taken off the history, and `version`, where the source declares a
-  version, finds the version just released declared.\
-  While the branch is still there, such a check warns.\
+- That includes a commit pushed while merge-back runs.\
+  A check of it that runs only once the release has landed, a re-run or one that waited in a queue,
+  finds the release
+  [landed after the commit](../lib/README.md#a-release-landed-after-this-commit-exits-with-4-too) on
+  the default branch, and warns too.\
+  `check-release` takes the default branch from the event that started the run.\
+  Where its `default-branch` input is empty, such a check fails once merge-back has deleted the
+  release branch: `ancestry` and `changelog` read the tag as taken off the history, and `version`,
+  where the source declares a version, finds the version just released declared.\
   Nothing is wrong with the commit: a run on a later one, such as the one merge-back starts, settles
   it.
 - No next release can be prepared: `prepare` refuses.
-- A warning in a check run started after the merge-back run means the release is not on the default
-  branch: the run failed, its pull request is still open, or a force-push took the release back off,
-  as [The release branch](#the-release-branch) says.\
+- A check run started after the merge-back run that warns of the release as yet to land, not as
+  landed after the commit, means the release is not on the default branch: the run failed, its pull
+  request is still open, or a force-push took the release back off, as
+  [The release branch](#the-release-branch) says.\
   Look at that run, and [run it again](#running-it-again) where it failed.
 
 ### `check-workflow` needs `workflow_dispatch`, and `GITHUB_TOKEN` needs `actions: write`

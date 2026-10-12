@@ -168,6 +168,16 @@ class TheArchiveCheck(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertIn("plugin.xml has no <version>, and gradle.properties 1.2.0", done.stdout)
 
+    def test_change_notes_outside_ascii_pass_under_an_ascii_locale(self):
+        """check-archive.py restarts in UTF-8 mode (see main.in_utf8_mode): started outside it, it read CHANGE_NOTES
+        in the locale's encoding, so notes outside ASCII never matched the plugin.xml they were built into."""
+        self.plugin(notes="<p>café</p>")
+        env = {**os.environ, "CHANGE_NOTES": "<p>café</p>",
+               "LC_ALL": "C", "PYTHONCOERCECLOCALE": "0", "PYTHONUTF8": "0"}
+        done = subprocess.run([sys.executable, str(CHECK_ARCHIVE_PY), str(self.archive)], cwd=self.work,
+                              capture_output=True, env=env)
+        self.assertEqual(done.returncode, 0, (done.stdout + done.stderr).decode("utf-8"))
+
     def test_a_plugin_that_is_one_jar_is_read_too(self):
         self.made({"META-INF/plugin.xml": plugin_xml("1.2.0")})
         done = self.run_check()
@@ -281,6 +291,16 @@ class TheChangeNotes(unittest.TestCase):
         done = self.run_change_notes_py("https://github.com/o/r", "v1.2.0")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout, "<h3>Fixed</h3>\n<ul>\n<li>A &amp; B</li>\n</ul>\n")
+
+    def test_notes_outside_ascii_are_printed_under_an_ascii_locale(self):
+        """change-notes.py restarts in UTF-8 mode (see main.in_utf8_mode): started outside it, printing failed."""
+        changelog = self.work / "CHANGELOG.md"
+        changelog.write_text(changelog.read_text(encoding="utf-8").replace("- A & B\n", "- café\n"), encoding="utf-8")
+        env = {**os.environ, "LC_ALL": "C", "PYTHONCOERCECLOCALE": "0", "PYTHONUTF8": "0"}
+        done = subprocess.run([sys.executable, str(CHANGE_NOTES_PY), "https://github.com/o/r", "v1.2.0"],
+                              cwd=self.work, capture_output=True, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr.decode("utf-8"))
+        self.assertEqual(done.stdout.decode("utf-8"), "<h3>Fixed</h3>\n<ul>\n<li>café</li>\n</ul>\n")
 
     def test_a_relative_link_is_read_at_the_ref(self):
         self.linked()

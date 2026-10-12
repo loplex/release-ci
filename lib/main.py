@@ -27,6 +27,7 @@ rules/sources.py holds one adapter per kind of repository, for where the version
 
 import argparse
 import datetime
+import os
 import subprocess
 import sys
 
@@ -37,6 +38,25 @@ from rules.changelog import (UnreadCopy, absolute_links, bodies, check_changelog
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
 from rules.repository import (carried_by, check_ancestry, git, holder, read_file, released_versions, repository,
                                unreachable)
+
+
+def in_utf8_mode() -> None:
+    """Run this script again in Python's UTF-8 mode (PEP 540) where it was not started in it.
+
+    Everything here is UTF-8 whatever the locale says: CHANGELOG.md, git's output, the names of branches and tags.
+    Outside UTF-8 mode, Python decodes git's output, the arguments, and what it prints in the locale's encoding.
+    Under a Latin-2 locale a branch named `café` is then named garbled; under an ASCII one, printing it fails.
+    The mode settles all of them at once, where an encoding passed to each call would leave the next one to be found.
+    Python 3.15 runs in it by default (PEP 686).
+
+    Called by each script's entry point, never on import, so that a test runner importing this file is not restarted.
+    The first `-X utf8` on a command line wins over any later `-X utf8=0`, so the new run cannot start without it.
+    """
+    if sys.flags.utf8_mode:
+        return
+    if sys.orig_argv[1:3] == ["-X", "utf8"]:
+        raise SystemExit(f"{sys.argv[0]} was started again with -X utf8 and is still not in UTF-8 mode")
+    os.execv(sys.executable, [sys.executable, "-X", "utf8", *sys.orig_argv[1:]])
 
 
 # The exit status of a check that found nothing wrong but a release yet to land here.
@@ -563,4 +583,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    in_utf8_mode()
     sys.exit(main())

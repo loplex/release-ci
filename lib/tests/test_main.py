@@ -496,6 +496,22 @@ class AReleaseYetToLand(TwoReleasesOneOffMain):
                 self.assertNotIsInstance(problems[0], main.Awaiting)
                 self.assertIn(f"{name} still holds it", problems[0])
 
+    def test_a_branch_named_outside_ascii_is_named_under_an_ascii_locale(self):
+        """The script restarts itself in UTF-8 mode: started outside it, decoding git's output ended in a traceback.
+        Locale coercion and UTF-8 mode are both turned off, as a `C` locale would otherwise have them on.
+        `-X utf8=0` on the command line is overruled too."""
+        self.git("branch", "-q", "-D", "aside")
+        self.git("branch", "-q", "-m", "release/0.2.0", "café")
+        ascii_only = {**os.environ, "LC_ALL": "C", "PYTHONCOERCECLOCALE": "0", "PYTHONUTF8": "0"}
+        for options in ([], ["-X", "utf8=0"]):
+            with self.subTest(options):
+                run = subprocess.run([sys.executable, *options, str(SCRIPT), "ancestry", "--version-source", "tags",
+                                      "--tag-prefix", "v"], cwd=self.here, env=ascii_only, capture_output=True)
+                said = run.stderr.decode("utf-8")
+                self.assertEqual(run.returncode, 1, said)
+                self.assertNotIn("Traceback", said)
+                self.assertIn("café still holds it", said)
+
     def test_a_fetched_remote_branch_not_named_for_the_release_rules_out_the_local_one(self):
         """The local branches are asked only where no fetched branch holds the tag, as holder() asks them."""
         self.git("update-ref", "refs/remotes/origin/aside", "aside")

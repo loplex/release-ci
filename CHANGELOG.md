@@ -172,6 +172,13 @@ released it, so once a version has a section here, that section may not be edite
   ASCII, as under `LC_ALL=C` with `PYTHONUTF8=0`, reading a copy that holds a character outside
   ASCII ended in a traceback, and where it was another, such as Latin-2, the copy read as no longer
   what the tag has.
+- `lib/main.py` reads git's output and its arguments, and prints, in UTF-8 whatever the locale: it
+  restarts itself in Python's UTF-8 mode.\
+  Under an ASCII locale with locale coercion and UTF-8 mode turned off, `ancestry` ended in a
+  traceback on a tag held by a branch named outside ASCII, and under another, such as Latin-2, it
+  named that branch garbled.\
+  An argument that is not UTF-8 is refused as no text under every locale, as it already was under
+  a UTF-8 one.
 
 ## [0.2.0] - 2026-09-29
 

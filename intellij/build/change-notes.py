@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
 import main  # noqa: E402  (lib/main.py, found through the line above)
 
 if __name__ == "__main__":
+    main.in_utf8_mode()
     if len(sys.argv) not in (3, 4) or sys.argv[3:] not in ([], ["--page"]):
         sys.exit("usage: change-notes.py <repository-url> <ref> [--page]")
     repository_url, ref, *page = sys.argv[1:]

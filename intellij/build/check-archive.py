@@ -93,6 +93,7 @@ def run(archive: str) -> int:
 
 
 if __name__ == "__main__":
+    main.in_utf8_mode()
     if len(sys.argv) != 2:
         raise SystemExit("usage: check-archive.py <archive>")
     sys.exit(run(sys.argv[1]))

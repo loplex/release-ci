@@ -13,6 +13,21 @@ python3 -m unittest discover -s .github
 
 The first line installs what the `lib`, `intellij` and `.github` suites need.
 
+[`.github/run-tests.sh`](.github/run-tests.sh) runs the same tests in a fraction of the time, on the
+Python that `PYTHON` names, `python3` by default:
+
+```
+.github/run-tests.sh
+```
+
+- It runs the five suites at once, each split over as many processes as there are cores.
+- It prints one line per suite, then the whole output of every red one.
+- A suite whose tests did not all run is red as well.
+- It tests the checkout it is run in, wherever it comes from, so the copy in a newer checkout can
+  test an older commit's worktree.
+- pytest-xdist splits tests over processes the same way for pytest.\
+  It is not used, so that running the tests needs no package of its own.
+
 All five suites run on every push and pull request, in
 [`.github/workflows/test.yml`](.github/workflows/test.yml).\
 They run on the Python that [`.python-version`](.python-version) names.\
@@ -79,6 +94,10 @@ It reads the repository as text:
   put together at random, has to split into the same headings, list items and code as cmark-gfm
   splits it.\
   It reads the whole history, so in a shallow clone it fails.
+
+[`test_run_tests.py`](.github/test_run_tests.py) runs `run-tests.sh` over a checkout made for the
+purpose, with five small suites of its own.\
+Over this repository it would run itself again.
 
 The suite reads Markdown through [cmarkgfm](https://github.com/theacodes/cmarkgfm), the Python
 binding of GitHub's own cmark-gfm.\

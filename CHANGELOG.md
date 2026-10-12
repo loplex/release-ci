@@ -38,6 +38,10 @@ released it, so once a version has a section here, that section may not be edite
   on the default branch while the release was out, and how many.\
   The run was green with nothing to tell such a landing from a plain fast-forward, though it puts a
   merge on the default branch's history.
+- `--default-branch` of `lib/main.py` on `version`, `changelog` and `ancestry`: a release that
+  branch holds, which landed after the commit checked, exits with 4, as a release yet to land does.\
+  A commit pushed while merge-back ran, checked only after the release landed, failed as if a
+  rewrite had taken the release off.
 
 ### Changed
 

@@ -176,7 +176,8 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
         """Only `aside` holds v0.2.0 now, so the release is not on its way here (see AReleaseYetToLand)."""
         self.git("branch", "-q", "-D", "release/0.2.0")
         with contextlib.redirect_stdout(io.StringIO()):
-            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
+            problems = main.changelog_command(argparse.Namespace(default_branch=None,
+                                                                 version_source="tags", tag_prefix="v",
                                                                    skip_unreadable_releases=False))
         self.assertEqual(len(problems), 1)
         self.assertIn("not on this history", problems[0])
@@ -190,7 +191,8 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.1] - 2025-12-01\n\n- Z\n")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
+            problems = main.changelog_command(argparse.Namespace(default_branch=None,
+                                                                 version_source="tags", tag_prefix="v",
                                                                    skip_unreadable_releases=False))
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
@@ -206,7 +208,8 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
         self.commit("## [0.1.0] - 2026-01-01\n\n- A\n\n## [0.0.1] - 2025-12-01\n\n- Z\n")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
+            problems = main.changelog_command(argparse.Namespace(default_branch=None,
+                                                                 version_source="tags", tag_prefix="v",
                                                                    skip_unreadable_releases=False))
         self.assertEqual(problems, [])
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
@@ -215,7 +218,8 @@ class TheChangelogCommand(TwoReleasesOneOffMain):
     def run_changelog(self, skip_unreadable_releases: bool) -> tuple[list[str], str]:
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
+            problems = main.changelog_command(argparse.Namespace(default_branch=None,
+                                                                 version_source="tags", tag_prefix="v",
                                                                  skip_unreadable_releases=skip_unreadable_releases))
         return problems, printed.getvalue()
 
@@ -403,8 +407,9 @@ class AReleaseYetToLand(TwoReleasesOneOffMain):
     Every check reports that as an Awaiting problem, which main() exits with AWAITING on when it is all there is.
     What a rewrite leaves looks alike, and is still failed outright."""
 
-    def checked(self, command, version_source="tags", tag_prefix="v", **options):
-        arguments = argparse.Namespace(version_source=version_source, tag_prefix=tag_prefix, **options)
+    def checked(self, command, version_source="tags", tag_prefix="v", default_branch=None, **options):
+        arguments = argparse.Namespace(version_source=version_source, tag_prefix=tag_prefix,
+                                       default_branch=default_branch, **options)
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return command(arguments)
 
@@ -430,7 +435,7 @@ class AReleaseYetToLand(TwoReleasesOneOffMain):
     def test_the_sections_that_are_here_are_still_compared(self):
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            main.changelog_command(argparse.Namespace(version_source="tags", tag_prefix="v",
+            main.changelog_command(argparse.Namespace(default_branch=None, version_source="tags", tag_prefix="v",
                                                       skip_unreadable_releases=False))
         self.assertIn("Compared 1 released section(s)", printed.getvalue())
 
@@ -446,7 +451,7 @@ class AReleaseYetToLand(TwoReleasesOneOffMain):
     def test_the_other_tags_are_still_counted(self):
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed), contextlib.redirect_stderr(io.StringIO()):
-            main.ancestry_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+            main.ancestry_command(argparse.Namespace(default_branch=None, version_source="tags", tag_prefix="v"))
         self.assertIn("The other 1 released tag(s) are reachable from HEAD.", printed.getvalue())
 
     def test_a_loose_entry_under_unreleased_is_still_reported_beside_it(self):
@@ -550,7 +555,8 @@ class AReleaseYetToLand(TwoReleasesOneOffMain):
         self.git("tag", "-d", "v0.1.0")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed), contextlib.redirect_stderr(io.StringIO()):
-            problems = main.ancestry_command(argparse.Namespace(version_source="tags", tag_prefix="v"))
+            problems = main.ancestry_command(argparse.Namespace(default_branch=None,
+                                                                version_source="tags", tag_prefix="v"))
         self.assertEqual([isinstance(problem, main.Awaiting) for problem in problems], [True])
         self.assertNotIn("released tag(s)", printed.getvalue())
 
@@ -613,6 +619,92 @@ class AReleaseYetToLand(TwoReleasesOneOffMain):
         self.assertEqual(status, 1, said)
         self.assertIn("v0.2.0 is released, and has yet to land here", said)
         self.assertNotIn("no release can be prepared", said)
+
+
+class AReleaseLandedAfterThisCommit(TwoReleasesOneOffMain):
+    """`window` is pushed to main while merge-back runs, and checked only once v0.2.0 has landed:
+    a re-run, or a run that waited in a queue.
+    The fetched main holds the tag through merge-back's merge, and `release/0.2.0` is gone.
+    Given the default branch, every check reports that as an Awaiting problem; without it, as a rewrite, as before."""
+
+    def setUp(self):
+        super().setUp()
+        (self.here / "window.txt").write_text("pushed while merge-back ran\n", encoding="utf-8")
+        self.git("add", "window.txt")
+        self.git("commit", "-q", "-m", "window")
+        self.git("switch", "-q", "-c", "landed")
+        self.git("merge", "-q", "--no-ff", "-m", "chore(release): carry 0.2.0 back", "release/0.2.0")
+        self.git("update-ref", "refs/remotes/origin/main", "landed")
+        self.git("switch", "-q", "main")
+        self.git("branch", "-q", "-D", "landed", "release/0.2.0", "aside")
+
+    def checked(self, command, default_branch="main", version_source="tags", tag_prefix="v", **options):
+        arguments = argparse.Namespace(version_source=version_source, tag_prefix=tag_prefix,
+                                       default_branch=default_branch, **options)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return command(arguments)
+
+    def test_every_check_awaits_it(self):
+        (self.here / "gradle.properties").write_text("version = 0.2.0-SNAPSHOT\ntagPrefix = v\n", encoding="utf-8")
+        for problems in (self.checked(main.ancestry_command),
+                         self.checked(main.changelog_command, skip_unreadable_releases=False),
+                         self.checked(main.version_command, version=None, version_source="gradle.properties",
+                                      tag_prefix=None)):
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIsInstance(problems[0], main.Awaiting)
+            self.assertIn("landed on origin/main after this commit was made", problems[0])
+
+    def test_without_the_default_branch_it_is_failed_as_before(self):
+        problems = self.checked(main.ancestry_command, default_branch=None)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertNotIsInstance(problems[0], main.Awaiting)
+        self.assertIn("origin/main still holds it", problems[0])
+        (self.here / "gradle.properties").write_text("version = 0.2.0-SNAPSHOT\ntagPrefix = v\n", encoding="utf-8")
+        problems = self.checked(main.version_command, default_branch=None, version=None,
+                                version_source="gradle.properties", tag_prefix=None)
+        self.assertFalse(any(isinstance(problem, main.Awaiting) for problem in problems), problems)
+        self.assertIn("released already", " ".join(problems))
+
+    def test_another_branch_named_as_the_default_is_failed(self):
+        problems = self.checked(main.ancestry_command, default_branch="master")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertNotIsInstance(problems[0], main.Awaiting)
+
+    def test_a_local_default_branch_holds_it_where_no_remote_one_does(self):
+        self.git("branch", "-q", "landed", "origin/main")
+        self.git("update-ref", "-d", "refs/remotes/origin/main")
+        problems = self.checked(main.ancestry_command, default_branch="landed")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIsInstance(problems[0], main.Awaiting)
+        self.assertIn("landed on landed after this commit was made", problems[0])
+
+    def test_a_default_branch_holding_a_copy_of_the_release_is_failed(self):
+        """A squash merge leaves the default branch a copy of the release commit, and the tag on no branch."""
+        self.git("switch", "-q", "-c", "squashed", "main")
+        self.git("merge", "-q", "--squash", "v0.2.0")
+        self.git("commit", "-q", "-m", "chore(release): 0.2.0, squashed")
+        self.git("update-ref", "refs/remotes/origin/main", "squashed")
+        self.git("switch", "-q", "main")
+        self.git("branch", "-q", "-D", "squashed")
+        problems = self.checked(main.ancestry_command)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertNotIsInstance(problems[0], main.Awaiting)
+        self.assertIn("no longer reachable", problems[0])
+
+    def test_a_commit_off_the_history_the_release_was_cut_from_is_failed(self):
+        """A history rewritten below where the release was cut: its tag's parent is not on it."""
+        self.git("switch", "-q", "--orphan", "rewritten")
+        self.commit("## [0.1.0] - 2026-01-01\n\n- A, rewritten\n")
+        problems = [problem for problem in self.checked(main.ancestry_command) if "v0.2.0" in problem]
+        self.assertEqual(len(problems), 1, problems)
+        self.assertNotIsInstance(problems[0], main.Awaiting)
+
+    def test_it_exits_with_its_own_status(self):
+        for check in ("ancestry", "changelog"):
+            run = subprocess.run([sys.executable, str(SCRIPT), check, "--version-source", "tags", "--tag-prefix", "v",
+                                  "--default-branch", "main"], cwd=self.here, capture_output=True, text=True)
+            self.assertEqual(run.returncode, main.AWAITING, run.stderr)
+            self.assertIn("landed on origin/main after this commit was made", run.stderr)
 
 
 class WritingTheVersionBack(unittest.TestCase):
@@ -796,7 +888,7 @@ class AVersionHandedIn(unittest.TestCase):
         self.addCleanup(setattr, repository, "REPO", original)
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = version_command(argparse.Namespace(version=given,
+            problems = version_command(argparse.Namespace(default_branch=None, version=given,
                                                           version_source="gradle.properties", tag_prefix="v"))
         return problems, printed.getvalue().strip()
 
@@ -844,13 +936,15 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         # It is swallowed here, so that the suite's output holds only test results.
         self.repository_with(*tags, **repository)
         with contextlib.redirect_stdout(io.StringIO()):
-            return version_command(argparse.Namespace(version=given, version_source=version_source, tag_prefix=prefix))
+            return version_command(argparse.Namespace(default_branch=None,
+                                                      version=given, version_source=version_source, tag_prefix=prefix))
 
     def test_a_tag_source_releases_the_version_it_is_handed(self):
         self.repository_with("v0.1.0")
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = version_command(argparse.Namespace(version="0.2.0", version_source="tags", tag_prefix="v"))
+            problems = version_command(argparse.Namespace(default_branch=None,
+                                                          version="0.2.0", version_source="tags", tag_prefix="v"))
         self.assertEqual((problems, printed.getvalue().strip()), ([], "0.2.0"))
 
     def test_the_default_is_the_patch_after_the_highest_release(self):
@@ -890,12 +984,13 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.repository_with("v0.2.0", changelog=added)
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            problems = version_command(argparse.Namespace(version=None, version_source="tags", tag_prefix="v"))
+            problems = version_command(argparse.Namespace(default_branch=None,
+                                                          version=None, version_source="tags", tag_prefix="v"))
         self.assertEqual((problems, printed.getvalue().strip()), ([], "0.3.0"))
         self.assertIn("at least a minor, 0.3.0", " ".join(self.problems_releasing("0.2.1", "v0.2.0", changelog=added)))
         self.repository_with("v0.2.0", declaring="version = 0.2.1-SNAPSHOT\ntagPrefix = v\n", changelog=added)
         with contextlib.redirect_stdout(io.StringIO()):
-            problems = version_command(argparse.Namespace(version=None,
+            problems = version_command(argparse.Namespace(default_branch=None, version=None,
                                                           version_source="gradle.properties", tag_prefix=None))
         self.assertIn("[Unreleased] holds ### Added", " ".join(problems))
 
@@ -922,7 +1017,8 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.repository_with("v0.2.0", changelog="# Changelog\n\n## [Unreleased]\n\n### Documentation\n\n- D\n")
         said = io.StringIO()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(said):
-            problems = version_command(argparse.Namespace(version="0.2.1", version_source="tags", tag_prefix="v"))
+            problems = version_command(argparse.Namespace(default_branch=None,
+                                                          version="0.2.1", version_source="tags", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertIn("'### Documentation', which is not a kind of change Keep a Changelog names", said.getvalue())
 
@@ -933,7 +1029,8 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.repository_with("v0.2.0", changelog="# Changelog\n\n## Unreleased\n\n### Added\n\n- A\n")
         said = io.StringIO()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(said):
-            problems = version_command(argparse.Namespace(version="0.2.1", version_source="tags", tag_prefix="v"))
+            problems = version_command(argparse.Namespace(default_branch=None,
+                                                          version="0.2.1", version_source="tags", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertIn("CHANGELOG.md has no [Unreleased] section", said.getvalue())
 
@@ -941,7 +1038,8 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.repository_with("v0.2.0", changelog=None)
         said = io.StringIO()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(said):
-            problems = version_command(argparse.Namespace(version="0.2.1", version_source="tags", tag_prefix="v"))
+            problems = version_command(argparse.Namespace(default_branch=None,
+                                                          version="0.2.1", version_source="tags", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertIn("there is no CHANGELOG.md here", said.getvalue())
 
@@ -957,7 +1055,8 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.repository_with("deploy-1")
         said = io.StringIO()
         with contextlib.redirect_stderr(said), self.assertRaises(SystemExit) as raised:
-            version_command(argparse.Namespace(version=None, version_source="tags", tag_prefix="v"))
+            version_command(argparse.Namespace(default_branch=None,
+                                               version=None, version_source="tags", tag_prefix="v"))
         self.assertIn("say which version to release", str(raised.exception))
         self.assertEqual(said.getvalue().count("none of them is a release"), 1, said.getvalue())
 
@@ -977,7 +1076,7 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         printed = io.StringIO()
         with unittest.mock.patch.object(main, "marker_of", lambda source: ""), \
                 contextlib.redirect_stdout(printed):
-            problems = version_command(argparse.Namespace(version=None,
+            problems = version_command(argparse.Namespace(default_branch=None, version=None,
                                                           version_source="gradle.properties", tag_prefix="v"))
         self.assertEqual(problems, [])
         self.assertEqual(printed.getvalue().strip(), "0.2.0")
@@ -989,7 +1088,7 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.repository_with("v0.1.0", "v0.2.0", declaring="version = 0.2.0\ntagPrefix = v\n")
         printed, said = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(printed), contextlib.redirect_stderr(said):
-            problems = version_command(argparse.Namespace(version=None,
+            problems = version_command(argparse.Namespace(default_branch=None, version=None,
                                                           version_source="gradle.properties", tag_prefix=None))
         self.assertEqual((problems, printed.getvalue().strip()), ([], "0.2.0"))
         self.assertIn("this commit is the release of 0.2.0", said.getvalue())
@@ -999,7 +1098,7 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t",
                         "commit", "-q", "--allow-empty", "-m", "after"], cwd=here, check=True)
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            problems = version_command(argparse.Namespace(version=None,
+            problems = version_command(argparse.Namespace(default_branch=None, version=None,
                                                           version_source="gradle.properties", tag_prefix=None))
         self.assertTrue(problems)
         self.assertIn("released already", " ".join(problems))
@@ -1008,7 +1107,7 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         """A version given outright is a release being asked for, wherever it is asked."""
         self.repository_with("v0.2.0", declaring="version = 0.2.0\ntagPrefix = v\n")
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            problems = version_command(argparse.Namespace(version="0.2.0",
+            problems = version_command(argparse.Namespace(default_branch=None, version="0.2.0",
                                                           version_source="gradle.properties", tag_prefix=None))
         self.assertIn("released already", " ".join(problems))
 
@@ -1019,7 +1118,7 @@ class TheSourceAVersionComesFrom(unittest.TestCase):
         self.repository_with("v0.1.0")
         said = io.StringIO()
         with contextlib.redirect_stderr(said), self.assertRaises(SystemExit) as raised:
-            main.set_version_command(argparse.Namespace(version="0.2.0",
+            main.set_version_command(argparse.Namespace(default_branch=None, version="0.2.0",
                                                                  version_source="tags", tag_prefix="v"))
         self.assertEqual(raised.exception.code, main.NOTHING_TO_WRITE)
         self.assertNotIn(main.NOTHING_TO_WRITE, (1, 2), "the status of every other refusal, and argparse's")

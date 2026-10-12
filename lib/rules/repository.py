@@ -176,7 +176,12 @@ def holder(tag: str, version: str) -> str:
 def release_branch(kind: str, branch: str, version: str) -> bool:
     """Whether `branch`, of `kind`, is the release branch itself: `release/<version>` as a local branch,
     `<remote>/release/<version>` as fetched. A branch whose name only ends so, `team/release/<version>`, is another."""
-    return (branch.split("/", 1)[1:] if kind == "refs/remotes" else [branch]) == [f"release/{version}"]
+    return is_branch(kind, branch, f"release/{version}")
+
+
+def is_branch(kind: str, branch: str, name: str) -> bool:
+    """Whether `branch`, of `kind`, is the branch `name`: itself as a local branch, `<remote>/<name>` as fetched."""
+    return (branch.split("/", 1)[1:] if kind == "refs/remotes" else [branch]) == [name]
 
 
 def holding(tag: str) -> tuple[str, list[str]]:
@@ -211,13 +216,38 @@ def carried_by(prefix: str, versions) -> dict[str, str]:
         tag = f"{prefix}{version}"
         kind, branches = holding(tag)
         named = [branch for branch in branches if release_branch(kind, branch, version)]
-        if not named:
-            continue
-        # A tagged commit with no parent was cut from no history, so nothing says it is this one.
-        parents = git("rev-list", "--parents", "-n", "1", f"{tag}^{{commit}}").split()[1:]
-        if parents and all(reaches(parent) for parent in parents):
+        if named and cut_from_here(tag):
             found[version] = named[0]
     return found
+
+
+def landed_after(prefix: str, versions, default_branch: str) -> dict[str, str]:
+    """Of `versions`, released but off this history, those that landed on the default branch after HEAD was made,
+    each with the branch that holds it.
+
+    A commit pushed while merge-back runs, and checked only once the release has landed, a re-run or a run that waited
+    in a queue, finds `release/<version>` deleted and the tag on the default branch.
+    The commit is older than the release, not cut off from it.
+    Two things about the history tell that apart from a rewrite:
+    - `default_branch` holds the tag, as fetched where a remote branch holds it, as carried_by() looks for the release
+      branch. A squash or a rebase merge would have left the default branch a copy of the release commit instead.
+    - Every parent of the tagged commit is on this history, as carried_by() asks.
+    """
+    found = {}
+    for version in versions:
+        tag = f"{prefix}{version}"
+        kind, branches = holding(tag)
+        named = [branch for branch in branches if is_branch(kind, branch, default_branch)]
+        if named and cut_from_here(tag):
+            found[version] = named[0]
+    return found
+
+
+def cut_from_here(tag: str) -> bool:
+    """Whether every parent of the commit `tag` points at is on this history.
+    A tagged commit with no parent was cut from no history, so nothing says it is this one."""
+    parents = git("rev-list", "--parents", "-n", "1", f"{tag}^{{commit}}").split()[1:]
+    return bool(parents) and all(reaches(parent) for parent in parents)
 
 
 def reaches(commit: str) -> bool:

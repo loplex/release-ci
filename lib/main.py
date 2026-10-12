@@ -30,14 +30,15 @@ import datetime
 import os
 import subprocess
 import sys
+from typing import NamedTuple
 
 from rules import sources
 from rules.versions import SEMVER, channel_of, check_version, precedence, version_after
 from rules.changelog import (UnreadCopy, absolute_links, bodies, check_changelog, closed, missing, referenced,
                              sections, silent, structure, through, uncompared)
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
-from rules.repository import (carried_by, check_ancestry, git, holder, read_file, released_versions, repository,
-                               unreachable)
+from rules.repository import (carried_by, check_ancestry, git, holder, landed_after, read_file, released_versions,
+                               repository, unreachable)
 
 
 def in_utf8_mode() -> None:
@@ -59,35 +60,63 @@ def in_utf8_mode() -> None:
     os.execv(sys.executable, [sys.executable, "-X", "utf8", *sys.orig_argv[1:]])
 
 
-# The exit status of a check that found nothing wrong but a release yet to land here.
+# The exit status of a check that found nothing wrong but a release yet to land here, or one landed after this commit.
 # A published release is carried back onto the default branch by merge-back, or by its pull request once merged, and
 # every commit checked before then is off its tag.
+# So is a commit made before it landed and checked after, given the default branch (see landing).
 # A caller reads this as it needs, and only check-release tells it from a failure: it warns.
 # prepare refuses to cut a release, and merge-back leaves its merged tree to a pull request, as on any other failure.
 AWAITING = 4
 
 
 class Awaiting(str):
-    """A problem that is only a published release not carried back onto this history yet (see carried_by)."""
+    """A problem that is only a published release off this history for a reason that is no fault (see landing)."""
 
 
-def landing(prefix: str, off_history) -> dict[str, str]:
-    """Of the released versions off this history, those still on their way here, each with the branch holding it.
+class Arrival(NamedTuple):
+    """Where a published release off this history is, when that is no fault."""
 
-    carried_by() asks the history; a squash or a rebase merge passes its questions, so the tree is asked too.
+    branch: str
+    # True: on the default branch already, landed after this commit was made.
+    # False: still on its release branch, yet to be carried back.
+    landed: bool
+
+
+def landing(prefix: str, off_history, default_branch: str | None) -> dict[str, Arrival]:
+    """Of the released versions off this history, those still on their way here, or landed after this commit, each
+    with where it is.
+
+    carried_by() asks the history for a release still on its release branch.
+    landed_after() asks it, given the default branch, for one that landed after this commit was made:
+    without the name, such a release is failed as a rewrite would be.
+    A squash or a rebase merge passes the questions of both, so the tree is asked too.
     Either copies the release commit onto the default branch, and with it the release's section of CHANGELOG.md.
     A release yet to land has no section here.
     A tree whose CHANGELOG.md is missing, is not UTF-8, or holds a line not read, cannot answer.
     ancestry, and version where the file is missing, then fail its releases off this history as if none were on its way;
     changelog, and version where the file is there, name the file's own fault."""
-    on_the_way = carried_by(prefix, sorted(off_history, key=precedence))
+    ordered = sorted(off_history, key=precedence)
+    on_the_way = {version: Arrival(branch, False) for version, branch in carried_by(prefix, ordered).items()}
+    if default_branch:
+        rest = [version for version in ordered if version not in on_the_way]
+        on_the_way |= {version: Arrival(branch, True)
+                       for version, branch in landed_after(prefix, rest, default_branch).items()}
     if not on_the_way:
         return {}
     try:
         present = sections(read_changelog("the released sections"))
     except SystemExit:
         return {}
-    return {version: branch for version, branch in on_the_way.items() if version not in present}
+    return {version: arrival for version, arrival in on_the_way.items() if version not in present}
+
+
+def awaited(released: str, arrival: Arrival, held: str) -> Awaiting:
+    """The report of a release off this history that is no fault: `released` names it, `held` is what its branch
+    holds."""
+    if arrival.landed:
+        return Awaiting(f"{released}, and landed on {arrival.branch} after this commit was made: the commit is older "
+                        f"than the release, not cut off from it")
+    return Awaiting(f"{released}, and has yet to land here: {arrival.branch} holds {held} until it is carried back")
 
 
 def read_declared(adapter, newline: str | None = None) -> str:
@@ -231,7 +260,7 @@ def version_command(arguments) -> list[str]:
         # and nothing is wrong with that: the version written back once it lands names the next one.
         # A version handed in is still checked, as on the commit a release tags.
         arriving = {} if arguments.version or candidate not in releases else landing(
-            prefix, unreachable(prefix, [candidate]))
+            prefix, unreachable(prefix, [candidate]), arguments.default_branch)
     else:
         # Handed in, or the default where a dispatch left it empty. No file is read, and none will be written.
         releases = released_versions(prefix)
@@ -242,8 +271,7 @@ def version_command(arguments) -> list[str]:
     loose = [f"[Unreleased] has an entry under no ### group, so nothing says what kind of change it is: {entry}"
              for entry in asked.loose]
     if candidate in arriving:
-        return [Awaiting(f"{candidate} is released, as {prefix}{candidate}, and has yet to land here: "
-                         f"{arriving[candidate]} holds it until it is carried back"), *loose]
+        return [awaited(f"{candidate} is released, as {prefix}{candidate}", arriving[candidate], "it"), *loose]
     problems = (check_version(candidate, releases) or check_step(candidate, releases, asked)) + loose
     if not problems:
         print(candidate)
@@ -302,7 +330,7 @@ def changelog_command(arguments) -> list[str]:
 
     off_history, present = unreachable(prefix, [*at_tag, *began]), sections(in_tree)
     # A release yet to land has no section here, and is not compared until it lands.
-    arriving = landing(prefix, off_history)
+    arriving = landing(prefix, off_history, arguments.default_branch)
     problems = [] if arguments.skip_unreadable_releases else [
         f"{why}, which cannot be edited, so [{version}] cannot be compared: the skip-unreadable-releases input, "
         f"--skip-unreadable-releases here, names it as not compared instead"
@@ -315,9 +343,8 @@ def changelog_command(arguments) -> list[str]:
     gone = [] if not arguments.skip_unreadable_releases else sorted(
         (version for version in began if version not in present), key=precedence)
     problems += [missing(version, off_history) for version in gone if version not in arriving]
-    problems += [Awaiting(f"[{version}] is released, and has yet to land here: {branch} holds its section until it "
-                          f"is carried back")
-                 for version, branch in arriving.items() if version in at_tag or version in gone]
+    problems += [awaited(f"[{version}] is released", arrival, "its section")
+                 for version, arrival in arriving.items() if version in at_tag or version in gone]
     if all(isinstance(problem, Awaiting) for problem in problems):
         not_compared = uncompared(compared)
         print(f"Compared {len(compared) - len(not_compared)} released section(s) against the tag that released them.")
@@ -474,16 +501,15 @@ def ancestry_command(arguments) -> list[str]:
     off_history = unreachable(prefix, releases)
     reachability = {version: version not in off_history for version in releases}
 
-    # A release yet to land is off this history for now, not taken off it.
-    arriving = landing(prefix, off_history)
+    # A release yet to land is off this history for now, not taken off it, and so is one landed after this commit.
+    arriving = landing(prefix, off_history, arguments.default_branch)
     for version in arriving:
         del reachability[version]
     held_by = {
         version: holder(f"{prefix}{version}", version) for version, reached in reachability.items() if not reached
     }
     problems = check_ancestry(reachability, prefix, held_by)
-    problems += [Awaiting(f"{prefix}{version} is released, and has yet to land here: {branch} holds it until it is "
-                          f"carried back") for version, branch in arriving.items()]
+    problems += [awaited(f"{prefix}{version} is released", arrival, "it") for version, arrival in arriving.items()]
     if not problems:
         print(f"All {len(releases)} released tag(s) are reachable from HEAD.")
     elif reachability and all(isinstance(problem, Awaiting) for problem in problems):
@@ -505,8 +531,13 @@ def main() -> int:
     tag_prefix.add_argument("--tag-prefix", help="what release tags carry in front of the version, for a source "
                                                  "that declares no prefix of its own; '' or ^none for no prefix")
     both = [version_source, tag_prefix]
+    default_branch = argparse.ArgumentParser(add_help=False)
+    default_branch.add_argument("--default-branch", help="the branch releases land on: a release it holds that landed "
+                                                         "after this commit then exits with 4, not failed as a "
+                                                         "rewrite")
+    checking = [*both, default_branch]
 
-    version_parser = commands.add_parser("version", parents=both,
+    version_parser = commands.add_parser("version", parents=checking,
                                          help="whether the candidate version may be released next")
     version_parser.add_argument("--version", help="the version to release, not this program's: the one to "
                                                   "check instead of what the source declares, or of the version "
@@ -520,7 +551,7 @@ def main() -> int:
     next_parser.add_argument("released", help="the version just released, with or without the tag prefix")
     next_parser.set_defaults(run=next_command)
 
-    changelog_parser = commands.add_parser("changelog", parents=both,
+    changelog_parser = commands.add_parser("changelog", parents=checking,
                                            help="whether released sections still read as released")
     changelog_parser.add_argument("--skip-unreadable-releases", action="store_true",
                                   help="leave out, as not compared, a release whose tag holds a CHANGELOG.md line "
@@ -561,7 +592,7 @@ def main() -> int:
     channel_parser.add_argument("version", help="the version, without the tag prefix")
     channel_parser.set_defaults(run=channel_command)
 
-    ancestry_parser = commands.add_parser("ancestry", parents=both,
+    ancestry_parser = commands.add_parser("ancestry", parents=checking,
                                           help="whether every released tag is still reachable")
     ancestry_parser.set_defaults(run=ancestry_command)
 

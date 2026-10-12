@@ -48,6 +48,8 @@ The options go after the subcommand name, and a subcommand refuses an option it 
   `close-changelog` reads them only with `--repository-url`, and takes them either way.
 - `--version-source` alone: `set-version`.
 - `--skip-unreadable-releases`: `changelog` alone, as [The changelog](#the-changelog) says.
+- `--default-branch`: `version`, `changelog` and `ancestry`, as
+  [A release landed after this commit](#a-release-landed-after-this-commit-exits-with-4-too) says.
 - `--html`: `notes` alone.\
   It prints the section as HTML, rendered by cmark-gfm, the renderer GitHub's Markdown is built on.\
   Raw HTML in the section is left out, comments included.\
@@ -104,6 +106,26 @@ A force-push that takes a release back off the default branch after it landed pa
 merge-back deletes the branch when its own push lands the release.\
 Delete it once merge-back's pull request is merged, as
 [The release branch](../release-flow/README.md#the-release-branch) says.
+
+### A release landed after this commit exits with 4 too
+
+A commit pushed while merge-back runs may be checked only once the release has landed:
+a re-run, or a run that waited in a queue.\
+`release/<version>` is gone by then, and the default branch holds the tag.\
+The commit is older than the release, not cut off from it.
+
+`--default-branch` names the branch releases land on, such as `main`.\
+With it, a release landed after this commit where all three hold:
+
+- That branch holds its tag, looked for as `release/<version>` is above.\
+  A squash or a rebase merge leaves the branch a copy of the release commit instead.
+- Every parent of the tagged commit is on the current history.
+- `CHANGELOG.md` in the tree has no section for it.
+
+Each check reports it as landed after this commit, naming the branch, and exits with 4 where it
+finds nothing else, as for a release yet to land.\
+Without `--default-branch`, such a release fails `ancestry` and `changelog` as a rewrite would, and
+`version` refuses the version as released already.
 
 ## Versions
 

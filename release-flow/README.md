@@ -134,7 +134,9 @@ jobs:
 
 [`release-flow/draft`](draft/action.yml) pushes the release branch and drafts the release from it:
 
-- The notes are the version's released section of `CHANGELOG.md`.
+- The notes are the version's released section of `CHANGELOG.md`.\
+  A relative link in them leads nowhere while the release is a draft: GitHub reads it at a name
+  of the draft's own, `untagged-…`, and at the tag only once the draft is published.
 - The files are what `files` names, one pattern or path per line.\
   A pattern is a bash glob, in which `**` goes no deeper than `*`.\
   With `files` left empty, nothing is attached.

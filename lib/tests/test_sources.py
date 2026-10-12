@@ -88,6 +88,52 @@ class WhatEverySourceAnswers(unittest.TestCase):
                 self.assertEqual(adapter.tag_prefix(adapter.with_version(text, "0.1.1")), adapter.tag_prefix(text))
 
 
+class NamingASource(unittest.TestCase):
+    """`--version-source` names a source, and for gradle.properties also the key its version is read under."""
+
+    def test_a_bare_name_is_the_adapter_filed_under_it(self):
+        for name, adapter in sources.SOURCES.items():
+            with self.subTest(name):
+                self.assertIs(sources.source(name), adapter)
+
+    def test_a_key_after_the_name_is_where_the_version_is_read(self):
+        adapter = sources.source("gradle.properties:appVersion")
+        self.assertEqual(adapter.version("version = 9.9.9\nappVersion = 0.2.0-SNAPSHOT\n"), "0.2.0-SNAPSHOT")
+        self.assertEqual(sources.source("gradle.properties").key, "version")
+
+    def test_what_names_no_source_or_no_key_to_read_is_refused(self):
+        """A key that would need escapes in the file is refused, not escaped: none of the keys in use needs any."""
+        for spec in ("", "pom.xml", "gradle.properties:", "tags:appVersion", "gradle.properties:tagPrefix",
+                     "gradle.properties:app version", "gradle.properties:app=version", "gradle.properties:a:b"):
+            with self.subTest(spec), self.assertRaises(ValueError):
+                sources.source(spec)
+
+
+class GradlePropertiesUnderAnotherKey(unittest.TestCase):
+    """A project whose build reads its version from a key of its own keeps `version` for what Gradle does with it."""
+
+    APP_VERSION = sources.source("gradle.properties:appVersion")
+    TEXT = "version = 1.0.0\nappVersion = 0.2.0-SNAPSHOT\ntagPrefix = v\n"
+
+    def test_only_the_key_named_is_rewritten(self):
+        self.assertEqual(self.APP_VERSION.with_version(self.TEXT, "0.2.0"),
+                         "version = 1.0.0\nappVersion = 0.2.0\ntagPrefix = v\n")
+
+    def test_a_key_a_continuation_splits_is_written_whole_under_its_own_name(self):
+        self.assertEqual(self.APP_VERSION.with_version("\tapp\\\n  Version = 0.1.0\n", "0.2.0"),
+                         "\tappVersion = 0.2.0\n")
+
+    def test_a_file_without_the_key_is_refused_naming_it(self):
+        for read in (lambda text: self.APP_VERSION.version(text),
+                     lambda text: self.APP_VERSION.with_version(text, "0.2.0")):
+            with self.assertRaises(SystemExit) as refused:
+                read("version = 0.1.0\ntagPrefix = v\n")
+            self.assertIn("appVersion", str(refused.exception))
+
+    def test_the_prefix_is_read_from_tagPrefix_as_before(self):
+        self.assertEqual(self.APP_VERSION.tag_prefix(self.TEXT), "v")
+
+
 class RewritingGradleProperties(unittest.TestCase):
     """What a release does to gradle.properties: before it builds, and again once it is out.
 

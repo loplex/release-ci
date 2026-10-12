@@ -409,6 +409,16 @@ Two sources exist:
 
 The candidate version is the version `main.py version` checks against the rules.
 
+### `gradle.properties:<key>` reads the version under another key
+
+`--version-source gradle.properties:appVersion` reads and writes the version in the `appVersion`
+line instead of `version`.\
+Everything else is as under `gradle.properties`, the prefix in `tagPrefix` included.\
+Gradle sets every project's `project.version` from a `version` line.
+So a build that keeps its version under a key of its own cannot move it there without changing
+what the build makes.\
+The key is letters, digits, `_`, `.` and `-`, and `tagPrefix` is refused: it holds the prefix.
+
 ### `-SNAPSHOT` belongs to `gradle.properties`
 
 `-SNAPSHOT` is how Gradle and Maven mark a version that is not released yet.

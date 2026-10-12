@@ -21,6 +21,8 @@ inputs:
       Where the version of the next release comes from:
       - `gradle.properties`: the file declares it in `version`, for example `0.2.0-SNAPSHOT`.
         The file also declares the tag prefix in `tagPrefix`.
+      - `gradle.properties:<key>`: the same, with the version in `<key>` instead, such as `appVersion`.
+        For a build that keeps `version` for what Gradle does with it.
       - `tags`: no file declares it.
         It comes from the `version` input.
         Without one, it is the version after the highest release tag,

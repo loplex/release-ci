@@ -18,6 +18,8 @@ There are two kinds of source:
 
 What every adapter answers:
 - `name`: the `--version-source` value that selects it.
+- `under()`: the same source reading its version under another key, or a refusal where it has no keys.
+  `--version-source gradle.properties:appVersion` selects it so (see source()).
 - `declares_a_version`.
 - `marker`: the ending of a version being worked on, hyphen included (`-SNAPSHOT` for gradle.properties),
   or empty where there is no such state.
@@ -140,9 +142,16 @@ class Tags:
     file = None
     marker = ""
 
+    def under(self, key: str):
+        raise ValueError(f"{self.name} declares no version, so there is no key '{key}' to read one under")
+
 
 class GradleProperties:
     """gradle.properties, the Java properties file a project declares its version and its tag prefix in.
+
+    The version is read under the key `version` unless another is given.
+    Gradle sets every project's `project.version` from a `version` line, so a project whose build reads its version
+    from a key of its own, such as `appVersion`, cannot move it there without changing what the build makes.
 
     `-SNAPSHOT` is how Gradle and Maven mark a version being worked on.
     It is never released to any channel:
@@ -166,8 +175,23 @@ class GradleProperties:
     # Choosing one spelling here would show in the diff as a change nobody made,
     # and so would an indented declaration moved to the margin.
     # Where a continuation splits the key itself, the first line holds only part of it,
-    # and the declaration is written as `version = ` after that line's indentation.
+    # and the declaration is written as `<key> = ` after that line's indentation.
     DECLARATION_LEAD = re.compile(r"[ \t\f]*(?:\\[^\r\n]|[^\\=: \t\f\r\n])*[ \t\f]*[=:]?[ \t\f]*")
+
+    # A key given for the version is one that reads the same escaped or not, so it is written back as given.
+    # One that would need escapes, such as one holding a space or `=`, is refused instead of escaped.
+    KEY = re.compile(r"[A-Za-z0-9_.-]+")
+
+    def __init__(self, key: str = "version"):
+        self.key = key
+
+    def under(self, key: str) -> "GradleProperties":
+        if not self.KEY.fullmatch(key):
+            raise ValueError(f"'{key}' is no key gradle.properties can be given the version under: "
+                             "letters, digits, `_`, `.` and `-` only")
+        if key == "tagPrefix":
+            raise ValueError("tagPrefix is where gradle.properties declares the tag prefix, not the version")
+        return GradleProperties(key)
 
     def properties(self, text: str) -> dict[str, str]:
         """Every key the file declares, with its value, read the way Gradle reads them (see NATURAL_LINE).
@@ -185,9 +209,9 @@ class GradleProperties:
         """The version the file names, marker included.
 
         A release is asked to be this version with the marker taken off."""
-        declared = self.properties(text).get("version")
+        declared = self.properties(text).get(self.key)
         if declared is None:
-            raise SystemExit("gradle.properties names no version")
+            raise SystemExit(f"gradle.properties names no {self.key}")
         return declared
 
     def tag_prefix(self, text: str) -> str:
@@ -214,19 +238,37 @@ class GradleProperties:
         - rewriting the last one would leave a stale line above it for the next reader to trust.
         """
         declarations = [(start, end) for start, end, line in logical_lines(text)
-                        if unescaped(KEY_AND_VALUE.match(line).group(1)) == "version"]
+                        if unescaped(KEY_AND_VALUE.match(line).group(1)) == self.key]
         if not declarations:
-            raise SystemExit("gradle.properties names no version to rewrite")
+            raise SystemExit(f"gradle.properties names no {self.key} to rewrite")
         if len(declarations) > 1:
-            raise SystemExit(f"gradle.properties declares the version {len(declarations)} times, and a release "
+            raise SystemExit(f"gradle.properties declares {self.key} {len(declarations)} times, and a release "
                              f"rewrites one declaration: say it once")
         start, end = declarations[0]
         lead = self.DECLARATION_LEAD.match(text, start).group(0)
-        if unescaped(KEY_AND_VALUE.match(lead.lstrip(" \t\f")).group(1)) != "version":
-            lead = lead[:len(lead) - len(lead.lstrip(" \t\f"))] + "version = "
+        if unescaped(KEY_AND_VALUE.match(lead.lstrip(" \t\f")).group(1)) != self.key:
+            lead = lead[:len(lead) - len(lead.lstrip(" \t\f"))] + f"{self.key} = "
         elif not lead.endswith(("=", ":", " ", "\t", "\f")):
             lead += " = "
         return text[:start] + lead + stored(version) + text[end:]
 
 
 SOURCES = {adapter.name: adapter for adapter in (GradleProperties(), Tags())}
+
+
+def source(spec: str):
+    """The adapter `--version-source` names: a name from SOURCES, or a name, a colon and the key its version is
+    read under, as in `gradle.properties:appVersion`.
+
+    The key is the one place a source takes a setting, and it goes with the name,
+    so every action of a release is handed the same pair in one input.
+    A name that is not a source, a key after one that has none, and an empty key are refused with ValueError."""
+    name, colon, key = spec.partition(":")
+    if name not in SOURCES:
+        raise ValueError(f"'{spec}' names no version source: {', '.join(SOURCES)}, the first with an optional "
+                         "':<key>'")
+    if not colon:
+        return SOURCES[name]
+    if not key:
+        raise ValueError(f"'{spec}' names no key after the colon")
+    return SOURCES[name].under(key)

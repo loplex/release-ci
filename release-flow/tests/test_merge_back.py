@@ -32,8 +32,11 @@ class Staged(unittest.TestCase):
     This class holds no tests of its own.
     """
 
-    def stage(self, prefix="v", at_start=AT_START, released=RELEASED):
+    def stage(self, prefix="v", at_start=AT_START, released=RELEASED, key="version"):
+        """`key` is where gradle.properties declares the version; under another than `version`, `version` holds a
+        value of its own beside it."""
         self.tag = f"{prefix}0.1.0"
+        gradles = "" if key == "version" else "version = 9.9.9\n"
         root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         self.origin = root / "origin.git"
         self.work = root / "work"
@@ -45,7 +48,7 @@ class Staged(unittest.TestCase):
 
         (self.work / "CHANGELOG.md").write_text(at_start, encoding="utf-8")
         (self.work / "gradle.properties").write_text(
-            f"version = 0.1.0-SNAPSHOT\ntagPrefix = {prefix}\n", encoding="utf-8")
+            f"{gradles}{key} = 0.1.0-SNAPSHOT\ntagPrefix = {prefix}\n", encoding="utf-8")
         git("add", "-A", cwd=self.work)
         git("commit", "-qm", "base", cwd=self.work)
         git("push", "-q", "-u", "origin", "main", cwd=self.work)
@@ -53,7 +56,7 @@ class Staged(unittest.TestCase):
         # The release commit, on a branch of its own and tagged: the state a published release leaves behind.
         git("switch", "-qc", "release/0.1.0", cwd=self.work)
         (self.work / "gradle.properties").write_text(
-            f"version = 0.1.0\ntagPrefix = {prefix}\n", encoding="utf-8")
+            f"{gradles}{key} = 0.1.0\ntagPrefix = {prefix}\n", encoding="utf-8")
         (self.work / "CHANGELOG.md").write_text(released, encoding="utf-8")
         git("commit", "-qam", "chore(release): 0.1.0", cwd=self.work)
         git("tag", self.tag, cwd=self.work)
@@ -153,6 +156,13 @@ class MergeBack(Staged):
         self.carry_back()
         properties = git("show", "main:gradle.properties", cwd=self.origin).stdout
         self.assertIn("version = 0.1.1-SNAPSHOT", properties)
+
+    def test_the_next_version_is_opened_under_the_key_the_version_is_read_under(self):
+        self.stage(key="appVersion")
+        outputs, done = self.carry_back(source="gradle.properties:appVersion")
+        self.assertEqual(outputs.get("landed"), "true", done.stdout + done.stderr)
+        self.assertEqual(git("show", "main:gradle.properties", cwd=self.origin).stdout,
+                         "version = 9.9.9\nappVersion = 0.1.1-SNAPSHOT\ntagPrefix = v\n")
 
     def test_a_check_is_asked_for_and_the_branch_taken_down(self):
         """A push made with GITHUB_TOKEN starts no run, so the branch would otherwise arrive unchecked.

@@ -9,6 +9,8 @@ released it, so once a version has a section here, that section may not be edite
 
 ### Added
 
+- `version-source: gradle.properties:<key>` reads and writes the version in `<key>` instead of
+  `version`, such as `appVersion`, for a build that keeps `version` for what Gradle does with it.
 - `--tag-prefix '^none'` of `lib/main.py` says the tags have no prefix, as the actions' `tag-prefix`
   input does.
 - `lib/main.py notes --html` prints a released section as HTML, rendered by cmark-gfm, for where

@@ -42,9 +42,10 @@ inputs:
     description: |
       Where the version of the next release comes from:
       - `gradle.properties`: the file declares it in `version`.
+      - `gradle.properties:<key>`: the file declares it in `<key>`, such as `appVersion`.
       - `tags`: no file declares it.
 
-      check-release's action describes both in full.
+      check-release's action describes each in full.
     required: true
   tag-prefix:
     description: |

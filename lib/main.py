@@ -143,12 +143,30 @@ def read_changelog(holds: str, newline: str | None = None) -> str:
 SOURCES = sources.SOURCES
 
 
+def adapter_of(source: str):
+    """The adapter `source` names: `gradle.properties`, `gradle.properties:appVersion` or `tags` (see sources.source).
+    One that names none is refused."""
+    try:
+        return sources.source(source)
+    except ValueError as refusal:
+        raise SystemExit(str(refusal)) from None
+
+
+def source_argument(value: str) -> str:
+    """`--version-source` as given, once sources.source() has read it: argparse refuses one it cannot read."""
+    try:
+        sources.source(value)
+    except ValueError as refusal:
+        raise argparse.ArgumentTypeError(str(refusal)) from None
+    return value
+
+
 def declares_a_version(source: str) -> bool:
     """Whether the source names the version between releases, so that a release reads it there.
 
     Where it does, a release writes the next version back afterwards.
     Where it does not, `set-version` has nothing to write to, and says so instead of reporting a success."""
-    return SOURCES[source].declares_a_version
+    return adapter_of(source).declares_a_version
 
 
 def marker_of(source: str) -> str:
@@ -156,13 +174,13 @@ def marker_of(source: str) -> str:
 
     Empty where the source has no such state:
     a repository whose version lives only in its tags has no version being worked on."""
-    return SOURCES[source].marker
+    return adapter_of(source).marker
 
 
 def declared_version(source: str) -> str:
     """The version a declaring source names, marker included.
     Without the marker, it is what a release is asked to be."""
-    adapter = SOURCES[source]
+    adapter = adapter_of(source)
     return adapter.version(read_declared(adapter))
 
 
@@ -201,7 +219,7 @@ def prefix_from(source: str, given: str | None) -> str:
         return ""
     if given is not None:
         return given
-    adapter = SOURCES[source]
+    adapter = adapter_of(source)
     if adapter.file is not None:
         return as_text(adapter.tag_prefix(read_declared(adapter)), f"tagPrefix in {adapter.file}")
     raise SystemExit(f"--tag-prefix says what release tags are called, which {source} does not declare")
@@ -385,7 +403,7 @@ def set_version_command(arguments) -> list[str]:
         raise SystemExit(NOTHING_TO_WRITE)
 
     # Read and written with the file's own line endings, so a CRLF file is not rewritten whole to change one line.
-    adapter = SOURCES[arguments.version_source]
+    adapter = adapter_of(arguments.version_source)
     path = repository() / adapter.file
     written = adapter.with_version(read_declared(adapter, newline=""), arguments.version)
     with open(path, "w", encoding=adapter.encoding, newline="") as stream:
@@ -525,8 +543,10 @@ def main() -> int:
     # `notes` and `channel` read neither, and `set-version` writes a version but names no tag.
     # `close-changelog` reads both only with --repository-url, and takes them either way.
     version_source = argparse.ArgumentParser(add_help=False)
-    version_source.add_argument("--version-source", required=True, choices=SOURCES,
-                                help="where the version of the next release comes from")
+    version_source.add_argument("--version-source", required=True, type=source_argument,
+                                help="where the version of the next release comes from: "
+                                     f"{', '.join(SOURCES)}; gradle.properties:<key> reads it under that key "
+                                     "instead of version")
     tag_prefix = argparse.ArgumentParser(add_help=False)
     tag_prefix.add_argument("--tag-prefix", help="what release tags carry in front of the version, for a source "
                                                  "that declares no prefix of its own; '' or ^none for no prefix")

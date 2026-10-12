@@ -126,6 +126,15 @@ class Prepare(Staged):
         self.prepare()
         self.assertIn("version = 0.1.1\n", self.file_on("release/0.1.1", "gradle.properties"))
 
+    def test_a_version_under_a_key_of_its_own_is_read_and_written_there(self):
+        """`version` holds a value the release does not touch: Gradle's, for a project keeping its own key."""
+        self.stage(properties="version = 9.9.9\nappVersion = 0.1.1-SNAPSHOT\ntagPrefix = v\n")
+        outputs, done = self.prepare(source="gradle.properties:appVersion")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(outputs["version"], "0.1.1")
+        self.assertEqual(self.file_on("release/0.1.1", "gradle.properties"),
+                         "version = 9.9.9\nappVersion = 0.1.1\ntagPrefix = v\n")
+
     def test_a_version_handed_in_without_the_marker_is_released_as_it_is(self):
         """Only a marker at the end of the version comes off, and 0.2.0 has none.
 

@@ -106,7 +106,7 @@ class WhichTagsCountAsReleases(unittest.TestCase):
         return sorted(released_versions(prefix))
 
     def test_a_v_prefix_takes_the_v_tags_and_hands_back_versions(self):
-        self.assertEqual(self.releases_under("v"), ["0.1.0", "1.2.3-rc.1"])
+        self.assertEqual(self.releases_under("v"), ["0.1.0", "1.2.3-rc.1", "2.0.0-SNAPSHOT"])
 
     def test_no_prefix_takes_the_bare_tags_and_leaves_the_v_ones(self):
         self.assertEqual(self.releases_under(""), ["0.1.0", "0.9.9", "10.1.0"])
@@ -128,11 +128,11 @@ class WhichTagsCountAsReleases(unittest.TestCase):
                 self.assertNotIn(two_numbers, found)
                 self.assertNotIn(merely_starts, found)
 
-    def test_a_tag_on_a_version_being_worked_on_is_not_a_release(self):
-        """Somebody tagged a snapshot.
-        Counting it would open a train on the channel `SNAPSHOT`, which every later pre-release would have to
-        outrank."""
-        self.assertNotIn("2.0.0-SNAPSHOT", self.releases_under("v"))
+    def test_a_tag_on_a_version_being_worked_on_counts_as_a_release(self):
+        """Somebody tagged a snapshot by hand: release-flow never makes such a tag.
+        No rule here knows which suffix the version carried then, so it counts, as the pre-release it reads as.
+        It ranks below the version itself, so that version can still be released."""
+        self.assertIn("2.0.0-SNAPSHOT", self.releases_under("v"))
 
     def test_counting_none_out_of_many_is_said_out_loud(self):
         """This is what an unchecked prefix looks like from the outside.

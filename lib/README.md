@@ -32,7 +32,7 @@ No older Python is tested.
 | Subcommand        | What it does                                                                                                |
 |-------------------|-------------------------------------------------------------------------------------------------------------|
 | `version`         | checks whether the [candidate version](#where-the-version-comes-from) may be released next                  |
-| `next`            | prints the version after a released one, with the source's [marker](#-snapshot-belongs-to-gradleproperties) |
+| `next`            | prints the version after a released one, with the [snapshot suffix](#the-snapshot-suffix) given             |
 | `changelog`       | checks that every released section of `CHANGELOG.md` still reads as its tag has it                          |
 | `ancestry`        | checks that every release tag is still reachable from the current history                                   |
 | `prefix`          | prints what release tags carry in front of the version                                                      |
@@ -49,6 +49,7 @@ The options go after the subcommand name, and a subcommand refuses an option it 
   `close-changelog` reads them only with `--repository-url`, and takes them either way.
 - `--version-source` alone: `set-version`.
 - `--skip-unreadable-releases`: `changelog` alone, as [The changelog](#the-changelog) says.
+- `--snapshot-suffix`: `version` and `next`, as [The snapshot suffix](#the-snapshot-suffix) says.
 - `--default-branch`: `version`, `changelog` and `ancestry`, as
   [A release landed after this commit](#a-release-landed-after-this-commit-exits-with-4-too) says.
 - `--html`: `notes` alone.\
@@ -142,7 +143,7 @@ A leading zero or an empty identifier is refused, because SemVer gives it no ord
 `version` refuses a candidate that:
 
 - is not a semantic version;
-- still carries the [`-SNAPSHOT` marker](#-snapshot-belongs-to-gradleproperties);
+- still carries the [snapshot suffix](#the-snapshot-suffix) of a version being worked on;
 - does not come after the last release it is offered next to:
   - a final release has to come after the last final release;
   - a pre-release has to come after the highest release of any kind;
@@ -408,7 +409,7 @@ Two sources exist:
 
 | `--version-source`  | Where the candidate version comes from                                                         | After a release           |
 |---------------------|------------------------------------------------------------------------------------------------|---------------------------|
-| `gradle.properties` | the `version` line of the file, or `--version`; a `-SNAPSHOT` at its end is dropped            | the next one written back |
+| `gradle.properties` | the `version` line of the file, or `--version`; its snapshot suffix is dropped                 | the next one written back |
 | `tags`              | `--version`, or the version after the highest release, moved further where `[Unreleased]` asks | nothing written           |
 
 The candidate version is the version `main.py version` checks against the rules.
@@ -423,18 +424,43 @@ So a build that keeps its version under a key of its own cannot move it there wi
 what the build makes.\
 The key is letters, digits, `_`, `.` and `-`, and `tagPrefix` is refused: it holds the prefix.
 
-### `-SNAPSHOT` belongs to `gradle.properties`
+### The snapshot suffix
 
-`-SNAPSHOT` is how Gradle and Maven mark a version that is not released yet.
+Between releases, a source with a file names the next version with a suffix the project chooses:
+`-SNAPSHOT` in `0.2.1-SNAPSHOT`, another such as `-dev`, or none.\
+It is a hyphen and one identifier of letters and digits, so the version is still a semantic
+version.\
+The identifier holds a letter: a number could match the number of a pre-release, such as `1` in
+`1.0.0-rc.1`.
 
-- A release drops it from the end of the version.\
-  This holds whether the version comes from the file, from `--version`, or from the `version` input
-  of `check-release` or `release-flow/prepare`.
-- A version given by hand may also leave it out.
-- A version that still carries `SNAPSHOT` after that is refused, whatever the source:
-  `1.0.0-SNAPSHOT-SNAPSHOT`, `1.0.0-SNAPSHOT+b`, or `1.0.0-SNAPSHOT` given under `tags`.
-- `tags` has no marker: the version after a release is worked out bare, and a source that has a
-  marker adds it.
+- `release-flow/prepare` is given it in its `snapshot-suffix` input, `^none` for none.\
+  It records it in the release commit, and `release-flow/merge-back` appends it to the next version.
+- `version` takes the suffix off the end of the declared version, or of `--version`, before it
+  checks it.\
+  The suffix is the one the nearest release recorded: of the release tags HEAD reaches whose commit
+  records how `prepare` made it, the one fewest commits away, the higher version where two are as
+  near.\
+  A release tag whose commit records nothing is passed over.\
+  That release's merge-back appended the suffix to the next version, and a version raised by hand
+  since keeps it.
+- Where there is no such release, or it recorded no suffix, `version` takes `--snapshot-suffix`
+  instead:
+  - before the first release of a project, or the first since it moved to a `prepare` that
+    records;
+  - after that first release is published, until merge-back carries it here;
+  - where that release was made under `tags`, whose merge-back wrote no version.
+- `--snapshot-suffix` is required under a source with a file, `^none` included.\
+  `check-release` and `release-flow/prepare` pass their `snapshot-suffix` input there.
+- A version given by hand may leave the suffix out.
+- A version that still carries the suffix after that is refused:
+  `1.0.0-SNAPSHOT-SNAPSHOT` or `1.0.0-SNAPSHOT+b` under `-SNAPSHOT`.
+- `next` appends the `--snapshot-suffix` it is given, and nothing without one.
+- `tags` keeps no version between releases, so it has no suffix: `version` refuses one given.
+- A tag carrying a suffix counts as a release: nothing says which suffix it was tagged under.\
+  Release flow makes no such tag.\
+  One made by hand is a pre-release of its version, below the version itself, so that version can
+  still be released.\
+  `changelog` names it as not compared where its copy of CHANGELOG.md has no section for it.
 
 ### The first release under `tags` needs a version
 
@@ -485,8 +511,8 @@ Adding `package.json`, `pyproject.toml` or `Cargo.toml` means one more adapter t
 - its file declaring the tag prefix next to the version, as `gradle.properties` declares
   `tagPrefix`.
 
-The rules need no change, unless the new source marks a version in progress with something other
-than a `-SNAPSHOT` suffix.
+The rules need no change: the [snapshot suffix](#the-snapshot-suffix) is the project's choice, not
+the source's.
 
 A plain `VERSION` file has no room for a tag prefix.\
 main.py asks every source with a file for one, unless `--tag-prefix` is given, so such a

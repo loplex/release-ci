@@ -3,7 +3,7 @@ description: |
   Carries a published release back onto the default branch.
 
   How the release was made is read from its commit, where release-flow/prepare recorded it,
-  not given again: the version source, the tag prefix, and `skip-unreadable-releases`.
+  not given again: the version source, the tag prefix, the snapshot suffix, and `skip-unreadable-releases`.
   A tag that is not the one that commit records, such as a draft's tag renamed before publishing, fails the run
   before anything is carried back, and so does a release prepare did not record.
 
@@ -79,7 +79,8 @@ outputs:
   next:
     description: |
       The version that follows the released one, written the way the source writes a version being worked on:
-      - `gradle.properties`: `0.1.1-SNAPSHOT`, written to the file and committed.
+      - `gradle.properties`: `0.1.1-SNAPSHOT`, with the snapshot suffix the release recorded, written to the file
+        and committed.
       - `tags`: `0.1.1`, only reported, because there is no file to write it to.
     value: ${{ steps.merge-back.outputs.next }}
   landed:

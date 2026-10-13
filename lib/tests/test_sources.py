@@ -10,7 +10,6 @@ Run with `python3 -m unittest discover -s lib` from the repository root.
 import unittest
 
 from rules import sources
-from rules.versions import SEMVER, being_worked_on, check_version
 
 GRADLE_PROPERTIES = sources.SOURCES["gradle.properties"]
 
@@ -28,23 +27,11 @@ class WhatEverySourceAnswers(unittest.TestCase):
         for name, adapter in sources.SOURCES.items():
             self.assertEqual(adapter.name, name)
 
-    def test_a_marker_is_one_the_rules_refuse_to_release(self):
-        """The adapter spells the marker, and the rules refuse it.
-        A marker the rules did not refuse would let a version being worked on be released."""
-        for adapter in sources.SOURCES.values():
-            with self.subTest(adapter.name):
-                if adapter.marker:
-                    marked = f"1.0.0{adapter.marker}"
-                    self.assertTrue(SEMVER.match(marked), f"{marked} is no version the rules read")
-                    self.assertTrue(being_worked_on(marked))
-                    self.assertIn("being worked on", " ".join(check_version(marked, [])))
-
-    def test_a_source_declaring_nothing_names_no_file_and_no_marker(self):
+    def test_a_source_declaring_nothing_names_no_file(self):
         for adapter in sources.SOURCES.values():
             if not adapter.declares_a_version:
                 with self.subTest(adapter.name):
                     self.assertIsNone(adapter.file)
-                    self.assertEqual(adapter.marker, "")
 
     def test_a_source_declaring_a_version_names_its_file_and_what_it_is_looked_in_for(self):
         """main.py reads the file, and refuses a missing one by saying what it was read for.
@@ -78,7 +65,6 @@ class WhatEverySourceAnswers(unittest.TestCase):
         for name, text in FILES_TO_TRY_ON.items():
             with self.subTest(name):
                 adapter = sources.SOURCES[name]
-                self.assertTrue(adapter.version(text).endswith(adapter.marker))
                 self.assertEqual(adapter.version(adapter.with_version(text, "0.1.1")), "0.1.1")
 
     def test_writing_the_version_leaves_the_prefix_as_it_was(self):

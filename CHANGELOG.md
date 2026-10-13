@@ -10,8 +10,8 @@ released it, so once a version has a section here, that section may not be edite
 ### Added
 
 - `release-flow/prepare` records in the release commit how it made the release, as `Release-CI-*`
-  git trailers: the version, `version-source`, the tag prefix, and `skip-unreadable-releases` where
-  it was `true`.\
+  git trailers: the version, `version-source`, the tag prefix, the snapshot suffix, and
+  `skip-unreadable-releases` where it was `true`.\
   `release-flow/merge-back` and `intellij/build` read them there, and `lib/main.py recorded` prints
   one.
 - `version-source: gradle.properties:<key>` reads and writes the version in `<key>` instead of
@@ -69,6 +69,19 @@ released it, so once a version has a section here, that section may not be edite
 - **BREAKING** The `source` input of `check-release` and `release-flow/prepare` is now
   `version-source`.\
   [UPGRADING.md](UPGRADING.md#the-source-input-is-now-version-source) shows the change.
+- **BREAKING** The suffix a version carries between releases is the project's choice, no longer
+  `-SNAPSHOT` for every `gradle.properties`: `check-release` and `release-flow/prepare` take it in
+  a `snapshot-suffix` input, required where the source names a file, `^none` for none.\
+  `check-release` reads it only in `version`.\
+  A build between releases had to cut `-SNAPSHOT` off wherever a package takes no `-` in a version,
+  as rpm and an MSI do.\
+  The suffix is recorded in the release commit: `merge-back` appends it to the next version, and
+  `check-release` and the next `prepare` take off the one a release recorded where one applies, or
+  their input otherwise.\
+  A tag carrying `SNAPSHOT` now counts as a release, as any other version tag does.\
+  `lib/main.py version` needs `--snapshot-suffix` under a source with a file, and `next` appends
+  only the one it is given.\
+  [UPGRADING.md](UPGRADING.md#the-snapshot-suffix-is-a-new-input) shows the change.
 - **BREAKING** `release-flow/merge-back` has no `source` or `tag-prefix` input: it reads them from
   the release commit, where `release-flow/prepare` recorded them.\
   A workflow could give it other values than the release was prepared with, and it then wrote the

@@ -3,7 +3,8 @@
 # It reads environment variables, not arguments, because that is how a composite action passes its inputs.
 # It is a file of its own, not part of action.yml, so that a test can run it against a repository.
 #
-# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX CHECKS VERSION SKIP_UNREADABLE_RELEASES DEFAULT_BRANCH GITHUB_OUTPUT
+# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX CHECKS VERSION SNAPSHOT_SUFFIX SKIP_UNREADABLE_RELEASES DEFAULT_BRANCH
+#         GITHUB_OUTPUT
 # Writes: version, channel  (to GITHUB_OUTPUT, where `version` ran and said yes)
 set -uo pipefail
 
@@ -54,10 +55,18 @@ case ${SKIP_UNREADABLE_RELEASES:-false} in
     exit 1 ;;
 esac
 
+# Passed even where empty: lib/main.py refuses it empty under a source that declares a version, and takes the suffix
+# the nearest recorded release names, using this only where that release names none or no release records anything.
+# Joined by `=`, because a suffix starts with a hyphen and would be read as an option of its own.
+version_arguments=("--snapshot-suffix=${SNAPSHOT_SUFFIX:-}")
+if [[ -n $VERSION ]]; then
+  version_arguments+=(--version "$VERSION")
+fi
+
 failed=0
 for check in "${check_names[@]}"; do
-  if [[ $check == version && -n $VERSION ]]; then
-    out=$("$PYTHON" "$script" version "${source_arguments[@]}" --version "$VERSION" 2>&1)
+  if [[ $check == version ]]; then
+    out=$("$PYTHON" "$script" version "${source_arguments[@]}" "${version_arguments[@]}" 2>&1)
     rc=$?
   elif [[ $check == changelog ]]; then
     out=$("$PYTHON" "$script" changelog "${source_arguments[@]}" "${changelog_arguments[@]}" 2>&1)

@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .versions import SEMVER, being_worked_on, precedence
+from .versions import SEMVER, precedence
 
 
 def repository_root() -> Path:
@@ -140,7 +140,9 @@ def released_versions(prefix: str) -> list[str]:
     """Every tag that names a release, with the prefix taken off.
 
     A repository also has tags that are not releases, and those are left out:
-    another component's, a deployment's, a milestone's, and a version tagged while it was still being worked on.
+    another component's, a deployment's, a milestone's.
+    A tag that is a version with the prefix is a release, whatever its pre-release part:
+    no rule here knows which suffix a version being worked on carried when it was tagged.
 
     Finding no release among the tags is reported on stderr, not failed:
     a repository may carry other tags only, and a first release has nothing to compare with either.
@@ -156,7 +158,6 @@ def released_versions(prefix: str) -> list[str]:
         for tag in tags
         if tag.startswith(prefix)
         and SEMVER.match(tag[len(prefix) :])
-        and not being_worked_on(tag[len(prefix) :])
     ]
     if tags and not releases:
         called = f"the prefix '{prefix}'" if prefix else "no prefix at all"

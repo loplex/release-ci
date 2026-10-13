@@ -31,7 +31,7 @@ DEFAULT_PATTERN = re.search(r"^  archive-pattern:\n(?:    .*\n)*?    default: (.
 def release_commit(work: Path, source: str = "gradle.properties", version: str = "1.2.0") -> None:
     """The commit intellij/build runs on: release-flow/prepare's, recording the source it wrote `version` into."""
     message = (f"chore(release): {version}\n\nRelease-CI-Version: {version}\nRelease-CI-Version-Source: {source}\n"
-               "Release-CI-Tag-Prefix: v\n")
+               "Release-CI-Tag-Prefix: v\nRelease-CI-Snapshot-Suffix: -SNAPSHOT\n")
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m",
                     message], cwd=work, check=True)
 

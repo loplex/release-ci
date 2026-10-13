@@ -23,21 +23,28 @@ def git(*arguments, cwd):
 
 
 class TheAction(unittest.TestCase):
-    """A repository with one release, 0.1.0, tagged the way the test asks."""
+    """A repository with one release, 0.1.0, tagged the way the test asks.
 
-    def stage(self, tag="v0.1.0"):
+    Its commit records what release-flow/prepare records, `-SNAPSHOT` the suffix, unless `recorded` is false."""
+
+    def stage(self, tag="v0.1.0", recorded=True):
         self.work = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         git("init", "-q", "-b", "main", cwd=self.work)
         (self.work / "CHANGELOG.md").write_text("# Changelog\n\n## [0.1.0] - 2026-09-01\n\n- A\n", encoding="utf-8")
         git("add", "-A", cwd=self.work)
-        git("commit", "-qm", "0.1.0", cwd=self.work)
+        message = "0.1.0"
+        if recorded:
+            message = (f"chore(release): 0.1.0\n\nRelease-CI-Version: 0.1.0\nRelease-CI-Version-Source: "
+                       f"gradle.properties\nRelease-CI-Tag-Prefix: {tag.removesuffix('0.1.0') or '^none'}\n"
+                       "Release-CI-Snapshot-Suffix: -SNAPSHOT\n")
+        git("commit", "-qm", message, cwd=self.work)
         git("tag", tag, cwd=self.work)
 
     def setUp(self):
         self.stage()
 
     def check(self, checks, tag_prefix="v", version="", source="tags", skip_unreadable_releases=None,
-              default_branch=None):
+              default_branch=None, snapshot_suffix=""):
         written = Path(self.enterContext(tempfile.TemporaryDirectory())) / "output.txt"
         written.write_text("", encoding="utf-8")
         skip = {} if skip_unreadable_releases is None else {"SKIP_UNREADABLE_RELEASES": skip_unreadable_releases}
@@ -45,7 +52,8 @@ class TheAction(unittest.TestCase):
         done = subprocess.run(
             ["bash", str(CHECK_SH)], cwd=self.work, capture_output=True, text=True,
             env={**os.environ, "PYTHON": sys.executable, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix,
-                 "CHECKS": checks, "VERSION": version, "GITHUB_OUTPUT": str(written), **skip, **branch},
+                 "CHECKS": checks, "VERSION": version, "SNAPSHOT_SUFFIX": snapshot_suffix,
+                 "GITHUB_OUTPUT": str(written), **skip, **branch},
         )
         outputs = dict(
             line.split("=", 1) for line in written.read_text(encoding="utf-8").splitlines() if "=" in line
@@ -80,7 +88,7 @@ class TheAction(unittest.TestCase):
 
         # Declared as the version just released, as main does until merge-back writes the next one.
         (self.work / "gradle.properties").write_text("version = 0.2.0-SNAPSHOT\ntagPrefix = v\n", encoding="utf-8")
-        outputs, done = self.check("version", tag_prefix="", source="gradle.properties")
+        outputs, done = self.check("version", tag_prefix="", source="gradle.properties", snapshot_suffix="-SNAPSHOT")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("::warning::check-release version found a published release that has yet to land here",
                       done.stdout)
@@ -182,13 +190,49 @@ class TheAction(unittest.TestCase):
                 outputs, done = self.check("version", version=asked)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 self.assertEqual(outputs, {"version": asked, "channel": channel})
-        # Under a source that declares its version, the version given may carry the marker.
-        # The version in the output does not.
+        # Under a source that declares its version, the version given may carry the snapshot suffix the release
+        # recorded. The version in the output does not.
         (self.work / "gradle.properties").write_text("version = 0.2.0-SNAPSHOT\ntagPrefix = v\n", encoding="utf-8")
-        outputs, done = self.check("version", version="0.2.0-SNAPSHOT", source="gradle.properties")
+        outputs, done = self.check("version", version="0.2.0-SNAPSHOT", source="gradle.properties",
+                                   snapshot_suffix="-SNAPSHOT")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(outputs, {"version": "0.2.0", "channel": "default"})
 
+    def test_before_a_release_records_its_suffix_the_suffix_given_comes_off(self):
+        """A new project, or one whose releases were all made before prepare recorded anything:
+        nothing recorded says which suffix the declared version carries, so the input does."""
+        self.stage(recorded=False)
+        (self.work / "gradle.properties").write_text("version = 0.2.0-SNAPSHOT\ntagPrefix = v\n", encoding="utf-8")
+        outputs, done = self.check("version", tag_prefix="", source="gradle.properties", snapshot_suffix="-SNAPSHOT")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(outputs, {"version": "0.2.0", "channel": "default"})
+
+    def test_the_first_recorded_release_yet_to_land_warns(self):
+        """The first release prepare recorded is published from its release branch, and main has yet to take it in.
+        No release main reaches records a suffix, so the input names it, and main's 0.2.0-SNAPSHOT is 0.2.0 waiting
+        to land, not a pre-release below a released 0.2.0."""
+        self.stage(recorded=False)
+        git("switch", "-qc", "release/0.2.0", cwd=self.work)
+        git("commit", "-q", "--allow-empty", "-m", "chore(release): 0.2.0\n\nRelease-CI-Version: 0.2.0\n"
+            "Release-CI-Version-Source: gradle.properties\nRelease-CI-Tag-Prefix: v\n"
+            "Release-CI-Snapshot-Suffix: -SNAPSHOT\n", cwd=self.work)
+        git("tag", "v0.2.0", cwd=self.work)
+        git("switch", "-q", "main", cwd=self.work)
+        (self.work / "gradle.properties").write_text("version = 0.2.0-SNAPSHOT\ntagPrefix = v\n", encoding="utf-8")
+        outputs, done = self.check("version", tag_prefix="", source="gradle.properties", snapshot_suffix="-SNAPSHOT")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("::warning::check-release version found a published release that has yet to land here",
+                      done.stdout)
+        self.assertEqual(outputs, {})
+
+    def test_under_a_declaring_source_only_version_needs_the_suffix(self):
+        (self.work / "gradle.properties").write_text("version = 0.2.0-SNAPSHOT\ntagPrefix = v\n", encoding="utf-8")
+        _, done = self.check("changelog ancestry", tag_prefix="", source="gradle.properties")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        outputs, done = self.check("version", tag_prefix="", source="gradle.properties")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("--snapshot-suffix is required under gradle.properties", done.stdout)
+        self.assertEqual(outputs, {})
 
 if __name__ == "__main__":
     unittest.main()

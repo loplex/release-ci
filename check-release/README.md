@@ -36,6 +36,7 @@ jobs:
         with:
           version-source: gradle.properties
           checks: version changelog ancestry
+          snapshot-suffix: -SNAPSHOT
 ```
 
 The [`action.yml`](action.yml) describes every input and output.\
@@ -96,13 +97,21 @@ The checks then find nothing to compare, and pass.\
 The one exception is `version` under `tags` with no version given: it fails, because it finds no
 release to count from.
 
+### `snapshot-suffix` is the one `release-flow/prepare` is given
+
+`version` takes the suffix off the declared version before it checks it: `0.2.0-SNAPSHOT` is
+checked as `0.2.0`.\
+The suffix is the one a release recorded where one applies, and this input otherwise, as
+[The snapshot suffix](../lib/README.md#the-snapshot-suffix) says.\
+Under a source with a file, `version` fails without it.
+
 ### Outputs
 
 When `version` is among the checks and passes, the action sets two outputs:
 
 - `steps.<id>.outputs.version`: the version that may be released, without the tag prefix and
-  without `-SNAPSHOT`.\
-  For `0.2.0-SNAPSHOT` in `gradle.properties` it is `0.2.0`.
+  without the snapshot suffix.\
+  For `0.2.0-SNAPSHOT` in `gradle.properties`, it is `0.2.0`.
 - `steps.<id>.outputs.channel`: the
   [channel](../lib/README.md#the-channel-a-version-goes-to) of that version.\
   `default` for a final release, otherwise the first identifier of its pre-release suffix.

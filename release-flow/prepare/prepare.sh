@@ -11,7 +11,7 @@
 # Inputs come from the environment, because that is how a composite action hands them over.
 # The script lives outside action.yml so that a test can run it against a repository.
 #
-# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX VERSION REPOSITORY_URL SKIP_UNREADABLE_RELEASES GITHUB_OUTPUT
+# Reads:  PYTHON VERSION_SOURCE TAG_PREFIX VERSION SNAPSHOT_SUFFIX REPOSITORY_URL SKIP_UNREADABLE_RELEASES GITHUB_OUTPUT
 # Writes: version, tag, branch  (to GITHUB_OUTPUT)
 set -uo pipefail
 
@@ -39,9 +39,12 @@ esac
 failed=0
 "${check_release[@]}" changelog "${source_arguments[@]}" "${changelog_arguments[@]}" || failed=1
 "${check_release[@]}" ancestry "${source_arguments[@]}" || failed=1
-version_arguments=()
+# Passed even where empty: lib/main.py refuses it empty under a source that declares a version, and takes the suffix
+# the nearest recorded release names, using this only where that release names none or no release records anything.
+# Joined by `=`, because a suffix starts with a hyphen and would be read as an option of its own.
+version_arguments=("--snapshot-suffix=${SNAPSHOT_SUFFIX:-}")
 if [[ -n $VERSION ]]; then
-  version_arguments=(--version "$VERSION")
+  version_arguments+=(--version "$VERSION")
 fi
 version=$("${check_release[@]}" version "${source_arguments[@]}" "${version_arguments[@]}"); rc=$?
 if (( rc != 0 || failed != 0 )); then
@@ -83,7 +86,9 @@ git switch -C "$branch" || exit 1
 # The release is still the version it was asked to be.
 # Any other failure stops here, before a commit names a release the build would not make.
 "${check_release[@]}" set-version "$version" --version-source "$VERSION_SOURCE" >/dev/null; rc=$?
+declares=true
 if (( rc == 3 )); then
+  declares=false
   echo "${VERSION_SOURCE} declares no version, so none was written; ${prefix}${version} is what the tag will say"
 elif (( rc != 0 )); then
   echo "::error::${VERSION_SOURCE} could not be given ${version}, so no release commit was made"
@@ -99,6 +104,10 @@ recorded=(
   --trailer "Release-CI-Version-Source: ${VERSION_SOURCE}"
   --trailer "Release-CI-Tag-Prefix: ${prefix:-^none}"
 )
+# The suffix merge-back appends to the next version, where there is a file to write it to.
+if [[ $declares == true ]]; then
+  recorded+=(--trailer "Release-CI-Snapshot-Suffix: ${SNAPSHOT_SUFFIX}")
+fi
 if [[ $skip == true ]]; then
   recorded+=(--trailer "Release-CI-Skip-Unreadable-Releases: true")
 fi

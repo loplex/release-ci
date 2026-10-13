@@ -123,6 +123,7 @@ jobs:
         id: cut
         with:
           version-source: gradle.properties
+          snapshot-suffix: -SNAPSHOT
           version: ${{ inputs.version }}
           repository-url: ${{ github.server_url }}/${{ github.repository }}
           skip-unreadable-releases: ${{ inputs.skip-unreadable-releases }}
@@ -207,6 +208,7 @@ It holds the release commit and whatever merge-back adds above it.
 | `Release-CI-Version`                  | the version released                                       |
 | `Release-CI-Version-Source`           | `version-source`, as `prepare` was given it                |
 | `Release-CI-Tag-Prefix`               | the prefix `prepare` used, from its input or the file      |
+| `Release-CI-Snapshot-Suffix`          | `snapshot-suffix`, recorded where the source has a file    |
 | `Release-CI-Skip-Unreadable-Releases` | `true`, recorded only where `prepare` was given it         |
 
 merge-back reads them from the commit the published tag names, so it takes no input for them.\

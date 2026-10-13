@@ -29,7 +29,7 @@ class Staged(unittest.TestCase):
     """A repository between releases.
 
     0.1.0 is tagged and work is under [Unreleased].
-    Where the source declares a version, the next one is declared with its marker.
+    Where the source declares a version, the next one is declared with its snapshot suffix.
     """
 
     def stage(self, properties="version = 0.1.1-SNAPSHOT\ntagPrefix = v\n", changelog=PENDING, tag="v0.1.0"):
@@ -53,14 +53,18 @@ class Staged(unittest.TestCase):
         self.stage()
 
     def prepare(self, source="gradle.properties", tag_prefix="", version="", repository_url="",
-                skip_unreadable_releases="false"):
+                skip_unreadable_releases="false", snapshot_suffix=None):
+        """`snapshot_suffix` left out is the input a workflow gives: `-SNAPSHOT` where the source names a file."""
+        if snapshot_suffix is None:
+            snapshot_suffix = "" if source == "tags" else "-SNAPSHOT"
         written = Path(self.enterContext(tempfile.TemporaryDirectory())) / "output.txt"
         written.write_text("", encoding="utf-8")
         done = subprocess.run(
             ["bash", str(PREPARE)], cwd=self.work, capture_output=True, text=True,
             env={**os.environ, "PYTHON": sys.executable, "VERSION_SOURCE": source, "TAG_PREFIX": tag_prefix,
                  "VERSION": version, "REPOSITORY_URL": repository_url,
-                 "SKIP_UNREADABLE_RELEASES": skip_unreadable_releases, "GITHUB_OUTPUT": str(written)},
+                 "SKIP_UNREADABLE_RELEASES": skip_unreadable_releases, "SNAPSHOT_SUFFIX": snapshot_suffix,
+                 "GITHUB_OUTPUT": str(written)},
         )
         outputs = dict(
             line.split("=", 1) for line in written.read_text(encoding="utf-8").splitlines() if "=" in line
@@ -119,20 +123,40 @@ class Prepare(Staged):
         """merge-back reads these back from the commit the published tag names, instead of being given them."""
         self.prepare()
         self.assertEqual({name: self.recorded("v0.1.1", name) for name in
-                          ("version", "version-source", "tag-prefix", "skip-unreadable-releases")},
+                          ("version", "version-source", "tag-prefix", "snapshot-suffix", "skip-unreadable-releases")},
                          {"version": "0.1.1", "version-source": "gradle.properties", "tag-prefix": "v",
-                          "skip-unreadable-releases": "false"})
+                          "snapshot-suffix": "-SNAPSHOT", "skip-unreadable-releases": "false"})
         self.assertNotIn("Skip-Unreadable", git("log", "-1", "--format=%B", cwd=self.work).stdout,
                          "the skip is recorded only where it was asked for")
 
-    def test_a_key_no_prefix_and_a_skip_are_recorded_as_given(self):
-        self.stage(properties="appVersion = 0.1.1-SNAPSHOT\ntagPrefix =\n", tag="0.1.0")
-        outputs, done = self.prepare(source="gradle.properties:appVersion", skip_unreadable_releases="true")
+    def test_a_key_no_prefix_a_suffix_and_a_skip_are_recorded_as_given(self):
+        self.stage(properties="appVersion = 0.1.1-dev\ntagPrefix =\n", tag="0.1.0")
+        outputs, done = self.prepare(source="gradle.properties:appVersion", skip_unreadable_releases="true",
+                                     snapshot_suffix="-dev")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(outputs["version"], "0.1.1")
         self.assertEqual(self.recorded("0.1.1", "version-source"), "gradle.properties:appVersion")
         self.assertEqual(self.recorded("0.1.1", "tag-prefix"), "^none")
+        self.assertEqual(self.recorded("0.1.1", "snapshot-suffix"), "-dev")
         self.assertEqual(self.recorded("0.1.1", "skip-unreadable-releases"), "true")
         self.assertEqual(git("log", "-1", "--format=%s", cwd=self.work).stdout, "chore(release): 0.1.1\n")
+
+    def test_under_tags_no_suffix_is_recorded_and_none_may_be_given(self):
+        """There is no file to write a next version to, so merge-back appends nothing."""
+        outputs, done = self.prepare(source="tags", tag_prefix="v")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("Snapshot-Suffix", git("log", "-1", "--format=%B", cwd=self.work).stdout)
+        self.assertEqual(self.recorded("v0.1.1", "snapshot-suffix"), "^none")
+        git("switch", "-q", "main", cwd=self.work)
+        _, done = self.prepare(source="tags", tag_prefix="v", snapshot_suffix="-SNAPSHOT")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("tags keeps no version between releases", done.stderr)
+
+    def test_a_suffix_left_out_under_a_declaring_source_cuts_nothing(self):
+        _, done = self.prepare(snapshot_suffix="")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("--snapshot-suffix is required under gradle.properties", done.stderr)
+        self.assertEqual(self.release_branches(), [])
 
     def test_nothing_reaches_the_remote(self):
         """A build that fails after this should leave neither a branch nor a draft, so pushing waits for it.
@@ -150,7 +174,7 @@ class Prepare(Staged):
         changelog = self.file_on("release/0.1.1", "CHANGELOG.md")
         self.assertIn("[0.1.1]: https://example.invalid/r/compare/v0.1.0...v0.1.1\n", changelog)
 
-    def test_the_marker_comes_off_the_declared_version(self):
+    def test_the_suffix_comes_off_the_declared_version(self):
         self.prepare()
         self.assertIn("version = 0.1.1\n", self.file_on("release/0.1.1", "gradle.properties"))
 
@@ -163,8 +187,8 @@ class Prepare(Staged):
         self.assertEqual(self.file_on("release/0.1.1", "gradle.properties"),
                          "version = 9.9.9\nappVersion = 0.1.1\ntagPrefix = v\n")
 
-    def test_a_version_handed_in_without_the_marker_is_released_as_it_is(self):
-        """Only a marker at the end of the version comes off, and 0.2.0 has none.
+    def test_a_version_handed_in_without_the_suffix_is_released_as_it_is(self):
+        """Only a suffix at the end of the version comes off, and 0.2.0 has none.
 
         The version differs from the declared 0.1.1, so a version handed in and then ignored would show.
         """

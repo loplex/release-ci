@@ -157,3 +157,26 @@ open.\
 A release prepared by an older `prepare` records nothing, and the new `intellij/build` and
 `merge-back` refuse it.\
 Carry such a release back with the old version first.
+
+### The snapshot suffix is a new input
+
+Under `version-source: gradle.properties` or `gradle.properties:<key>`, `release-flow/prepare` and
+the `version` check of `check-release` need `snapshot-suffix`: the suffix the version carries
+between releases.\
+Give both the same: `-SNAPSHOT` to keep what it was, or `^none` for none.\
+Until a release made with the new `release-flow/prepare` is reachable, the one given is taken off
+the declared version.\
+Under another suffix, put it in place of `-SNAPSHOT` in the declared version first, and under
+`^none` take `-SNAPSHOT` off: otherwise `0.4.0-SNAPSHOT` is read as a pre-release of `0.4.0`.
+
+```yaml
+- uses: loplex/release-ci/check-release@<tag>
+  with:
+    version-source: gradle.properties
+    checks: version
+    snapshot-suffix: -SNAPSHOT
+```
+
+A workflow that leaves it out fails there.\
+Once a release made with the new `release-flow/prepare` is reachable, the suffix it recorded is
+taken off instead, so a suffix changed in the input shows from the version after that release.

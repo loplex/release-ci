@@ -50,16 +50,29 @@ def precedence(version: str) -> tuple:
     return (int(major), int(minor), int(patch), 0, identifier_keys)
 
 
-def being_worked_on(version: str) -> bool:
-    """Whether SNAPSHOT is one of the dot- or hyphen-separated parts of the pre-release suffix of `version`.
+# The suffix a version being worked on carries between releases, hyphen included, such as `-SNAPSHOT`:
+# a hyphen and one identifier of letters and digits, so that a version carrying it is still a semantic version.
+# The identifier holds a letter.
+# A numeric one could have a leading zero, which SemVer refuses, and would match the number of a pre-release:
+# `-1` would make `1.0.0-rc.1` a version being worked on.
+# No suffix is spelled `^none`, as an empty value means "not given" where a GitHub input passes it.
+SNAPSHOT_SUFFIX = re.compile(r"-(?=[0-9]*[A-Za-z])[0-9A-Za-z]+")
+
+
+def being_worked_on(version: str, suffix: str) -> bool:
+    """Whether `version` carries the identifier of `suffix` as one of the dot- or hyphen-separated parts of its
+    pre-release part: `SNAPSHOT` of `-SNAPSHOT`.
 
     That covers `1.0.0-SNAPSHOT`, `1.0.0-rc.1-SNAPSHOT` and `1.0.0-SNAPSHOT-SNAPSHOT`.
-    The last is what a script makes by appending the marker to a version that has it already.
-    version_command strips one marker only, so its candidate still carries the other.
-    `preSNAPSHOT` is not the marker.
-    Build metadata is not looked at: it names a build, not a state."""
-    suffix = SEMVER.match(version).group(4) or ""
-    return "SNAPSHOT" in re.split(r"[.-]", suffix)
+    The last is what a script makes by appending the suffix to a version that has it already.
+    version_command strips one suffix only, so its candidate still carries the other.
+    `preSNAPSHOT` does not carry it.
+    Build metadata is not looked at: it names a build, not a state.
+    With no suffix, no version is being worked on."""
+    if not suffix:
+        return False
+    pre_release = SEMVER.match(version).group(4) or ""
+    return suffix[1:] in re.split(r"[.-]", pre_release)
 
 
 def core(version: str) -> tuple[int, int, int]:
@@ -77,12 +90,13 @@ def core_text(parts: tuple[int, int, int]) -> str:
     return "{}.{}.{}".format(*parts)
 
 
-def check_version(candidate: str, releases: list[str]) -> list[str]:
-    """Whether `candidate` may be released, given the releases already tagged."""
+def check_version(candidate: str, releases: list[str], suffix: str = "") -> list[str]:
+    """Whether `candidate` may be released, given the releases already tagged and the suffix of a version being
+    worked on, which a release cannot carry."""
 
     if not SEMVER.match(candidate):
         return [f"'{candidate}' is not a version this project releases"]
-    if being_worked_on(candidate):
+    if being_worked_on(candidate, suffix):
         return [f"{candidate} is a version being worked on, and a release is precisely what it cannot be"]
 
     ordered = sorted((version for version in releases if SEMVER.match(version)), key=precedence)
@@ -140,9 +154,9 @@ def check_version(candidate: str, releases: list[str]) -> list[str]:
 
 
 def version_after(released: str) -> str:
-    """The version that follows `released`, without a marker. It is used two ways:
-    - a project that declares its version writes it back as the next one being worked on;
-      the source adds the marker, where it has one;
+    """The version that follows `released`, without a suffix. It is used two ways:
+    - a project that declares its version writes it back as the next one being worked on,
+      with the snapshot suffix the release recorded, where it has one;
     - a repository versioned by its tags alone offers it as the default when a release is asked for.
 
     A pre-release moves nothing: `0.2.0-rc.1` was a step towards `0.2.0`, so work goes on towards it.

@@ -3,7 +3,7 @@
 
 - `version`: whether the candidate version may be released next,
   given the releases already tagged and what waits under `[Unreleased]`.
-- `next`: the version that follows a released one, with the source's marker.
+- `next`: the version that follows a released one, with the snapshot suffix given.
 - `changelog`: whether every released section still reads as it did when it was released.
 - `ancestry`: whether every release tag is still reachable. A history rewrite can take one off.
 - `prefix`: what release tags carry in front of the version.
@@ -34,7 +34,7 @@ import sys
 from typing import NamedTuple
 
 from rules import sources
-from rules.versions import SEMVER, channel_of, check_version, precedence, version_after
+from rules.versions import SEMVER, SNAPSHOT_SUFFIX, channel_of, check_version, precedence, version_after
 from rules.changelog import (UnreadCopy, absolute_links, bodies, check_changelog, closed, missing, referenced,
                              sections, silent, structure, through, uncompared)
 from rules.steps import Asked, NOTHING_ASKED, check_step, next_candidate, train_asks
@@ -134,8 +134,8 @@ def read_changelog(holds: str, newline: str | None = None) -> str:
 
 # Where the version of a release comes from is the one thing here that depends on the kind of project.
 # rules/sources.py decides it, with one adapter per kind of repository.
-# main.py asks an adapter four things, through the functions below:
-# whether it declares a version, its marker for a version being worked on, the version it names, the tag prefix.
+# main.py asks an adapter three things, through the functions below:
+# whether it declares a version, the version it names, the tag prefix.
 # set_version_command also hands it the text to rewrite.
 # The file an adapter names is read and written here, in the adapter's `encoding`.
 # read_declared() reads it, with the adapter's `holds` saying what the file is read for,
@@ -170,17 +170,9 @@ def declares_a_version(source: str) -> bool:
     return adapter_of(source).declares_a_version
 
 
-def marker_of(source: str) -> str:
-    """The ending a version has while it is being worked on, hyphen included: `-SNAPSHOT` for gradle.properties.
-
-    Empty where the source has no such state:
-    a repository whose version lives only in its tags has no version being worked on."""
-    return adapter_of(source).marker
-
-
 def declared_version(source: str) -> str:
-    """The version a declaring source names, marker included.
-    Without the marker, it is what a release is asked to be."""
+    """The version a declaring source names, snapshot suffix included.
+    Without the suffix, it is what a release is asked to be."""
     adapter = adapter_of(source)
     return adapter.version(read_declared(adapter))
 
@@ -226,6 +218,66 @@ def prefix_from(source: str, given: str | None) -> str:
     raise SystemExit(f"--tag-prefix says what release tags are called, which {source} does not declare")
 
 
+def suffix_argument(value: str) -> str:
+    """`--snapshot-suffix` as given, once read: a suffix such as `-SNAPSHOT`, `^none`, or empty for not given."""
+    if value in ("", "^none") or SNAPSHOT_SUFFIX.fullmatch(value):
+        return value
+    raise argparse.ArgumentTypeError(f"'{value}' is no snapshot suffix: a hyphen and one identifier of letters and "
+                                     "digits holding a letter, such as -SNAPSHOT, or ^none for none")
+
+
+def suffix_of(given: str | None) -> str:
+    """The snapshot suffix a setting names: `^none`, empty or nothing names none."""
+    return "" if given in (None, "", "^none") else given
+
+
+def nearest_recorded(prefix: str) -> dict[str, str] | None:
+    """What the release nearest to HEAD recorded, or None where no release HEAD reaches records anything.
+
+    Of the release tags HEAD reaches whose commit records how release-flow/prepare made it, the one fewest commits
+    away, and the higher version where two are as near.
+    Under a declaring source, that release's merge-back appended its suffix to the next version, which a version
+    raised by hand since keeps, so its record says how the declared version is spelled.
+    A tag older releases left, whose commit records nothing, is passed over.
+    None before the first release a recording prepare made, on a new project and on one that has just moved to it."""
+    try:
+        reached = git("tag", "--merged", "HEAD").split()
+    except subprocess.CalledProcessError:
+        return None  # No commit yet, so no release either.
+    found = []
+    for tag in reached:
+        version = tag[len(prefix):]
+        if not tag.startswith(prefix) or not SEMVER.match(version) or not recorded(tag):
+            continue
+        found.append((int(git("rev-list", "--count", f"{tag}..HEAD")), version, settings_at(tag)))
+    if not found:
+        return None
+    nearest = min(distance for distance, _, _ in found)
+    return max(((version, settings) for distance, version, settings in found if distance == nearest),
+               key=lambda pair: precedence(pair[0]))[1]
+
+
+def snapshot_suffix(arguments, prefix: str) -> str:
+    """The suffix the declared version carries, which a release takes off: the one nearest_recorded() names,
+    which its merge-back appended, or the one `--snapshot-suffix` gives where it names none.
+
+    A release made under `tags` records none, because its merge-back wrote no version.
+    So does every release before the first a recording prepare made, and none HEAD reaches records one
+    between publishing that release and its merge-back landing here.
+
+    `--snapshot-suffix` is required under a declaring source, `^none` included:
+    a project chooses its suffix, because no default fits every one.
+    check-release and release-flow/prepare pass their snapshot-suffix input, empty where it was left out."""
+    if not arguments.snapshot_suffix:
+        raise SystemExit(f"--snapshot-suffix is required under {arguments.version_source}: the suffix the declared "
+                         "version carries between releases, such as -SNAPSHOT, or ^none for none; check-release and "
+                         "release-flow/prepare take it in their snapshot-suffix input")
+    nearest = nearest_recorded(prefix)
+    if nearest is not None and "snapshot-suffix" in nearest:
+        return suffix_of(nearest["snapshot-suffix"])
+    return suffix_of(arguments.snapshot_suffix)
+
+
 def unreleased_asks(releases: list[str]) -> Asked:
     """What CHANGELOG.md asks of the next release, by train_asks.
     Groups under `[Unreleased]` named outside Keep a Changelog's kinds are noted on stderr.
@@ -257,12 +309,13 @@ def version_command(arguments) -> list[str]:
     if declares_a_version(arguments.version_source):
         named = arguments.version or declared_version(arguments.version_source)
 
-        # Work carries the marker, and a release drops it:
-        # the released version is the version worked on without the marker, so the two cannot drift apart.
-        # Only a marker at the very end comes off, and a version handed in may be given with or without it.
+        # Work carries the snapshot suffix, and a release drops it:
+        # the released version is the version worked on without the suffix, so the two cannot drift apart.
+        # Only a suffix at the very end comes off, and a version handed in may be given with or without it.
         # One still carrying it after that, such as `1.0.0-SNAPSHOT+b`, is refused by check_version
         # as a version being worked on, which it is.
-        candidate = named.removesuffix(marker_of(arguments.version_source))
+        suffix = snapshot_suffix(arguments, prefix)
+        candidate = named.removesuffix(suffix) if suffix else named
 
         # The commit a release tags still names the version it released.
         # Publishing the release creates that tag, and a workflow that runs on push runs for it too.
@@ -282,6 +335,10 @@ def version_command(arguments) -> list[str]:
             prefix, unreachable(prefix, [candidate]), arguments.default_branch)
     else:
         # Handed in, or the default where a dispatch left it empty. No file is read, and none will be written.
+        if suffix_of(arguments.snapshot_suffix):
+            raise SystemExit(f"{arguments.version_source} keeps no version between releases, so there is no "
+                             "snapshot suffix to give it")
+        suffix = ""
         releases = released_versions(prefix)
         asked = unreleased_asks(releases)
         candidate = arguments.version or next_candidate(releases, asked)
@@ -291,7 +348,7 @@ def version_command(arguments) -> list[str]:
              for entry in asked.loose]
     if candidate in arriving:
         return [awaited(f"{candidate} is released, as {prefix}{candidate}", arriving[candidate], "it"), *loose]
-    problems = (check_version(candidate, releases) or check_step(candidate, releases, asked)) + loose
+    problems = (check_version(candidate, releases, suffix) or check_step(candidate, releases, asked)) + loose
     if not problems:
         print(candidate)
     return problems
@@ -385,7 +442,7 @@ def next_command(arguments) -> list[str]:
     released = arguments.released.removeprefix(prefix_from(arguments.version_source, arguments.tag_prefix))
     if not SEMVER.match(released):
         return [f"'{arguments.released}' is not a version this project releases"]
-    print(version_after(released) + marker_of(arguments.version_source))
+    print(version_after(released) + suffix_of(arguments.snapshot_suffix))
     return []
 
 
@@ -519,8 +576,10 @@ def prefix_command(arguments) -> list[str]:
 # merge-back writes the next version where prepare read this one, and checks with the options prepare checked with.
 # - version: the version released, which the tag has to name;
 # - version-source and tag-prefix: as prepare was given them, the prefix as prepare found it, `^none` for none;
+# - snapshot-suffix: what merge-back appends to the next version, `^none` for none,
+#   recorded where the source declares a version;
 # - skip-unreadable-releases: recorded only where it was `true`.
-SETTINGS = ("version", "version-source", "tag-prefix", "skip-unreadable-releases")
+SETTINGS = ("version", "version-source", "tag-prefix", "snapshot-suffix", "skip-unreadable-releases")
 
 
 def trailer(name: str) -> str:
@@ -541,6 +600,8 @@ def settings_at(ref: str) -> dict[str, str]:
     if twice:
         raise SystemExit(f"{ref} names a commit that records {', '.join(map(trailer, twice))} more than once")
     missing = [name for name in SETTINGS[:3] if name not in found]
+    if not missing and "snapshot-suffix" not in found and declares_a_version(found["version-source"][0]):
+        missing = ["snapshot-suffix"]
     if missing:
         raise SystemExit(f"{ref} names a commit that records no {', '.join(map(trailer, missing))}")
     return {name: values[0] for name, values in found.items()}
@@ -571,8 +632,9 @@ def built_version() -> tuple[str, str]:
 
 
 def recorded_command(arguments) -> list[str]:
-    """One setting release-flow/prepare recorded in the commit of a release tag, `false` for a skip it did not."""
-    value = settings_of(arguments.tag).get(arguments.name, "false")
+    """One setting release-flow/prepare recorded in the commit of a release tag.
+    Where it recorded none: `false` for the skip, `^none` for the suffix of a source that keeps no version."""
+    value = settings_of(arguments.tag).get(arguments.name, "false" if arguments.name.startswith("skip") else "^none")
     print(value)
     return []
 
@@ -626,13 +688,19 @@ def main() -> int:
     version_parser.add_argument("--version", help="the version to release, not this program's: the one to "
                                                   "check instead of what the source declares, or of the version "
                                                   "after the highest release, or a later one [Unreleased] asks "
-                                                  "for, where it declares none, with or without the marker that "
-                                                  "source puts on a declaration")
+                                                  "for, where it declares none, with or without the snapshot "
+                                                  "suffix")
+    version_parser.add_argument("--snapshot-suffix", type=suffix_argument,
+                                help="the suffix the declared version carries, such as -SNAPSHOT, or ^none, where no "
+                                     "release's record applies (see lib/README.md); required under a source that "
+                                     "declares a version")
     version_parser.set_defaults(run=version_command)
 
     next_parser = commands.add_parser("next", parents=both,
-                                      help="the version that follows a released one, with the source's marker")
+                                      help="the version that follows a released one, with the snapshot suffix given")
     next_parser.add_argument("released", help="the version just released, with or without the tag prefix")
+    next_parser.add_argument("--snapshot-suffix", type=suffix_argument,
+                             help="what to append, such as -SNAPSHOT; ^none or left out appends nothing")
     next_parser.set_defaults(run=next_command)
 
     changelog_parser = commands.add_parser("changelog", parents=checking,

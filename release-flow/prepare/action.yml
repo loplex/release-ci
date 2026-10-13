@@ -37,16 +37,28 @@ inputs:
       - Leave it out under `gradle.properties`: the file declares it.
       - `^none`: the tags have no prefix at all.
     default: ''
+  snapshot-suffix:
+    description: |
+      What the version carries between releases, after the release's version: `-SNAPSHOT` in `0.2.1-SNAPSHOT`.
+      - Required where `version-source` names a file; a hyphen and one identifier of letters and digits,
+        holding a letter.
+      - `^none`: the version carries nothing between releases.
+      - Left out under `tags`, which keeps no version between releases.
+
+      Recorded in the release commit: merge-back appends it to the next version it writes.
+      The release takes off the suffix a release before it recorded where one applies, so a suffix changed here
+      shows from the next version on, and this one otherwise; lib/README.md says which under The snapshot suffix.
+    default: ''
   version:
     description: |
       The version to release, instead of the one `version-source` gives.
       This is what a dispatch input passes on.
-      - Under `gradle.properties`: `0.2.0` or `0.2.0-SNAPSHOT`; the `-SNAPSHOT` at the end is dropped.
+      - Under `gradle.properties`: `0.2.0` or `0.2.0-SNAPSHOT`; the snapshot suffix at the end is dropped.
       - Under `tags`: `0.2.0`.
         Left empty, the version after the highest release is released,
         or a later one where `[Unreleased]` asks for more.
 
-      The `version` output has no `-SNAPSHOT` under either source.
+      The `version` output has no snapshot suffix under either source.
     default: ''
   repository-url:
     description: |
@@ -67,7 +79,7 @@ inputs:
 outputs:
   version:
     description: |
-      The version being released, without the tag prefix and without `-SNAPSHOT`.
+      The version being released, without the tag prefix and without the snapshot suffix.
     value: ${{ steps.prepare.outputs.version }}
   tag:
     description: |
@@ -96,6 +108,7 @@ runs:
         VERSION_SOURCE: ${{ inputs.version-source }}
         TAG_PREFIX: ${{ inputs.tag-prefix }}
         VERSION: ${{ inputs.version }}
+        SNAPSHOT_SUFFIX: ${{ inputs.snapshot-suffix }}
         REPOSITORY_URL: ${{ inputs.repository-url }}
         SKIP_UNREADABLE_RELEASES: ${{ inputs.skip-unreadable-releases }}
       # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,

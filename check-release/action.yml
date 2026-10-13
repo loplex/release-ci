@@ -58,9 +58,22 @@ inputs:
     description: |
       The version to check, instead of the one `version-source` gives.
       Only `version` reads it.
-      - Under `gradle.properties`: `0.2.0` or `0.2.0-SNAPSHOT`; the `-SNAPSHOT` at the end is dropped.
+      - Under `gradle.properties`: `0.2.0` or `0.2.0-SNAPSHOT`; the snapshot suffix is dropped from the end.
       - Under `tags`: `0.2.0`.
         Left empty, the version after the highest release is checked, as described under `version-source`.
+    default: ''
+  snapshot-suffix:
+    description: |
+      What the version carries between releases, after the release's version: `-SNAPSHOT` in `0.2.1-SNAPSHOT`.
+      Only `version` reads it.
+      - Required where `version-source` names a file; a hyphen and one identifier of letters and digits,
+        holding a letter.
+      - `^none`: the version carries nothing between releases.
+      - Left out under `tags`, which keeps no version between releases.
+
+      Give what release-flow/prepare is given.
+      `version` takes off the suffix a release recorded where one applies, and this one otherwise:
+      lib/README.md says which under The snapshot suffix.
     default: ''
   skip-unreadable-releases:
     description: |
@@ -89,7 +102,7 @@ outputs:
   version:
     description: |
       The version that may be released, as `version` answered it.
-      It has no tag prefix and no `-SNAPSHOT`.
+      It has no tag prefix and no snapshot suffix.
       Empty unless `version` ran and passed: also where it only warned, of a release yet to land.
     value: ${{ steps.check.outputs.version }}
   channel:
@@ -123,6 +136,7 @@ runs:
         TAG_PREFIX: ${{ inputs.tag-prefix }}
         CHECKS: ${{ inputs.checks }}
         VERSION: ${{ inputs.version }}
+        SNAPSHOT_SUFFIX: ${{ inputs.snapshot-suffix }}
         SKIP_UNREADABLE_RELEASES: ${{ inputs.skip-unreadable-releases }}
         DEFAULT_BRANCH: ${{ inputs.default-branch }}
       # The Python setup-python installs finds its libpython through LD_LIBRARY_PATH in a job that runs in a container,

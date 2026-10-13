@@ -24,7 +24,7 @@ check_release=("$PYTHON" "$script")
 # Read from the release commit, where release-flow/prepare recorded them, not given again:
 # the next version goes where prepare read this one, and the merged tree is checked with the options prepare used.
 # Reading one also checks that TAG is the tag of the release that commit records.
-for name in version-source tag-prefix skip-unreadable-releases; do
+for name in version-source tag-prefix snapshot-suffix skip-unreadable-releases; do
   if ! value=$("${check_release[@]}" recorded "$TAG" "$name"); then
     echo "::error::${TAG} does not say how its release was made, so nothing was carried back"
     exit 1
@@ -32,6 +32,7 @@ for name in version-source tag-prefix skip-unreadable-releases; do
   case $name in
     version-source) version_source=$value ;;
     tag-prefix) tag_prefix=$value ;;
+    snapshot-suffix) snapshot_suffix=$value ;;
     skip-unreadable-releases) skip=$value ;;
   esac
 done
@@ -51,7 +52,8 @@ version="${TAG#"$prefix"}"
 # check-release answers what follows a release, as it answers every other question about versions.
 # Counting up the patch here would be wrong after a pre-release.
 # 0.2.0-rc.1 was a step towards 0.2.0, so work goes on towards 0.2.0, not 0.2.1.
-next=$("${check_release[@]}" next "$TAG" "${source_arguments[@]}"); rc=$?
+# The suffix is joined by `=`: it starts with a hyphen, and would be read as an option of its own.
+next=$("${check_release[@]}" next "$TAG" "${source_arguments[@]}" "--snapshot-suffix=${snapshot_suffix}"); rc=$?
 if (( rc != 0 )); then
   echo "::error::check-release could not say what follows $TAG"
   exit 1
@@ -118,9 +120,9 @@ under \`[Unreleased]\` that asks for more - an \`### Added\` that landed while t
 stands under \`[Unreleased]\` here only once the conflict is resolved, or once it is moved back out of the
 released section the \`changelog\` check names. From then on the \`version\` check of this pull request, where
 it runs one, refuses the version this branch starts and names the least version it takes: raise the declared
-version to that one here, followed by the marker \`${next}\` carries. The check takes the marker off before it
-compares, so one declared without it passes as well, and the default branch then builds as that release before
-it is one.
+version to that one here, followed by the snapshot suffix \`${next}\` carries. The check takes the suffix off
+before it compares, so one declared without it passes as well, and the default branch then builds as that
+release before it is one.
 "
 else
   title="Release ${version}"

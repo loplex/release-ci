@@ -32,11 +32,12 @@ class Staged(unittest.TestCase):
     This class holds no tests of its own.
     """
 
-    def stage(self, prefix="v", at_start=AT_START, released=RELEASED, key="version", source=None, skip=False):
+    def stage(self, prefix="v", at_start=AT_START, released=RELEASED, key="version", source=None, skip=False,
+              suffix="-SNAPSHOT"):
         """`key` is where gradle.properties declares the version; under another than `version`, `version` holds a
         value of its own beside it.
-        `source` and `skip` are what release-flow/prepare recorded in the release commit, the source following `key`
-        unless given."""
+        `source`, `skip` and `suffix` are what release-flow/prepare recorded in the release commit, the source following
+        `key` unless given."""
         self.tag = f"{prefix}0.1.0"
         gradles = "" if key == "version" else "version = 9.9.9\n"
         root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -63,6 +64,7 @@ class Staged(unittest.TestCase):
         source = source or ("gradle.properties" if key == "version" else f"gradle.properties:{key}")
         recorded = ("Release-CI-Version: 0.1.0", f"Release-CI-Version-Source: {source}",
                     f"Release-CI-Tag-Prefix: {prefix or '^none'}")
+        recorded += (f"Release-CI-Snapshot-Suffix: {suffix}",) if source != "tags" else ()
         recorded += ("Release-CI-Skip-Unreadable-Releases: true",) if skip else ()
         git("commit", "-qam", "chore(release): 0.1.0\n\n" + "\n".join(recorded), cwd=self.work)
         git("tag", self.tag, cwd=self.work)
@@ -181,6 +183,12 @@ class MergeBack(Staged):
         self.carry_back()
         properties = git("show", "main:gradle.properties", cwd=self.origin).stdout
         self.assertIn("version = 0.1.1-SNAPSHOT", properties)
+
+    def test_the_next_version_carries_the_suffix_the_release_recorded(self):
+        self.stage(suffix="^none")
+        outputs, done = self.carry_back()
+        self.assertEqual(outputs.get("next"), "0.1.1", done.stdout + done.stderr)
+        self.assertIn("version = 0.1.1\n", git("show", "main:gradle.properties", cwd=self.origin).stdout)
 
     def test_the_next_version_is_opened_under_the_key_the_version_is_read_under(self):
         self.stage(key="appVersion")
@@ -406,7 +414,7 @@ class MergeBack(Staged):
         self.carry_back(fetch=False)
         self.assertIn("--title Release 0.1.0, and start 0.1.1-SNAPSHOT --body", self.gh_said())
         self.assertIn("This branch starts `0.1.1-SNAPSHOT`, counted from `0.1.0` alone.", self.gh_said())
-        self.assertIn("followed by the marker `0.1.1-SNAPSHOT` carries", self.gh_said())
+        self.assertIn("followed by the snapshot suffix `0.1.1-SNAPSHOT` carries", self.gh_said())
 
     def test_a_pull_request_under_a_source_declaring_no_version_claims_none_opened(self):
         """Nothing was written back.

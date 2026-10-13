@@ -10,7 +10,7 @@ and finding the file, or refusing a missing one, is written once instead of once
 
 There are two kinds of source:
 - One that declares a version keeps the next version in a file between releases,
-  marked as being worked on where its ecosystem has a marker for that.
+  with the snapshot suffix the project chose, such as `-SNAPSHOT`, or none.
   A release reads the version from that file and writes the following one back.
 - One that declares nothing is given the version when a release is asked for.
   Without one, it takes the version after the highest release, or a later one where `[Unreleased]` asks for more.
@@ -21,8 +21,6 @@ What every adapter answers:
 - `under()`: the same source reading its version under another key, or a refusal where it has no keys.
   `--version-source gradle.properties:appVersion` selects it so (see source()).
 - `declares_a_version`.
-- `marker`: the ending of a version being worked on, hyphen included (`-SNAPSHOT` for gradle.properties),
-  or empty where there is no such state.
 - `file`: the file it declares a version in, or None where it declares none.
 
 An adapter that declares a version also answers:
@@ -37,9 +35,9 @@ A source that names no file is given its prefix.
 Adding a source, such as package.json, pyproject.toml or Cargo.toml:
 - It is another adapter here, its file carrying the tag prefix beside the version,
   filed in SOURCES under its `--version-source` name.
-- Nothing in main.py or the other modules of rules/ changes, unless the source marks a version being
-  worked on other than with a `-SNAPSHOT` suffix, the only marker being_worked_on in versions.py knows.
-- test_sources.py holds it to what every adapter has to answer, and fails if the rules do not refuse its marker.
+- Nothing in main.py or the other modules of rules/ changes.
+  The suffix of a version being worked on is no adapter's: release-flow/prepare is given it (see versions.py).
+- test_sources.py holds it to what every adapter has to answer.
 - A plain VERSION file has no room for a tag prefix, so it needs more than an adapter.
 """
 
@@ -135,12 +133,11 @@ class Tags:
     - the prefix is given;
     - the version is given, or it is the one after the highest release,
       or a later one where `[Unreleased]` asks for more;
-    - no version is being worked on, so there is no marker."""
+    - no version is being worked on, so there is no snapshot suffix."""
 
     name = "tags"
     declares_a_version = False
     file = None
-    marker = ""
 
     def under(self, key: str):
         raise ValueError(f"{self.name} declares no version, so there is no key '{key}' to read one under")
@@ -153,9 +150,7 @@ class GradleProperties:
     Gradle sets every project's `project.version` from a `version` line, so a project whose build reads its version
     from a key of its own, such as `appVersion`, cannot move it there without changing what the build makes.
 
-    `-SNAPSHOT` is how Gradle and Maven mark a version being worked on.
-    It is never released to any channel:
-    `version` refuses a candidate that still carries it, and no tag that carries it counts as a release.
+    Between releases the version carries the snapshot suffix the release recorded, such as `-SNAPSHOT`, or none.
     """
 
     name = "gradle.properties"
@@ -167,7 +162,6 @@ class GradleProperties:
     # Read and written the same way here, no byte in the file fails to decode.
     # A comment, or any value but the version, goes back in the bytes it was read from, whatever its encoding.
     encoding = "iso-8859-1"
-    marker = "-SNAPSHOT"
 
     # What a release puts back in front of the version it writes:
     # the indentation, the key and the separator, exactly as the first line of the declaration has them.
@@ -206,9 +200,9 @@ class GradleProperties:
         return found
 
     def version(self, text: str) -> str:
-        """The version the file names, marker included.
+        """The version the file names, snapshot suffix included.
 
-        A release is asked to be this version with the marker taken off."""
+        A release is asked to be this version with the suffix taken off."""
         declared = self.properties(text).get(self.key)
         if declared is None:
             raise SystemExit(f"gradle.properties names no {self.key}")

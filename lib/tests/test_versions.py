@@ -6,7 +6,8 @@ Run with `python3 -m unittest discover -s lib` from the repository root.
 
 import unittest
 
-from rules.versions import SEMVER, being_worked_on, channel_of, check_version, precedence, version_after
+from rules.versions import (SEMVER, SNAPSHOT_SUFFIX, being_worked_on, channel_of, check_version, precedence,
+                            version_after)
 
 
 class Precedence(unittest.TestCase):
@@ -94,26 +95,50 @@ class FirstRelease(unittest.TestCase):
 
 
 class AVersionBeingWorkedOn(unittest.TestCase):
-    """The marker says the version has not been released, so it can never be a release.
+    """The snapshot suffix says the version has not been released, so it can never be a release.
     This is the rule most easily hit by accident.
     A script that appends -SNAPSHOT to a version that already has it writes `1.0.0-SNAPSHOT-SNAPSHOT`.
-    `version` takes the marker off once, and would then offer `1.0.0-SNAPSHOT` as the release."""
+    `version` takes the suffix off once, and would then offer `1.0.0-SNAPSHOT` as the release."""
 
-    def test_the_marker_is_refused_wherever_it_sits_in_the_suffix(self):
-        for candidate in ("1.0.0-SNAPSHOT", "1.0.0-rc.1-SNAPSHOT", "1.0.0-rc.SNAPSHOT", "1.0.0-SNAPSHOT-SNAPSHOT",
-                          "1.0.0-SNAPSHOT+b", "1.0.0-SNAPSHOT.2"):
-            with self.subTest(candidate=candidate):
-                problems = check_version(candidate, ["0.9.0"])
-                self.assertEqual(len(problems), 1)
-                self.assertIn("being worked on", problems[0])
+    def test_the_suffix_is_refused_wherever_it_sits_in_the_pre_release_part(self):
+        for suffix, candidates in (("-SNAPSHOT", ("1.0.0-SNAPSHOT", "1.0.0-rc.1-SNAPSHOT", "1.0.0-rc.SNAPSHOT",
+                                                  "1.0.0-SNAPSHOT-SNAPSHOT", "1.0.0-SNAPSHOT+b", "1.0.0-SNAPSHOT.2")),
+                                   ("-dev", ("1.0.0-dev", "1.0.0-rc.1-dev"))):
+            for candidate in candidates:
+                with self.subTest(suffix=suffix, candidate=candidate):
+                    problems = check_version(candidate, ["0.9.0"], suffix)
+                    self.assertEqual(len(problems), 1)
+                    self.assertIn("being worked on", problems[0])
 
-    def test_an_identifier_that_merely_contains_the_word_is_not_the_marker(self):
-        self.assertFalse(being_worked_on("1.0.0-preSNAPSHOT"))
-        self.assertFalse(being_worked_on("1.0.0-SNAPSHOTTED"))
+    def test_a_suffix_of_the_form_taken_makes_a_version_the_rules_read_and_refuse(self):
+        """`--snapshot-suffix` takes a hyphen and one identifier, so the version carrying it is still a version.
+        A suffix the rules did not read, or did not refuse, would let a version being worked on be released.
+        The identifier holds a letter: `-01` makes no version, and `-1` is the number of `1.0.0-rc.1`."""
+        for suffix in ("-SNAPSHOT", "-dev", "-b2", "-2b"):
+            with self.subTest(suffix):
+                self.assertTrue(SNAPSHOT_SUFFIX.fullmatch(suffix))
+                self.assertTrue(SEMVER.match(f"1.0.0{suffix}"))
+                self.assertIn("being worked on", " ".join(check_version(f"1.0.0{suffix}", [], suffix)))
+        for suffix in ("SNAPSHOT", "-", "-a.b", "-a-b", "~dev", "-a_b", "-0", "-1", "-01"):
+            with self.subTest(suffix):
+                self.assertFalse(SNAPSHOT_SUFFIX.fullmatch(suffix))
 
-    def test_the_word_in_build_metadata_is_not_the_marker(self):
+    def test_without_a_suffix_nothing_is_being_worked_on(self):
+        """A project that keeps none releases `1.0.0-SNAPSHOT` as a pre-release, if it ever names one so."""
+        self.assertFalse(being_worked_on("1.0.0-SNAPSHOT", ""))
+        self.assertFalse(being_worked_on("1.0.0", ""))
+        self.assertEqual(check_version("1.0.0-SNAPSHOT", ["0.9.0"], ""), [])
+
+    def test_only_the_suffix_given_is_one_being_worked_on(self):
+        self.assertFalse(being_worked_on("1.0.0-SNAPSHOT", "-dev"))
+
+    def test_an_identifier_that_merely_contains_the_word_is_not_the_suffix(self):
+        self.assertFalse(being_worked_on("1.0.0-preSNAPSHOT", "-SNAPSHOT"))
+        self.assertFalse(being_worked_on("1.0.0-SNAPSHOTTED", "-SNAPSHOT"))
+
+    def test_the_word_in_build_metadata_is_not_the_suffix(self):
         """Metadata names a build, not a state."""
-        self.assertFalse(being_worked_on("1.0.0+SNAPSHOT"))
+        self.assertFalse(being_worked_on("1.0.0+SNAPSHOT", "-SNAPSHOT"))
 
 
 class TheStep(unittest.TestCase):
@@ -299,8 +324,7 @@ class TheChannel(unittest.TestCase):
         self.assertEqual(channel_of("1.0.0+build-7"), "default")
 
     def test_the_version_being_worked_on_has_a_channel_by_the_same_rule(self):
-        """Nothing carrying -SNAPSHOT is released: `version` refuses it, and released_versions() leaves out
-        such a tag.
+        """A version carrying the snapshot suffix is not released: `version` refuses it.
         The rule still has to answer the way a second copy of it elsewhere would.
         With any `+` metadata off, everything after the first `-`, up to the first `.`, is the channel."""
         self.assertEqual(channel_of("0.2.1-SNAPSHOT"), "SNAPSHOT")
